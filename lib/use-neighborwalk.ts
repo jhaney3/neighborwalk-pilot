@@ -373,8 +373,10 @@ export function useNeighborWalk() {
 
   const importBackup = useCallback(async (file: File) => {
     const imported = await importNeighborWalkFile(file);
-    setData(imported);
-    return imported;
+    const mode: NeighborWalkData["sync"]["mode"] = process.env.NEXT_PUBLIC_API_BASE_URL ? "connected" : "device_only";
+    const next = { ...imported, sync: { ...imported.sync, mode } };
+    setData(next);
+    return next;
   }, []);
 
   const resetDemo = useCallback(async () => {

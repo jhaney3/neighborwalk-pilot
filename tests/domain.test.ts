@@ -102,6 +102,7 @@ describe("response hardening", () => {
     expect(secured.headers.get("x-existing")).toBe("kept");
     expect(secured.headers.get("x-content-type-options")).toBe("nosniff");
     expect(secured.headers.get("x-frame-options")).toBe("DENY");
+    expect(secured.headers.get("strict-transport-security")).toContain("max-age=31536000");
     expect(secured.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect(secured.headers.get("permissions-policy")).toContain("geolocation=(self)");
     expect(await secured.text()).toBe("ok");

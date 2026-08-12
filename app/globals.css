@@ -92,6 +92,18 @@ input, textarea, select { color: var(--ink); }
 .map-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 11px; }
 .map-search button { display: grid; place-items: center; padding: 3px; border: 0; color: var(--muted); background: transparent; cursor: pointer; }
 .toolbar-icon { width: 41px; height: 41px; display: grid; place-items: center; flex: none; border: 1px solid var(--line); border-radius: 11px; color: var(--pine-900); background: white; cursor: pointer; box-shadow: var(--shadow-sm); }
+.map-layer-picker { position: relative; z-index: 90; }
+.map-layer-menu { position: absolute; top: calc(100% + 7px); right: 0; width: 230px; overflow: hidden; padding: 7px; border: 1px solid var(--line); border-radius: 13px; background: white; box-shadow: var(--shadow-lg); }
+.map-layer-menu > p { margin: 3px 7px 6px; color: var(--soft); font: 600 7px/1 var(--font-plex-mono), monospace; letter-spacing: .08em; text-transform: uppercase; }
+.map-layer-menu > button, .custom-map-style { width: 100%; display: flex; align-items: center; gap: 9px; padding: 9px; border: 0; border-radius: 9px; color: var(--ink); background: transparent; text-align: left; }
+.map-layer-menu > button { cursor: pointer; }
+.map-layer-menu > button:hover, .map-layer-menu > button[aria-checked="true"] { background: var(--mint-100); }
+.map-layer-menu > button > span, .custom-map-style > span { min-width: 0; flex: 1; }
+.map-layer-menu strong, .map-layer-menu small { display: block; }
+.map-layer-menu strong { font-size: 10px; }
+.map-layer-menu small { margin-top: 2px; color: var(--muted); font-size: 8px; }
+.map-layer-menu svg { flex: none; color: var(--pine-600); }
+.custom-map-style { margin-top: 3px; border-top: 1px solid var(--line); border-radius: 0; color: var(--muted); }
 .map-stage { position: relative; flex: 1; min-height: 0; }
 .map-engine-shell, .map-engine { width: 100%; height: 100%; min-height: 430px; border-radius: 18px; }
 .map-engine-shell { position: relative; overflow: hidden; border: 1px solid #d0dcd7; background: #e6eeea; }
@@ -374,6 +386,15 @@ input, textarea, select { color: var(--ink); }
 .modal-heading p { margin: 5px 0 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
 .form-stack { display: grid; gap: 11px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line); }
+.territory-picker-list { display: grid; gap: 7px; }
+.territory-picker-list > button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 11px; color: var(--ink); background: var(--mist-50); text-align: left; cursor: pointer; }
+.territory-picker-list > button:hover, .territory-picker-list > button.active { border-color: var(--pine-300); background: var(--mint-100); }
+.territory-picker-list > button > i { width: 9px; height: 38px; flex: none; border-radius: 5px; }
+.territory-picker-list > button > span { min-width: 0; flex: 1; }
+.territory-picker-list strong, .territory-picker-list small { display: block; }
+.territory-picker-list strong { font-size: 12px; }
+.territory-picker-list small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.territory-picker-list svg { flex: none; color: var(--pine-600); }
 .location-preview { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 13px; padding: 11px; border-radius: 10px; color: var(--pine-700); background: var(--mint-100); }
 .location-preview svg { flex: none; }
 .location-preview span, .location-preview strong { display: block; }

@@ -32,6 +32,7 @@ import {
   outcomeMeta,
   visitsForProperty,
   type Coordinates,
+  type NeighborWalkData,
   type Outcome,
 } from "../lib/domain";
 import { useNeighborWalk } from "../lib/use-neighborwalk";
@@ -49,6 +50,12 @@ const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
   { value: "do_not_visit", label: "Skip" },
 ];
 
+const mapStyleOptions = [
+  { label: "Bright", description: "Detailed streets and landmarks", url: "https://tiles.openfreemap.org/styles/bright" },
+  { label: "Liberty", description: "High-contrast field map", url: "https://tiles.openfreemap.org/styles/liberty" },
+  { label: "Positron", description: "Quiet, minimal basemap", url: "https://tiles.openfreemap.org/styles/positron" },
+];
+
 export function NeighborWalkApp() {
   const { data, loading, storageError, online, saving, activeTerritory, activeVolunteer, actions } = useNeighborWalk();
   const [viewOverride, setViewOverride] = useState<View | null>(null);
@@ -60,6 +67,8 @@ export function NeighborWalkApp() {
   const [drawMode, setDrawMode] = useState(false);
   const [draftBoundary, setDraftBoundary] = useState<Coordinates[]>([]);
   const [newTerritoryOpen, setNewTerritoryOpen] = useState(false);
+  const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
+  const [mapLayersOpen, setMapLayersOpen] = useState(false);
   const [walkStartedAt, setWalkStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [toast, setToast] = useState("");
@@ -118,6 +127,7 @@ export function NeighborWalkApp() {
     setViewOverride(next);
     setSelectedPropertyId(null);
     setAddMode(false);
+    setMapLayersOpen(false);
     if (next !== "map") {
       setDrawMode(false);
       setDraftBoundary([]);
@@ -186,13 +196,20 @@ export function NeighborWalkApp() {
           {view === "map" && (
             <section className="map-view">
               <div className="mobile-context-row">
-                <div><p className="eyebrow">{data.events.find((event) => event.id === data.preferences.activeEventId)?.name}</p><button onClick={() => setNewTerritoryOpen(canManage)} disabled={!canManage}><strong>{activeTerritory.name}</strong><ChevronDown size={15} /></button></div>
+                <div><p className="eyebrow">{data.events.find((event) => event.id === data.preferences.activeEventId)?.name}</p><button onClick={() => setTerritoryPickerOpen(true)}><strong>{activeTerritory.name}</strong><ChevronDown size={15} /></button></div>
                 <div><strong>{coverage.percent}%</strong><span>covered</span></div>
               </div>
               <div className="map-toolbar">
                 <div className="map-filter-scroll" aria-label="Filter locations">{mapFilterOptions.map((option) => <button key={option.value} className={filter === option.value ? "active" : ""} onClick={() => setFilter(option.value)}>{option.label}{option.value !== "all" && <i style={{ background: outcomeMeta[option.value].color }} />}</button>)}</div>
                 <label className="map-search"><Search size={15} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find an address" aria-label="Find an address" />{query && <button onClick={() => setQuery("")} aria-label="Clear search"><X size={14} /></button>}</label>
-                <button className="toolbar-icon" aria-label="Map layers"><Layers3 size={18} /></button>
+                <div className="map-layer-picker">
+                  <button className="toolbar-icon" aria-label="Map layers" aria-expanded={mapLayersOpen} onClick={() => setMapLayersOpen((open) => !open)}><Layers3 size={18} /></button>
+                  {mapLayersOpen && <div className="map-layer-menu" role="menu" aria-label="Choose map style">
+                    <p>Map appearance</p>
+                    {mapStyleOptions.map((style) => <button key={style.url} role="menuitemradio" aria-checked={data.preferences.mapStyleUrl === style.url} onClick={() => { actions.setPreference("mapStyleUrl", style.url); setMapLayersOpen(false); setToast(`${style.label} map selected`); }}><span><strong>{style.label}</strong><small>{style.description}</small></span>{data.preferences.mapStyleUrl === style.url && <Check size={15} />}</button>)}
+                    {!mapStyleOptions.some((style) => style.url === data.preferences.mapStyleUrl) && <div className="custom-map-style"><Layers3 size={14} /><span><strong>Custom style</strong><small>Configured in Settings</small></span></div>}
+                  </div>}
+                </div>
               </div>
               <div className="map-stage">
                 <MapCanvas key={data.preferences.mapStyleUrl} territory={activeTerritory} properties={filteredProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} addMode={addMode} drawMode={drawMode} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setAddMode(false); }} onAddIntent={async (intent) => {
@@ -230,6 +247,7 @@ export function NeighborWalkApp() {
       </nav>
 
       {pendingAdd && <AddPropertyModal intent={pendingAdd} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
+      {territoryPickerOpen && <TerritoryPickerModal data={data} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
       {newTerritoryOpen && <TerritoryModal hasBoundary={draftBoundary.length >= 3} onClose={() => setNewTerritoryOpen(false)} onSave={(name, color) => {
         const boundary = draftBoundary.length >= 3 ? draftBoundary : activeTerritory.boundary;
         const center: Coordinates = [boundary.reduce((sum, point) => sum + point[0], 0) / boundary.length, boundary.reduce((sum, point) => sum + point[1], 0) / boundary.length];
@@ -251,6 +269,11 @@ function TerritoryModal({ hasBoundary, onClose, onSave }: { hasBoundary: boolean
   const [name, setName] = useState("");
   const [color, setColor] = useState("#286c59");
   return <Modal title={hasBoundary ? "Name this territory" : "Territory options"} description={hasBoundary ? "The boundary will be available to volunteers assigned to this event." : "Choose an existing territory below, or close this panel and use Draw territory."} onClose={onClose}>{hasBoundary ? <><div className="form-stack"><label className="form-field"><span>Territory name</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: Oakwood North" /></label><label className="form-field"><span>Map color</span><input type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label></div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => onSave(name, color)} disabled={name.trim().length < 3}><MapPinned size={15} /> Create territory</button></div></> : <div className="empty-mini"><MapPinned size={24} /><strong>Draw a boundary on the map</strong><span>Tap Draw territory, then mark at least three corners.</span></div>}</Modal>;
+}
+
+function TerritoryPickerModal({ data, activeTerritoryId, canManage, onClose, onSelect, onDraw }: { data: NeighborWalkData; activeTerritoryId: string; canManage: boolean; onClose: () => void; onSelect: (territoryId: string) => void; onDraw: () => void }) {
+  const territories = data.territories.filter((territory) => territory.eventId === data.preferences.activeEventId);
+  return <Modal title="Choose a territory" description="Switch the map and coverage view for this outreach event." onClose={onClose}><div className="territory-picker-list">{territories.map((territory) => { const coverage = coverageForTerritory(data, territory.id); return <button key={territory.id} className={territory.id === activeTerritoryId ? "active" : ""} onClick={() => onSelect(territory.id)}><i style={{ background: territory.color }} /><span><strong>{territory.name}</strong><small>{coverage.percent}% covered · {coverage.remaining} remaining</small></span>{territory.id === activeTerritoryId && <Check size={16} />}</button>; })}</div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Close</button>{canManage && <button className="button primary" onClick={onDraw}><MapPinned size={15} /> Draw a new territory</button>}</div></Modal>;
 }
 
 function NavButton({ active, icon, label, count, onClick }: { active: boolean; icon: React.ReactNode; label: string; count?: number; onClick: () => void }) {

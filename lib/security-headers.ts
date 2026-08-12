@@ -2,6 +2,7 @@ const SECURITY_HEADERS: ReadonlyArray<readonly [string, string]> = [
   ["Content-Security-Policy", "base-uri 'self'; frame-ancestors 'none'; object-src 'none'"],
   ["Permissions-Policy", "camera=(), microphone=(), geolocation=(self)"],
   ["Referrer-Policy", "strict-origin-when-cross-origin"],
+  ["Strict-Transport-Security", "max-age=31536000; includeSubDomains"],
   ["X-Content-Type-Options", "nosniff"],
   ["X-Frame-Options", "DENY"],
   ["X-Permitted-Cross-Domain-Policies", "none"],
