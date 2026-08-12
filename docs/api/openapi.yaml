@@ -1,0 +1,274 @@
+openapi: 3.1.0
+info:
+  title: NeighborWalk Sync API
+  version: 1.0.0
+  description: |
+    Backend contract for the NeighborWalk PWA. All routes require an authenticated
+    church member. The server derives church and user identity from the session;
+    clients never choose an authorization scope by sending a church_id.
+servers:
+  - url: https://api.example.org/v1
+security:
+  - sessionCookie: []
+paths:
+  /bootstrap:
+    get:
+      summary: Get the current church workspace snapshot
+      responses:
+        "200":
+          description: Current authorized workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /sync:
+    post:
+      summary: Apply idempotent device mutations and return current state
+      description: |
+        Apply each mutation exactly once using its mutation id. Process the short
+        database transaction only after authentication and request validation.
+        A server may return deltas instead of a full snapshot once implemented.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncRequest"
+      responses:
+        "200":
+          description: Mutations accepted and reconciled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: A conflicting update needs client review
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+  /territories/{territoryId}/properties:
+    get:
+      summary: List active locations using keyset pagination
+      parameters:
+        - $ref: "#/components/parameters/TerritoryId"
+        - name: cursor
+          in: query
+          schema: { type: string }
+          description: Opaque cursor containing the last updated_at and id.
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 200 }
+      responses:
+        "200":
+          description: Authorized locations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Property" }
+                  nextCursor: { type: [string, "null"] }
+  /visits:
+    post:
+      summary: Record a visit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Visit" }
+      responses:
+        "201":
+          description: Visit recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Visit" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /follow-ups/{followUpId}:
+    patch:
+      summary: Reschedule, complete, or cancel a follow-up
+      parameters:
+        - name: followUpId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                status: { type: string, enum: [scheduled, completed, cancelled] }
+                dueAt: { type: string, format: date-time }
+                assignedTeamId: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Follow-up updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FollowUp" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /geocode/reverse:
+    get:
+      summary: Reverse geocode without exposing provider credentials
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema: { type: number, minimum: -90, maximum: 90 }
+        - name: lng
+          in: query
+          required: true
+          schema: { type: number, minimum: -180, maximum: 180 }
+      responses:
+        "200":
+          description: Best available address estimate
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [address]
+                properties:
+                  address: { type: string, maxLength: 240 }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: neighborwalk_session
+  parameters:
+    TerritoryId:
+      name: territoryId
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Forbidden:
+      description: Church membership or role required
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: Record not found in the authorized church
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    Coordinates:
+      type: array
+      prefixItems:
+        - { type: number, minimum: -180, maximum: 180 }
+        - { type: number, minimum: -90, maximum: 90 }
+      minItems: 2
+      maxItems: 2
+    Property:
+      type: object
+      required: [id, territoryId, address, coordinates, currentOutcome, visitCount, createdAt, updatedAt, source]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        territoryId: { type: string }
+        address: { type: string, minLength: 1, maxLength: 240 }
+        unit: { type: string, maxLength: 60 }
+        coordinates: { $ref: "#/components/schemas/Coordinates" }
+        buildingGeometry:
+          type: array
+          items: { $ref: "#/components/schemas/Coordinates" }
+        currentOutcome: { type: string, enum: [unvisited, no_answer, conversation, follow_up, declined, do_not_visit, inaccessible] }
+        lastVisitedAt: { type: string, format: date-time }
+        visitCount: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        source: { type: string, enum: [map, import, seed] }
+    Visit:
+      type: object
+      required: [id, eventId, territoryId, propertyId, volunteerId, outcome, followUpConsent, recordedAt, deviceId]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        eventId: { type: string }
+        territoryId: { type: string }
+        propertyId: { type: string }
+        volunteerId: { type: string }
+        outcome: { type: string, enum: [no_answer, conversation, follow_up, declined, do_not_visit, inaccessible] }
+        objectiveNote: { type: string, maxLength: 2000 }
+        followUpConsent: { type: boolean }
+        recordedAt: { type: string, format: date-time }
+        deviceId: { type: string, minLength: 8, maxLength: 120 }
+    FollowUp:
+      type: object
+      required: [id, propertyId, sourceVisitId, dueAt, status, createdAt]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        sourceVisitId: { type: string }
+        assignedTeamId: { type: string }
+        dueAt: { type: string, format: date-time }
+        status: { type: string, enum: [scheduled, completed, cancelled] }
+        note: { type: string, maxLength: 2000 }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+    PendingMutation:
+      type: object
+      required: [id, entityType, entityId, operation, changedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        entityType: { type: string, enum: [property, visit, follow_up, territory, settings, guide, data] }
+        entityId: { type: string }
+        operation: { type: string, enum: [upsert, delete] }
+        changedAt: { type: string, format: date-time }
+    SyncRequest:
+      type: object
+      required: [schemaVersion, mutations, snapshot]
+      additionalProperties: false
+      properties:
+        schemaVersion: { type: integer, minimum: 1 }
+        mutations:
+          type: array
+          maxItems: 2000
+          items: { $ref: "#/components/schemas/PendingMutation" }
+        snapshot: { type: object, description: "NeighborWalkData document validated against the client domain schema." }
+    SyncResponse:
+      type: object
+      required: [acceptedMutationIds, serverTime, data]
+      properties:
+        acceptedMutationIds:
+          type: array
+          items: { type: string }
+        serverTime: { type: string, format: date-time }
+        data: { type: object }
+    BootstrapResponse:
+      type: object
+      required: [data, serverTime]
+      properties:
+        data: { type: object }
+        serverTime: { type: string, format: date-time }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        requestId: { type: string }
