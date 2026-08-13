@@ -411,7 +411,7 @@ export function SettingsView({
         <SettingsSection icon={<MapPinned size={18} />} title="Map and field use" description="Map tiles need a connection; saved records do not.">
           <label className="form-field"><span>Map style URL</span><input inputMode="url" value={mapStyleUrl} onChange={(event) => setMapStyleUrl(event.target.value)} /></label>
           <button className="button quiet" onClick={saveMapStyle}><Save size={15} /> Save map style</button>
-          <label className="toggle-row"><input type="checkbox" checked={data.preferences.compactMapMarkers} onChange={(event) => onSetPreference("compactMapMarkers", event.target.checked)} /><span><strong>Compact house markers</strong>Show smaller markers in dense neighborhoods.</span></label>
+          <label className="toggle-row"><input type="checkbox" checked={data.preferences.compactMapMarkers} onChange={(event) => onSetPreference("compactMapMarkers", event.target.checked)} /><span><strong>Compact location dots</strong>Use smaller status dots in dense neighborhoods.</span></label>
           <div className="button-row"><button className="button quiet" onClick={requestNotifications}><Bell size={15} /> Enable reminders</button><button className="button quiet" onClick={installApp}><Smartphone size={15} /> Install app</button></div>
         </SettingsSection>
 

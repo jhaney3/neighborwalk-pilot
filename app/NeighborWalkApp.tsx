@@ -9,7 +9,6 @@ import {
   CircleUserRound,
   CloudOff,
   Edit3,
-  House,
   Layers3,
   Map as MapIcon,
   MapPinned,
@@ -24,7 +23,7 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapCanvas } from "../components/MapCanvas";
 import { PropertyDrawer } from "../components/PropertyDrawer";
 import { FollowUpsView, GuideView, LeaderView, Modal, SettingsView } from "../components/Views";
@@ -105,6 +104,20 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
     }
   }, [data?.followUps, data?.preferences.notificationsEnabled]);
 
+  const visibleOutcomes = useMemo(() => new Set<Outcome>(
+    filter === "all" ? Object.keys(outcomeMeta) as Outcome[] : [filter],
+  ), [filter]);
+  const territoryProperties = useMemo(() => (
+    data && activeTerritory
+      ? data.properties.filter((property) => property.territoryId === activeTerritory.id)
+      : []
+  ), [data, activeTerritory]);
+  const filteredProperties = useMemo(() => territoryProperties.filter((property) => {
+    const matchesOutcome = visibleOutcomes.has(property.currentOutcome);
+    const matchesSearch = !query || `${property.address} ${property.unit ?? ""}`.toLowerCase().includes(query.toLowerCase());
+    return matchesOutcome && matchesSearch;
+  }), [query, territoryProperties, visibleOutcomes]);
+
   if (loading || workspaceStatus === "connecting") return <AppLoading />;
   if (data && supabaseUser && (workspaceStatus === "needs_workspace" || workspaceStatus === "creating")) {
     return <WorkspaceSetup data={data} user={supabaseUser} creating={workspaceStatus === "creating"} error={data.sync.lastError} onCreate={actions.createWorkspace} onSignOut={onSignOut} />;
@@ -119,15 +132,6 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const initialView = allowedViews.includes(requestedView as View) ? requestedView as View : "map";
   const view = viewOverride ?? (initialView === "leader" && !canManage ? "map" : initialView);
   const coverage = coverageForTerritory(data, activeTerritory.id);
-  const territoryProperties = data.properties.filter((property) => property.territoryId === activeTerritory.id);
-  const visibleOutcomes = new Set<Outcome>(
-    filter === "all" ? Object.keys(outcomeMeta) as Outcome[] : [filter],
-  );
-  const filteredProperties = territoryProperties.filter((property) => {
-    const matchesOutcome = visibleOutcomes.has(property.currentOutcome);
-    const matchesSearch = !query || `${property.address} ${property.unit ?? ""}`.toLowerCase().includes(query.toLowerCase());
-    return matchesOutcome && matchesSearch;
-  });
   const selectedProperty = data.properties.find((property) => property.id === selectedPropertyId) ?? null;
   const selectedVisits = selectedProperty ? visitsForProperty(data, selectedProperty.id) : [];
   const selectedFollowUp = selectedProperty ? data.followUps.find((followUp) => followUp.propertyId === selectedProperty.id && followUp.status === "scheduled") : undefined;
@@ -252,7 +256,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
                 </div>
               </div>
               <div className="map-stage">
-                <MapCanvas territory={activeTerritory} properties={filteredProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setAddMode(false); }} onAddIntent={async (intent) => {
+                <MapCanvas territory={activeTerritory} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchQuery={query} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setAddMode(false); }} onAddIntent={async (intent) => {
                   if (intent.parcel?.situsAddress) {
                     setPendingAdd(intent);
                     setToast("Official parcel selected");
@@ -358,7 +362,7 @@ function AddPropertyModal({ intent, onClose, onSave }: { intent: AddIntent; onCl
   const [address, setAddress] = useState(intent.suggestedAddress);
   const [unit, setUnit] = useState("");
   const countyName = intent.parcel ? PARCEL_COUNTY_NAMES[intent.parcel.countyFips] ?? "Tennessee" : null;
-  return <Modal title="Add this location" description={intent.parcel ? "Confirm the official parcel address before recording a visit." : "Confirm the address before recording a visit."} onClose={onClose}><div className="location-preview"><House size={20} /><span><strong>{intent.parcel ? `Official ${countyName} parcel` : "Map location selected"}</strong>{intent.coordinates[1].toFixed(6)}, {intent.coordinates[0].toFixed(6)}{intent.buildingGeometry ? " · Boundary found" : ""}</span></div>{intent.parcel && <div className="parcel-preview"><span><strong>{intent.parcel.propertyClass ?? "Unclassified parcel"}</strong><small>{intent.parcel.landUse ?? "No land-use description in the county file"}</small></span><ShieldCheck size={15} /><small>Owner names and property values are not stored.</small></div>}<div className="form-stack"><label className="form-field"><span>Street address</span><input value={address} onChange={(event) => setAddress(event.target.value)} /></label><label className="form-field"><span>Unit <small>Optional</small></span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Apartment, suite, or unit" /></label></div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={address.trim().length < 3} onClick={() => onSave(address, unit)}><Plus size={15} /> Add location</button></div></Modal>;
+  return <Modal title="Add this location" description={intent.parcel ? "Confirm the official parcel address before recording a visit." : "Confirm the address before recording a visit."} onClose={onClose}><div className="location-preview"><MapPinned size={20} /><span><strong>{intent.parcel ? `Official ${countyName} parcel` : "Map location selected"}</strong>{intent.coordinates[1].toFixed(6)}, {intent.coordinates[0].toFixed(6)}{intent.buildingGeometry ? " · Boundary found" : ""}</span></div>{intent.parcel && <div className="parcel-preview"><span><strong>{intent.parcel.propertyClass ?? "Unclassified parcel"}</strong><small>{intent.parcel.landUse ?? "No land-use description in the county file"}</small></span><ShieldCheck size={15} /><small>Owner names and property values are not stored.</small></div>}<div className="form-stack"><label className="form-field"><span>Street address</span><input value={address} onChange={(event) => setAddress(event.target.value)} /></label><label className="form-field"><span>Unit <small>Optional</small></span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Apartment, suite, or unit" /></label></div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={address.trim().length < 3} onClick={() => onSave(address, unit)}><Plus size={15} /> Add location</button></div></Modal>;
 }
 
 function TerritoryModal({ territory, teams, boundaryChanged, onClose, onRedraw, onSave }: {

@@ -1,4 +1,4 @@
-const APP_CACHE = "neighborwalk-app-v10";
+const APP_CACHE = "neighborwalk-app-v11";
 const MAP_CACHE = "neighborwalk-map-v2";
 const CORE = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 const MAP_CACHE_LIMIT = 180;

@@ -8,7 +8,7 @@ import {
   ClipboardList,
   Clock3,
   History,
-  House,
+  MapPin,
   PencilLine,
   Save,
   ShieldCheck,
@@ -110,7 +110,7 @@ export function PropertyDrawer({
     <aside className="property-drawer" aria-label={`Location details for ${property.address}`}>
       <div className="drawer-handle" aria-hidden="true" />
       <div className="drawer-heading">
-        <div className="property-symbol"><House size={19} /></div>
+        <div className="property-symbol"><MapPin size={19} /></div>
         <div className="drawer-address">
           <span className="status-label" data-outcome={property.currentOutcome}>{outcomeMeta[property.currentOutcome].label}</span>
           {editingAddress ? (

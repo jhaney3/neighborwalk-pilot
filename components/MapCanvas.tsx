@@ -3,7 +3,7 @@
 import { AlertTriangle, LoaderCircle, MapPin, MapPinned, MousePointerClick } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon } from "geojson";
-import type { Map as MapLibreMap, Marker as MapLibreMarker, MapMouseEvent } from "maplibre-gl";
+import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { Coordinates, Outcome, Property, Territory } from "../lib/domain";
 import { outcomeMeta } from "../lib/domain";
 import {
@@ -19,6 +19,13 @@ const PARCEL_MIN_ZOOM = 14.5;
 const PARCEL_SOURCE_ID = "official-parcels";
 const PARCEL_FILL_LAYER_ID = "official-parcels-fill";
 const PARCEL_OUTLINE_LAYER_ID = "official-parcels-outline";
+const LOCATION_SOURCE_ID = "mapped-locations";
+const LOCATION_AREA_HIT_LAYER_ID = "mapped-location-area-hit";
+const LOCATION_FILL_LAYER_ID = "mapped-location-fill";
+const LOCATION_OUTLINE_LAYER_ID = "mapped-location-outline";
+const LOCATION_POINT_HIT_LAYER_ID = "mapped-location-point-hit";
+const LOCATION_HALO_LAYER_ID = "mapped-location-selected-halo";
+const LOCATION_DOT_LAYER_ID = "mapped-location-dot";
 const EMPTY_PARCELS: ParcelFeatureCollection = { type: "FeatureCollection", features: [] };
 type MapStyleLayer = ReturnType<MapLibreMap["getStyle"]>["layers"][number];
 type BuildingFootprintLayer = Extract<MapStyleLayer, { type: "fill" }> | Extract<MapStyleLayer, { type: "fill-extrusion" }>;
@@ -36,6 +43,7 @@ type Props = {
   properties: Property[];
   selectedPropertyId: string | null;
   visibleOutcomes: Set<Outcome>;
+  searchQuery: string;
   addMode: boolean;
   drawMode: boolean;
   drawModeLabel?: string;
@@ -76,6 +84,43 @@ function draftFeatureCollection(points: Coordinates[]): FeatureCollection {
     geometry: { type: "Point", coordinates },
   }));
   return featureCollection(polygon, line, ...vertices);
+}
+
+function mappedLocationFeatureCollection(
+  properties: Property[],
+  selectedPropertyId: string | null,
+  visibleOutcomes: Set<Outcome>,
+  searchQuery: string,
+  compact: boolean,
+): FeatureCollection {
+  const features: Feature<Geometry>[] = [];
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  for (const property of properties) {
+    const matchesSearch = !normalizedQuery
+      || `${property.address} ${property.unit ?? ""}`.toLowerCase().includes(normalizedQuery);
+    const visible = visibleOutcomes.has(property.currentOutcome) && matchesSearch;
+    const selected = selectedPropertyId === property.id;
+    const visited = property.currentOutcome !== "unvisited";
+    const statusColor = outcomeMeta[property.currentOutcome].color;
+    const mapProperties = {
+      propertyId: property.id,
+      outcome: property.currentOutcome,
+      statusColor,
+      outlineColor: visited ? statusColor : "#315c50",
+      visible,
+      selected,
+      visited,
+      compact,
+    };
+    const footprint = polygonFeature(property.buildingGeometry ?? []);
+    if (footprint) features.push({ ...footprint, properties: mapProperties });
+    features.push({
+      type: "Feature",
+      properties: mapProperties,
+      geometry: { type: "Point", coordinates: property.coordinates },
+    });
+  }
+  return { type: "FeatureCollection", features };
 }
 
 function updateGeoJsonSource(map: MapLibreMap, sourceId: string, data: FeatureCollection) {
@@ -166,6 +211,7 @@ function configureNeighborWalkLayers(
   territory: Territory,
   draftBoundary: Coordinates[],
   parcels: ParcelFeatureCollection,
+  mappedLocations: FeatureCollection,
 ) {
   configureBuildingDetails(map);
   if (!map.getSource(PARCEL_SOURCE_ID)) {
@@ -218,6 +264,96 @@ function configureNeighborWalkLayers(
       paint: { "line-color": territory.color, "line-width": 3, "line-dasharray": [2, 1.5] },
     });
   }
+  if (!map.getSource(LOCATION_SOURCE_ID)) {
+    map.addSource(LOCATION_SOURCE_ID, { type: "geojson", data: mappedLocations });
+  }
+  if (!map.getLayer(LOCATION_AREA_HIT_LAYER_ID)) {
+    map.addLayer({
+      id: LOCATION_AREA_HIT_LAYER_ID,
+      type: "fill",
+      source: LOCATION_SOURCE_ID,
+      minzoom: PARCEL_MIN_ZOOM,
+      filter: ["==", ["geometry-type"], "Polygon"],
+      paint: { "fill-color": "#163b31", "fill-opacity": 0.01 },
+    });
+  }
+  if (!map.getLayer(LOCATION_FILL_LAYER_ID)) {
+    map.addLayer({
+      id: LOCATION_FILL_LAYER_ID,
+      type: "fill",
+      source: LOCATION_SOURCE_ID,
+      minzoom: PARCEL_MIN_ZOOM,
+      filter: ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "visible"], true]],
+      paint: {
+        "fill-color": ["get", "statusColor"],
+        "fill-opacity": [
+          "case",
+          ["==", ["get", "selected"], true], 0.42,
+          ["==", ["get", "visited"], true], 0.26,
+          0.11,
+        ],
+      },
+    });
+  }
+  if (!map.getLayer(LOCATION_OUTLINE_LAYER_ID)) {
+    map.addLayer({
+      id: LOCATION_OUTLINE_LAYER_ID,
+      type: "line",
+      source: LOCATION_SOURCE_ID,
+      minzoom: PARCEL_MIN_ZOOM,
+      filter: ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "visible"], true]],
+      paint: {
+        "line-color": ["get", "outlineColor"],
+        "line-opacity": 0.96,
+        "line-width": ["case", ["==", ["get", "selected"], true], 3, 1.65],
+      },
+    });
+  }
+  if (!map.getLayer(LOCATION_POINT_HIT_LAYER_ID)) {
+    map.addLayer({
+      id: LOCATION_POINT_HIT_LAYER_ID,
+      type: "circle",
+      source: LOCATION_SOURCE_ID,
+      minzoom: 12.5,
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: { "circle-radius": 13, "circle-color": "#163b31", "circle-opacity": 0.01 },
+    });
+  }
+  if (!map.getLayer(LOCATION_HALO_LAYER_ID)) {
+    map.addLayer({
+      id: LOCATION_HALO_LAYER_ID,
+      type: "circle",
+      source: LOCATION_SOURCE_ID,
+      minzoom: 12.5,
+      filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "visible"], true], ["==", ["get", "selected"], true]],
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 12.5, 5.5, 16, 8, 19, 10],
+        "circle-color": "rgba(255, 248, 232, 0.9)",
+        "circle-stroke-color": "#a9660d",
+        "circle-stroke-width": 1.5,
+      },
+    });
+  }
+  if (!map.getLayer(LOCATION_DOT_LAYER_ID)) {
+    map.addLayer({
+      id: LOCATION_DOT_LAYER_ID,
+      type: "circle",
+      source: LOCATION_SOURCE_ID,
+      minzoom: 12.5,
+      filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "visible"], true]],
+      paint: {
+        "circle-radius": [
+          "interpolate", ["linear"], ["zoom"],
+          12.5, ["case", ["==", ["get", "compact"], true], 1.7, 2.2],
+          16, ["case", ["==", ["get", "compact"], true], 3.4, 4.2],
+          19, ["case", ["==", ["get", "compact"], true], 4.4, 5.2],
+        ],
+        "circle-color": ["get", "statusColor"],
+        "circle-stroke-color": ["get", "outlineColor"],
+        "circle-stroke-width": ["case", ["==", ["get", "visited"], true], 1.4, 1.8],
+      },
+    });
+  }
   if (!map.getSource("draft-territory")) {
     map.addSource("draft-territory", {
       type: "geojson",
@@ -257,6 +393,7 @@ function configureNeighborWalkLayers(
   updateGeoJsonSource(map, "active-territory", featureCollection(polygonFeature(territory.boundary)));
   updateGeoJsonSource(map, "draft-territory", draftFeatureCollection(draftBoundary));
   updateGeoJsonSource(map, PARCEL_SOURCE_ID, parcels);
+  updateGeoJsonSource(map, LOCATION_SOURCE_ID, mappedLocations);
 }
 
 export function MapCanvas({
@@ -264,6 +401,7 @@ export function MapCanvas({
   properties,
   selectedPropertyId,
   visibleOutcomes,
+  searchQuery,
   addMode,
   drawMode,
   drawModeLabel,
@@ -276,12 +414,18 @@ export function MapCanvas({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const markersRef = useRef<MapLibreMarker[]>([]);
   const callbacksRef = useRef({ onSelectProperty, onAddIntent, onDraftBoundaryChange });
   const modesRef = useRef({ addMode, drawMode, draftBoundary });
   const territoryRef = useRef(territory);
   const currentMapStyleUrlRef = useRef(mapStyleUrl);
   const parcelDataRef = useRef<ParcelFeatureCollection>(EMPTY_PARCELS);
+  const mappedLocationsRef = useRef<FeatureCollection>(mappedLocationFeatureCollection(
+    properties,
+    selectedPropertyId,
+    visibleOutcomes,
+    searchQuery,
+    compactMarkers,
+  ));
   const parcelRequestRef = useRef(0);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
   const [parcelStatus, setParcelStatus] = useState<"zoom" | "loading" | "ready" | "unavailable">("zoom");
@@ -369,7 +513,13 @@ export function MapCanvas({
 
       map.on("style.load", () => {
         if (!map) return;
-        configureNeighborWalkLayers(map, territoryRef.current, modesRef.current.draftBoundary, parcelDataRef.current);
+        configureNeighborWalkLayers(
+          map,
+          territoryRef.current,
+          modesRef.current.draftBoundary,
+          parcelDataRef.current,
+          mappedLocationsRef.current,
+        );
       });
 
       map.once("load", () => {
@@ -382,9 +532,16 @@ export function MapCanvas({
       map.on("moveend", refreshParcels);
 
       map.on("mousemove", (event: MapMouseEvent) => {
-        if (!map || modesRef.current.addMode || modesRef.current.drawMode || !map.getLayer(PARCEL_FILL_LAYER_ID)) return;
-        const parcel = map.queryRenderedFeatures(event.point, { layers: [PARCEL_FILL_LAYER_ID] })[0];
-        map.getCanvas().style.cursor = parcel ? "pointer" : "grab";
+        if (!map || modesRef.current.addMode || modesRef.current.drawMode) return;
+        const interactiveLayers = [
+          LOCATION_POINT_HIT_LAYER_ID,
+          LOCATION_AREA_HIT_LAYER_ID,
+          PARCEL_FILL_LAYER_ID,
+        ].filter((layerId) => map!.getLayer(layerId));
+        const feature = interactiveLayers.length
+          ? map.queryRenderedFeatures(event.point, { layers: interactiveLayers })[0]
+          : undefined;
+        map.getCanvas().style.cursor = feature ? "pointer" : "grab";
       });
 
       map.on("error", (event) => {
@@ -400,6 +557,17 @@ export function MapCanvas({
         const coordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
         if (modesRef.current.drawMode) {
           callbacksRef.current.onDraftBoundaryChange([...modesRef.current.draftBoundary, coordinates]);
+          return;
+        }
+
+        const locationLayers = [LOCATION_POINT_HIT_LAYER_ID, LOCATION_AREA_HIT_LAYER_ID]
+          .filter((layerId) => map!.getLayer(layerId));
+        const mappedLocation = locationLayers.length
+          ? map.queryRenderedFeatures(event.point, { layers: locationLayers })[0]
+          : undefined;
+        const mappedPropertyId = mappedLocation?.properties?.propertyId;
+        if (mappedPropertyId) {
+          callbacksRef.current.onSelectProperty(String(mappedPropertyId));
           return;
         }
 
@@ -447,8 +615,6 @@ export function MapCanvas({
     return () => {
       cancelled = true;
       if (loadTimeout !== undefined) window.clearTimeout(loadTimeout);
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
       map?.remove();
       mapRef.current = null;
     };
@@ -481,35 +647,17 @@ export function MapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
+    const mappedLocations = mappedLocationFeatureCollection(
+      properties,
+      selectedPropertyId,
+      visibleOutcomes,
+      searchQuery,
+      compactMarkers,
+    );
+    mappedLocationsRef.current = mappedLocations;
     if (!map || mapStatus !== "ready") return;
-    let disposed = false;
-    void import("maplibre-gl").then((maplibregl) => {
-      if (disposed || !mapRef.current) return;
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = properties
-        .filter((property) => visibleOutcomes.has(property.currentOutcome))
-        .map((property) => {
-          const element = document.createElement("button");
-          element.type = "button";
-          element.className = `nw-map-marker${selectedPropertyId === property.id ? " is-selected" : ""}${compactMarkers ? " is-compact" : ""}`;
-          element.dataset.outcome = property.currentOutcome;
-          element.style.setProperty("--marker-color", outcomeMeta[property.currentOutcome].color);
-          element.setAttribute("aria-label", `${property.address}: ${outcomeMeta[property.currentOutcome].label}`);
-          const label = document.createElement("span");
-          label.className = "nw-map-marker-label";
-          label.textContent = property.address;
-          element.appendChild(label);
-          element.addEventListener("click", (event) => {
-            event.stopPropagation();
-            callbacksRef.current.onSelectProperty(property.id);
-          });
-          return new maplibregl.Marker({ element, anchor: "bottom" })
-            .setLngLat(property.coordinates)
-            .addTo(map);
-        });
-    });
-    return () => { disposed = true; };
-  }, [properties, selectedPropertyId, visibleOutcomes, compactMarkers, mapStatus]);
+    updateGeoJsonSource(map, LOCATION_SOURCE_ID, mappedLocations);
+  }, [properties, selectedPropertyId, visibleOutcomes, searchQuery, compactMarkers, mapStatus]);
 
   return (
     <div className="map-engine-shell">
@@ -527,11 +675,11 @@ export function MapCanvas({
             ? "Zoom in for official parcels"
             : parcelStatus === "loading"
               ? "Loading official parcels"
-              : `${parcelCount === PARCEL_RESULT_LIMIT ? `${PARCEL_RESULT_LIMIT.toLocaleString()}+` : parcelCount.toLocaleString()} parcels visible · Tap one`}</span>
+              : `${parcelCount === PARCEL_RESULT_LIMIT ? `${PARCEL_RESULT_LIMIT.toLocaleString()}+` : parcelCount.toLocaleString()} parcels visible · Status colors mark saved locations`}</span>
         </div>
       )}
       {addMode && (
-        <div className="map-mode-banner"><MapPin size={15} /><span>Tap a building or location to add it</span></div>
+        <div className="map-mode-banner"><MapPin size={15} /><span>Tap an official parcel—or anywhere on the map</span></div>
       )}
       {drawMode && (
         <div className="map-mode-banner draw"><MousePointerClick size={15} /><span>{drawModeLabel ?? "Tap at least 3 corners"} · {draftBoundary.length} added</span></div>
