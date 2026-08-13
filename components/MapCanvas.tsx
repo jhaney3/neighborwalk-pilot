@@ -1,14 +1,25 @@
 "use client";
 
-import { AlertTriangle, LoaderCircle, MapPin, MousePointerClick } from "lucide-react";
+import { AlertTriangle, LoaderCircle, MapPin, MapPinned, MousePointerClick } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon } from "geojson";
 import type { Map as MapLibreMap, Marker as MapLibreMarker, MapMouseEvent } from "maplibre-gl";
 import type { Coordinates, Outcome, Property, Territory } from "../lib/domain";
 import { outcomeMeta } from "../lib/domain";
+import {
+  fetchParcelsInView,
+  PARCEL_RESULT_LIMIT,
+  type ParcelDetails,
+  type ParcelFeatureCollection,
+} from "../lib/parcels";
 
 const BUILDING_OUTLINE_LAYER_ID = "neighborwalk-building-outlines";
 const BUILDING_NUMBER_MIN_ZOOM = 16;
+const PARCEL_MIN_ZOOM = 14.5;
+const PARCEL_SOURCE_ID = "official-parcels";
+const PARCEL_FILL_LAYER_ID = "official-parcels-fill";
+const PARCEL_OUTLINE_LAYER_ID = "official-parcels-outline";
+const EMPTY_PARCELS: ParcelFeatureCollection = { type: "FeatureCollection", features: [] };
 type MapStyleLayer = ReturnType<MapLibreMap["getStyle"]>["layers"][number];
 type BuildingFootprintLayer = Extract<MapStyleLayer, { type: "fill" }> | Extract<MapStyleLayer, { type: "fill-extrusion" }>;
 type BuildingNumberLayer = Extract<MapStyleLayer, { type: "symbol" }>;
@@ -17,6 +28,7 @@ type AddIntent = {
   coordinates: Coordinates;
   suggestedAddress: string;
   buildingGeometry?: Coordinates[];
+  parcel?: ParcelDetails;
 };
 
 type Props = {
@@ -149,8 +161,41 @@ function configureBuildingDetails(map: MapLibreMap) {
   }, numberLayers[0]?.id);
 }
 
-function configureNeighborWalkLayers(map: MapLibreMap, territory: Territory, draftBoundary: Coordinates[]) {
+function configureNeighborWalkLayers(
+  map: MapLibreMap,
+  territory: Territory,
+  draftBoundary: Coordinates[],
+  parcels: ParcelFeatureCollection,
+) {
   configureBuildingDetails(map);
+  if (!map.getSource(PARCEL_SOURCE_ID)) {
+    map.addSource(PARCEL_SOURCE_ID, { type: "geojson", data: parcels });
+  }
+  if (!map.getLayer(PARCEL_FILL_LAYER_ID)) {
+    map.addLayer({
+      id: PARCEL_FILL_LAYER_ID,
+      type: "fill",
+      source: PARCEL_SOURCE_ID,
+      minzoom: PARCEL_MIN_ZOOM,
+      paint: {
+        "fill-color": ["case", ["==", ["get", "isResidential"], true], "#e3a33b", "#56776c"],
+        "fill-opacity": ["interpolate", ["linear"], ["zoom"], PARCEL_MIN_ZOOM, 0.035, 18, 0.1],
+      },
+    });
+  }
+  if (!map.getLayer(PARCEL_OUTLINE_LAYER_ID)) {
+    map.addLayer({
+      id: PARCEL_OUTLINE_LAYER_ID,
+      type: "line",
+      source: PARCEL_SOURCE_ID,
+      minzoom: PARCEL_MIN_ZOOM,
+      paint: {
+        "line-color": ["case", ["==", ["get", "isResidential"], true], "#a56b12", "#385b50"],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], PARCEL_MIN_ZOOM, 0.5, 18, 0.86],
+        "line-width": ["interpolate", ["linear"], ["zoom"], PARCEL_MIN_ZOOM, 0.55, 18, 1.25],
+      },
+    });
+  }
   if (!map.getSource("active-territory")) {
     map.addSource("active-territory", {
       type: "geojson",
@@ -211,6 +256,7 @@ function configureNeighborWalkLayers(map: MapLibreMap, territory: Territory, dra
   }
   updateGeoJsonSource(map, "active-territory", featureCollection(polygonFeature(territory.boundary)));
   updateGeoJsonSource(map, "draft-territory", draftFeatureCollection(draftBoundary));
+  updateGeoJsonSource(map, PARCEL_SOURCE_ID, parcels);
 }
 
 export function MapCanvas({
@@ -235,7 +281,11 @@ export function MapCanvas({
   const modesRef = useRef({ addMode, drawMode, draftBoundary });
   const territoryRef = useRef(territory);
   const currentMapStyleUrlRef = useRef(mapStyleUrl);
+  const parcelDataRef = useRef<ParcelFeatureCollection>(EMPTY_PARCELS);
+  const parcelRequestRef = useRef(0);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [parcelStatus, setParcelStatus] = useState<"zoom" | "loading" | "ready" | "unavailable">("zoom");
+  const [parcelCount, setParcelCount] = useState(0);
 
   useEffect(() => {
     callbacksRef.current = { onSelectProperty, onAddIntent, onDraftBoundaryChange };
@@ -281,15 +331,60 @@ export function MapCanvas({
         if (!mapLoaded) setMapStatus("error");
       }, 15000);
 
+      const refreshParcels = () => {
+        if (!map) return;
+        const requestId = ++parcelRequestRef.current;
+        if (map.getZoom() < PARCEL_MIN_ZOOM) {
+          parcelDataRef.current = EMPTY_PARCELS;
+          updateGeoJsonSource(map, PARCEL_SOURCE_ID, EMPTY_PARCELS);
+          setParcelCount(0);
+          setParcelStatus("zoom");
+          return;
+        }
+        const bounds = map.getBounds();
+        setParcelStatus("loading");
+        void fetchParcelsInView({
+          minLat: bounds.getSouth(),
+          minLong: bounds.getWest(),
+          maxLat: bounds.getNorth(),
+          maxLong: bounds.getEast(),
+        }).then((parcels) => {
+          if (cancelled || requestId !== parcelRequestRef.current) return;
+          if (!parcels) {
+            setParcelStatus("unavailable");
+            return;
+          }
+          parcelDataRef.current = parcels;
+          updateGeoJsonSource(map!, PARCEL_SOURCE_ID, parcels);
+          setParcelCount(parcels.features.length);
+          setParcelStatus("ready");
+        }).catch(() => {
+          if (cancelled || requestId !== parcelRequestRef.current) return;
+          parcelDataRef.current = EMPTY_PARCELS;
+          updateGeoJsonSource(map!, PARCEL_SOURCE_ID, EMPTY_PARCELS);
+          setParcelCount(0);
+          setParcelStatus("unavailable");
+        });
+      };
+
       map.on("style.load", () => {
         if (!map) return;
-        configureNeighborWalkLayers(map, territoryRef.current, modesRef.current.draftBoundary);
+        configureNeighborWalkLayers(map, territoryRef.current, modesRef.current.draftBoundary, parcelDataRef.current);
       });
 
       map.once("load", () => {
         mapLoaded = true;
         if (loadTimeout !== undefined) window.clearTimeout(loadTimeout);
         setMapStatus("ready");
+        refreshParcels();
+      });
+
+      map.on("moveend", refreshParcels);
+
+      map.on("mousemove", (event: MapMouseEvent) => {
+        if (!map || modesRef.current.addMode || modesRef.current.drawMode || !map.getLayer(PARCEL_FILL_LAYER_ID)) return;
+        const parcel = map.queryRenderedFeatures(event.point, { layers: [PARCEL_FILL_LAYER_ID] })[0];
+        map.getCanvas().style.cursor = parcel ? "pointer" : "grab";
       });
 
       map.on("error", (event) => {
@@ -305,6 +400,28 @@ export function MapCanvas({
         const coordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
         if (modesRef.current.drawMode) {
           callbacksRef.current.onDraftBoundaryChange([...modesRef.current.draftBoundary, coordinates]);
+          return;
+        }
+
+        const parcelFeature = map.getLayer(PARCEL_FILL_LAYER_ID)
+          ? map.queryRenderedFeatures(event.point, { layers: [PARCEL_FILL_LAYER_ID] })[0]
+          : undefined;
+        if (parcelFeature && (parcelFeature.geometry.type === "Polygon" || parcelFeature.geometry.type === "MultiPolygon")) {
+          const properties = parcelFeature.properties;
+          callbacksRef.current.onAddIntent({
+            coordinates,
+            suggestedAddress: String(properties?.situsAddress || `${coordinates[1].toFixed(6)}, ${coordinates[0].toFixed(6)}`),
+            buildingGeometry: buildingGeometryAtPoint(parcelFeature.geometry, coordinates),
+            parcel: {
+              id: Number(properties?.id),
+              countyFips: String(properties?.countyFips || ""),
+              gislink: String(properties?.gislink || ""),
+              situsAddress: properties?.situsAddress ? String(properties.situsAddress) : null,
+              propertyClass: properties?.propertyClass ? String(properties.propertyClass) : null,
+              landUse: properties?.landUse ? String(properties.landUse) : null,
+              isResidential: properties?.isResidential === true || properties?.isResidential === "true",
+            },
+          });
           return;
         }
         if (!modesRef.current.addMode) return;
@@ -402,6 +519,16 @@ export function MapCanvas({
       )}
       {mapStatus === "error" && (
         <div className="map-state error"><AlertTriangle size={23} /><strong>The map tiles did not load</strong><span>Visit records still work. Check the map style URL or your connection.</span></div>
+      )}
+      {mapStatus === "ready" && parcelStatus !== "unavailable" && (
+        <div className={`parcel-status ${parcelStatus}`}>
+          {parcelStatus === "loading" ? <LoaderCircle className="spin" size={14} /> : <MapPinned size={14} />}
+          <span>{parcelStatus === "zoom"
+            ? "Zoom in for official parcels"
+            : parcelStatus === "loading"
+              ? "Loading official parcels"
+              : `${parcelCount === PARCEL_RESULT_LIMIT ? `${PARCEL_RESULT_LIMIT.toLocaleString()}+` : parcelCount.toLocaleString()} parcels visible · Tap one`}</span>
+        </div>
       )}
       {addMode && (
         <div className="map-mode-banner"><MapPin size={15} /><span>Tap a building or location to add it</span></div>

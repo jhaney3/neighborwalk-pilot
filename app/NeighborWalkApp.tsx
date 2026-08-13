@@ -41,9 +41,17 @@ import {
 import { useNeighborWalk, type SupabaseUser } from "../lib/use-neighborwalk";
 import { reverseGeocode } from "../lib/geocoding";
 import { MAP_STYLE_OPTIONS } from "../lib/map-config";
+import type { ParcelDetails } from "../lib/parcels";
 
 type View = "map" | "followups" | "guide" | "leader" | "settings";
-type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[] };
+type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[]; parcel?: ParcelDetails };
+
+const PARCEL_COUNTY_NAMES: Record<string, string> = {
+  "47055": "Giles County",
+  "47099": "Lawrence County",
+  "47101": "Lewis County",
+  "47181": "Wayne County",
+};
 
 const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
   { value: "all", label: "All" },
@@ -245,6 +253,11 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
               </div>
               <div className="map-stage">
                 <MapCanvas territory={activeTerritory} properties={filteredProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setAddMode(false); }} onAddIntent={async (intent) => {
+                  if (intent.parcel?.situsAddress) {
+                    setPendingAdd(intent);
+                    setToast("Official parcel selected");
+                    return;
+                  }
                   setToast("Checking this map location…");
                   try {
                     const address = await reverseGeocode(intent.coordinates);
@@ -344,7 +357,8 @@ function WorkspaceSetup({
 function AddPropertyModal({ intent, onClose, onSave }: { intent: AddIntent; onClose: () => void; onSave: (address: string, unit: string) => void }) {
   const [address, setAddress] = useState(intent.suggestedAddress);
   const [unit, setUnit] = useState("");
-  return <Modal title="Add this location" description="Confirm the address before recording a visit." onClose={onClose}><div className="location-preview"><House size={20} /><span><strong>Map location selected</strong>{intent.coordinates[1].toFixed(6)}, {intent.coordinates[0].toFixed(6)}{intent.buildingGeometry ? " · Building outline found" : ""}</span></div><div className="form-stack"><label className="form-field"><span>Street address</span><input value={address} onChange={(event) => setAddress(event.target.value)} /></label><label className="form-field"><span>Unit <small>Optional</small></span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Apartment, suite, or unit" /></label></div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={address.trim().length < 3} onClick={() => onSave(address, unit)}><Plus size={15} /> Add location</button></div></Modal>;
+  const countyName = intent.parcel ? PARCEL_COUNTY_NAMES[intent.parcel.countyFips] ?? "Tennessee" : null;
+  return <Modal title="Add this location" description={intent.parcel ? "Confirm the official parcel address before recording a visit." : "Confirm the address before recording a visit."} onClose={onClose}><div className="location-preview"><House size={20} /><span><strong>{intent.parcel ? `Official ${countyName} parcel` : "Map location selected"}</strong>{intent.coordinates[1].toFixed(6)}, {intent.coordinates[0].toFixed(6)}{intent.buildingGeometry ? " · Boundary found" : ""}</span></div>{intent.parcel && <div className="parcel-preview"><span><strong>{intent.parcel.propertyClass ?? "Unclassified parcel"}</strong><small>{intent.parcel.landUse ?? "No land-use description in the county file"}</small></span><ShieldCheck size={15} /><small>Owner names and property values are not stored.</small></div>}<div className="form-stack"><label className="form-field"><span>Street address</span><input value={address} onChange={(event) => setAddress(event.target.value)} /></label><label className="form-field"><span>Unit <small>Optional</small></span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Apartment, suite, or unit" /></label></div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={address.trim().length < 3} onClick={() => onSave(address, unit)}><Plus size={15} /> Add location</button></div></Modal>;
 }
 
 function TerritoryModal({ territory, teams, boundaryChanged, onClose, onRedraw, onSave }: {

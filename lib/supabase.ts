@@ -88,6 +88,25 @@ export type NeighborWalkDatabase = {
           geometry: Json;
         }[];
       };
+      parcels_in_view_v2: {
+        Args: {
+          min_lat: number;
+          min_long: number;
+          max_lat: number;
+          max_long: number;
+          result_limit?: number;
+        };
+        Returns: {
+          id: number;
+          county_fips: string;
+          gislink: string;
+          situs_address: string | null;
+          property_class: string | null;
+          land_use: string | null;
+          is_residential: boolean | null;
+          geometry: Json;
+        }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
