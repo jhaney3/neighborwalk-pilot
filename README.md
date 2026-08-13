@@ -2,7 +2,7 @@
 
 NeighborWalk is a mobile-first progressive web app for respectful neighborhood outreach. Volunteers can work from a real interactive map, record one objective outcome per visit, schedule permission-based follow-ups, and use a church-approved conversation guide. Leaders can define territories and see operational coverage without ranking residents, conversations, or volunteers.
 
-The deployed build works immediately in device-only mode with fictional sample data. Records persist in IndexedDB, field actions work offline, and the app can be installed from a supported browser. Connect the documented backend contract before using it as a shared multi-user system.
+The app remains offline-first with IndexedDB and an installable service worker. When Supabase is configured, members sign in by email and synchronize a church workspace protected by grants and row-level security.
 
 ## Included
 
@@ -14,8 +14,8 @@ The deployed build works immediately in device-only mode with fictional sample d
 - leader dashboard for territories, teams, coverage, outcomes, and audit activity
 - offline device storage, ordered writes, validated import/export, retention enforcement, and a service worker
 - installable PWA manifest, responsive desktop/mobile layouts, reduced-motion support, and device notifications
-- optional sync and reverse-geocoding adapters controlled by environment variables
-- production PostgreSQL/PostGIS schema with constraints, indexes, and row-level security
+- Supabase passwordless email authentication and revision-aware workspace synchronization
+- production PostgreSQL/PostGIS migrations with explicit grants, row-level security, and a parcel-ready spatial index
 - OpenAPI 3.1 contract for bootstrap, sync, map data, visits, follow-ups, and reverse geocoding
 
 ## Run locally
@@ -47,24 +47,25 @@ Copy `.env.example` to `.env.local` for local development. MapTiler browser keys
 | --- | --- |
 | `NEXT_PUBLIC_MAPTILER_KEY` | Protected browser key used to build the MapTiler Streets style URL automatically. Paste only the key value. |
 | `NEXT_PUBLIC_MAP_STYLE_URL` | MapLibre-compatible style JSON URL. Defaults to OpenFreeMap Bright. |
-| `NEXT_PUBLIC_API_BASE_URL` | Enables connected mode and sends sync requests to `/v1/sync`. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe Supabase project API URL. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Modern browser-safe Supabase publishable key. Never substitute a secret or service-role key. |
 | `NEXT_PUBLIC_GEOCODER_URL` | Same-origin or trusted proxy endpoint used for reverse address lookup. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical production origin used for metadata. |
 
-Without `NEXT_PUBLIC_API_BASE_URL`, NeighborWalk intentionally stays in device-only mode. The Settings screen labels the identity picker as a demo preview so it cannot be mistaken for real authorization.
+Without both Supabase variables, NeighborWalk intentionally stays in device-only demo mode. With them, the app requires email sign-in and offers the first verified user a clean Lawrenceburg church workspace.
 
 When `NEXT_PUBLIC_MAPTILER_KEY` is configured, new installs use MapTiler Streets and existing version-3 installs migrate once from a bundled OpenFreeMap style. Users can still choose another layer afterward. MapTiler supplies streets and building footprints, not legal parcel boundaries; a separate parcel provider is required for a Zillow-style parcel overlay.
 
-## Backend handoff
+## Supabase backend
 
-The two implementation contracts are:
+The applied database source is stored in `supabase/migrations/`. It creates:
 
-- [`docs/database/postgres.sql`](docs/database/postgres.sql): PostgreSQL 16 + PostGIS tables, constraints, indexes, retention-ready timestamps, immutable visit policies, and role-aware RLS.
-- [`docs/api/openapi.yaml`](docs/api/openapi.yaml): the HTTP interface expected by the client.
+- church workspaces and authenticated memberships
+- an offline-first workspace snapshot with optimistic revision checks
+- a privacy-minimized parcel table and bounding-box RPC for Lawrence County data
+- explicit Data API grants and tenant-scoped RLS policies
 
-For every authenticated database transaction, the API must verify the external session, resolve it to `public.users.id`, then execute `SET LOCAL app.user_id = '<internal bigint id>'` before church-scoped queries. Use a non-owner application role so forced row-level security remains effective. Administrative membership provisioning and privacy erasure should run through separate, narrowly privileged server jobs.
-
-The sync endpoint receives idempotent mutation IDs plus a validated snapshot. The server remains authoritative: it must validate church membership, roles, object ownership, note limits, follow-up consent, and public IDs before applying anything. Never trust the device-only role selector or client-supplied church/user identifiers.
+`docs/database/postgres.sql` and `docs/api/openapi.yaml` preserve the more normalized future backend design. The connected pilot currently uses the smaller Supabase schema so the existing offline document can synchronize without discarding field functionality.
 
 ## Data and privacy model
 
@@ -76,4 +77,4 @@ Exported backups are readable JSON and can contain sensitive ministry records. S
 
 ## Deployment status
 
-The current Sites deployment is private and installable as a PWA. Its authentication gate protects access to the site, while shared user identity, church membership, and authorization become authoritative only after the backend is connected. See [`docs/production-checklist.md`](docs/production-checklist.md) before a live canvassing rollout.
+The current Sites deployment is private and installable as a PWA. Supabase Auth controls the signed-in church identity, while PostgreSQL grants and RLS protect workspace and parcel records. See [`docs/production-checklist.md`](docs/production-checklist.md) before a live canvassing rollout.

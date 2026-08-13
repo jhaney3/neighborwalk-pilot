@@ -17,6 +17,7 @@ import {
   FileJson,
   History,
   LockKeyhole,
+  LogOut,
   Map as MapIcon,
   MapPinned,
   MessageCircle,
@@ -281,6 +282,8 @@ export function SettingsView({
   online,
   saving,
   storageError,
+  accountEmail,
+  onSignOut,
   onUpdateChurch,
   onSetPreference,
   onExport,
@@ -293,6 +296,8 @@ export function SettingsView({
   online: boolean;
   saving: boolean;
   storageError: string | null;
+  accountEmail?: string;
+  onSignOut?: () => Promise<void>;
   onUpdateChurch: (patch: Partial<NeighborWalkData["church"]>) => void;
   onSetPreference: <K extends keyof NeighborWalkData["preferences"]>(key: K, value: NeighborWalkData["preferences"][K]) => void;
   onExport: () => void;
@@ -386,7 +391,7 @@ export function SettingsView({
           {data.sync.mode === "device_only" ? <>
             <label className="form-field"><span>Preview identity <small>Device-only demo</small></span><select value={data.preferences.activeVolunteerId} onChange={(event) => onSetPreference("activeVolunteerId", event.target.value)}>{data.volunteers.map((volunteer) => <option value={volunteer.id} key={volunteer.id}>{volunteer.name} · {volunteer.role}</option>)}</select></label>
             <div className="data-note"><LockKeyhole size={15} /><span>This selector previews volunteer and leader experiences. A connected deployment must derive roles from the authenticated backend session.</span></div>
-          </> : <div className="connection-card connected"><LockKeyhole size={18} /><span><strong>Identity controlled by your backend</strong>Roles cannot be changed from this device.</span></div>}
+          </> : <><div className="connection-card connected"><LockKeyhole size={18} /><span><strong>Signed-in church account</strong>{accountEmail || "Authenticated member"} · Roles are protected by the workspace.</span></div>{onSignOut && <button className="button quiet" onClick={() => void onSignOut()}><LogOut size={15} /> Sign out</button>}</>}
         </SettingsSection>
 
         <SettingsSection icon={<ShieldCheck size={18} />} title="Privacy guardrails" description="Applied to every field record on this device.">

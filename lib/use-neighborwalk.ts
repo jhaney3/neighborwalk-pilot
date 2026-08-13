@@ -21,6 +21,27 @@ import {
   resetNeighborWalkData,
   saveNeighborWalkData,
 } from "./storage";
+import { getSupabaseBrowserClient, type Json } from "./supabase";
+import { createWorkspaceData } from "./seed";
+
+export type SupabaseUser = { id: string; email: string };
+type WorkspaceStatus = "device_only" | "connecting" | "needs_workspace" | "creating" | "ready";
+type WorkspaceConnection = { userId: string; churchId: string; revision: number };
+
+const WORKSPACE_CACHE_KEY = "neighborwalk-supabase-workspace";
+
+function readWorkspaceConnection(userId: string): WorkspaceConnection | null {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(WORKSPACE_CACHE_KEY) ?? "null") as WorkspaceConnection | null;
+    return parsed?.userId === userId && parsed.churchId && Number.isInteger(parsed.revision) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeWorkspaceConnection(connection: WorkspaceConnection) {
+  window.localStorage.setItem(WORKSPACE_CACHE_KEY, JSON.stringify(connection));
+}
 
 type VisitInput = {
   propertyId: string;
@@ -63,32 +84,95 @@ function mutation(
   return { id: createId("mutation"), entityType, entityId, operation, changedAt };
 }
 
-export function useNeighborWalk() {
+export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const [data, setData] = useState<NeighborWalkData | null>(null);
   const [loading, setLoading] = useState(true);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus>(supabaseUser ? "connecting" : "device_only");
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveVersion = useRef(0);
+  const workspaceRef = useRef<WorkspaceConnection | null>(null);
 
   useEffect(() => {
     let active = true;
-    loadNeighborWalkData()
-      .then((loaded) => {
-        if (active) {
-          const mode = process.env.NEXT_PUBLIC_API_BASE_URL ? "connected" : "device_only";
-          setData({ ...loaded, sync: { ...loaded.sync, mode } });
+    const load = async () => {
+      try {
+        const loaded = await loadNeighborWalkData();
+        if (!active) return;
+        const client = getSupabaseBrowserClient();
+        if (!supabaseUser || !client) {
+          setWorkspaceStatus("device_only");
+          setData({ ...loaded, sync: { ...loaded.sync, mode: "device_only" } });
+          return;
         }
-      })
-      .catch((error: unknown) => {
+
+        setWorkspaceStatus("connecting");
+        try {
+          const { data: membership, error: membershipError } = await client
+            .from("church_memberships")
+            .select("church_id, role")
+            .eq("user_id", supabaseUser.id)
+            .eq("active", true)
+            .limit(1)
+            .maybeSingle();
+          if (!active) return;
+          if (membershipError) throw membershipError;
+          if (!membership) {
+            setWorkspaceStatus("needs_workspace");
+            setData({ ...loaded, sync: { ...loaded.sync, mode: "connected", lastError: undefined } });
+            return;
+          }
+          const { data: snapshot, error: snapshotError } = await client
+            .from("workspace_snapshots")
+            .select("church_id, schema_version, data, revision, updated_at")
+            .eq("church_id", membership.church_id)
+            .single();
+          if (!active) return;
+          if (snapshotError) throw snapshotError;
+          const parsedRemote = neighborWalkDataSchema.safeParse(snapshot.data);
+          if (!parsedRemote.success) throw new Error("The church workspace contains data from an unsupported app version.");
+          const cachedForUser = readWorkspaceConnection(supabaseUser.id);
+          const connection = { userId: supabaseUser.id, churchId: membership.church_id, revision: Number(snapshot.revision) };
+          workspaceRef.current = connection;
+          writeWorkspaceConnection(connection);
+          const hasLocalChanges = cachedForUser?.churchId === membership.church_id
+            && loaded.sync.mode === "connected"
+            && loaded.sync.pending.length > 0;
+          const selected = hasLocalChanges ? loaded : parsedRemote.data;
+          setData({
+            ...selected,
+            sync: {
+              ...selected.sync,
+              mode: "connected",
+              lastError: hasLocalChanges ? "This device has changes waiting to be synchronized." : undefined,
+            },
+          });
+          setWorkspaceStatus("ready");
+        } catch (error) {
+          if (!active) return;
+          const cached = readWorkspaceConnection(supabaseUser.id);
+          workspaceRef.current = cached;
+          setData({
+            ...loaded,
+            sync: {
+              ...loaded.sync,
+              mode: "connected",
+              lastError: error instanceof Error ? error.message : "The church workspace could not be reached.",
+            },
+          });
+          setWorkspaceStatus(cached ? "ready" : "needs_workspace");
+        }
+      } catch (error) {
         if (active) setStorageError(error instanceof Error ? error.message : "Could not open device storage.");
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    };
+    void load();
     return () => { active = false; };
-  }, []);
+  }, [supabaseUser]);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -373,17 +457,29 @@ export function useNeighborWalk() {
 
   const importBackup = useCallback(async (file: File) => {
     const imported = await importNeighborWalkFile(file);
-    const mode: NeighborWalkData["sync"]["mode"] = process.env.NEXT_PUBLIC_API_BASE_URL ? "connected" : "device_only";
-    const next = { ...imported, sync: { ...imported.sync, mode } };
+    const connected = Boolean(supabaseUser && getSupabaseBrowserClient());
+    const next = {
+      ...imported,
+      sync: {
+        ...imported.sync,
+        mode: connected ? "connected" as const : "device_only" as const,
+        pending: connected ? [mutation("data", imported.church.id)] : imported.sync.pending,
+      },
+    };
     setData(next);
     return next;
-  }, []);
+  }, [supabaseUser]);
 
   const resetDemo = useCallback(async () => {
     const reset = await resetNeighborWalkData();
-    setData(reset);
-    return reset;
-  }, []);
+    const connected = Boolean(supabaseUser && getSupabaseBrowserClient());
+    const next = connected ? {
+      ...reset,
+      sync: { ...reset.sync, mode: "connected" as const, pending: [mutation("data", reset.church.id)] },
+    } : reset;
+    setData(next);
+    return next;
+  }, [supabaseUser]);
 
   const purgeExpired = useCallback(() => {
     updateData((current) => {
@@ -393,32 +489,76 @@ export function useNeighborWalk() {
     });
   }, [updateData]);
 
-  const syncNow = useCallback(async () => {
-    if (!data || !process.env.NEXT_PUBLIC_API_BASE_URL || !online) return false;
-    const submittedMutationIds = new Set(data.sync.pending.map((item) => item.id));
-    const submittedUpdatedAt = data.updatedAt;
+  const createWorkspace = useCallback(async (churchName: string, includeDeviceData = false) => {
+    const client = getSupabaseBrowserClient();
+    if (!client || !supabaseUser || !data || !online) return false;
+    setWorkspaceStatus("creating");
     setSaving(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")}/v1/sync`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ schemaVersion: data.schemaVersion, mutations: data.sync.pending, snapshot: data }),
+      const sourceData = includeDeviceData ? data : createWorkspaceData(churchName, supabaseUser);
+      const initialData: NeighborWalkData = {
+        ...sourceData,
+        church: { ...sourceData.church, name: churchName.trim() },
+        sync: { ...sourceData.sync, mode: "connected", pending: [], lastError: undefined },
+        updatedAt: new Date().toISOString(),
+      };
+      const { data: created, error } = await client.rpc("create_church_workspace", {
+        workspace_name: initialData.church.name,
+        initial_data: initialData as unknown as Json,
+        initial_schema_version: initialData.schemaVersion,
       });
-      if (!response.ok) throw new Error(`Sync failed (${response.status})`);
-      const contentLength = Number(response.headers.get("content-length") || 0);
-      if (contentLength > 10 * 1024 * 1024) throw new Error("Sync response was too large");
-      const responseText = await response.text();
-      if (responseText.length > 10 * 1024 * 1024) throw new Error("Sync response was too large");
-      const result = JSON.parse(responseText) as { data?: unknown };
-      const parsedServerData = result.data === undefined ? null : neighborWalkDataSchema.safeParse(result.data);
-      if (parsedServerData && !parsedServerData.success) throw new Error("Sync returned invalid data");
-      const syncedAt = new Date().toISOString();
+      if (error) throw error;
+      const workspace = created?.[0];
+      if (!workspace) throw new Error("The church workspace was not created.");
+      const parsed = neighborWalkDataSchema.safeParse(workspace.data);
+      if (!parsed.success) throw new Error("The church workspace returned invalid data.");
+      const connection = { userId: supabaseUser.id, churchId: workspace.church_id, revision: Number(workspace.revision) };
+      workspaceRef.current = connection;
+      writeWorkspaceConnection(connection);
+      setData({ ...parsed.data, sync: { ...parsed.data.sync, mode: "connected", pending: [], lastSyncedAt: new Date().toISOString(), lastError: undefined } });
+      setWorkspaceStatus("ready");
+      return true;
+    } catch (error) {
+      setData((current) => current ? { ...current, sync: { ...current.sync, mode: "connected", lastError: error instanceof Error ? error.message : "The church workspace could not be created." } } : current);
+      setWorkspaceStatus("needs_workspace");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [data, online, supabaseUser]);
+
+  const syncNow = useCallback(async () => {
+    const client = getSupabaseBrowserClient();
+    const workspace = workspaceRef.current;
+    if (!data || !client || !supabaseUser || !workspace || !online) return false;
+    const submittedMutationIds = new Set(data.sync.pending.map((item) => item.id));
+    const submittedUpdatedAt = data.updatedAt;
+    const syncedAt = new Date().toISOString();
+    const submittedData: NeighborWalkData = {
+      ...enforceRetention(data),
+      sync: { ...data.sync, mode: "connected", pending: [], lastSyncedAt: syncedAt, lastError: undefined },
+    };
+    setSaving(true);
+    try {
+      const { data: saved, error } = await client
+        .from("workspace_snapshots")
+        .update({ schema_version: submittedData.schemaVersion, data: submittedData as unknown as Json })
+        .eq("church_id", workspace.churchId)
+        .eq("revision", workspace.revision)
+        .select("revision, data, updated_at")
+        .maybeSingle();
+      if (error) throw error;
+      if (!saved) throw new Error("Another device saved newer changes. Reload before synchronizing this device.");
+      const parsedServerData = neighborWalkDataSchema.safeParse(saved.data);
+      if (!parsedServerData.success) throw new Error("Sync returned invalid data.");
+      const nextConnection = { ...workspace, revision: Number(saved.revision) };
+      workspaceRef.current = nextConnection;
+      writeWorkspaceConnection(nextConnection);
       setData((current) => {
         if (!current) return current;
         const pending = current.sync.pending.filter((item) => !submittedMutationIds.has(item.id));
         const sync = { ...current.sync, mode: "connected" as const, pending, lastSyncedAt: syncedAt, lastError: undefined };
-        if (current.updatedAt !== submittedUpdatedAt || !parsedServerData?.success) return { ...current, sync };
+        if (current.updatedAt !== submittedUpdatedAt) return { ...current, sync };
         return { ...parsedServerData.data, sync: { ...parsedServerData.data.sync, ...sync } };
       });
       return true;
@@ -428,7 +568,7 @@ export function useNeighborWalk() {
     } finally {
       setSaving(false);
     }
-  }, [data, online]);
+  }, [data, online, supabaseUser]);
 
   const activeTerritory = useMemo(() => data?.territories.find((territory) => territory.id === data.preferences.activeTerritoryId) ?? null, [data]);
   const activeVolunteer = useMemo(() => data?.volunteers.find((volunteer) => volunteer.id === data.preferences.activeVolunteerId) ?? null, [data]);
@@ -439,6 +579,7 @@ export function useNeighborWalk() {
     storageError,
     online,
     saving,
+    workspaceStatus,
     activeTerritory,
     activeVolunteer,
     actions: {
@@ -459,6 +600,7 @@ export function useNeighborWalk() {
       importBackup,
       resetDemo,
       purgeExpired,
+      createWorkspace,
       syncNow,
     },
   };

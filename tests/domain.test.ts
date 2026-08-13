@@ -8,7 +8,7 @@ import {
   neighborWalkDataSchema,
   visitsForProperty,
 } from "../lib/domain";
-import { createSeedData } from "../lib/seed";
+import { createSeedData, createWorkspaceData } from "../lib/seed";
 import { withSecurityHeaders } from "../lib/security-headers";
 import { mapTilerStyleUrlForKey } from "../lib/map-config";
 
@@ -27,6 +27,19 @@ describe("NeighborWalk domain", () => {
     expect(data.schemaVersion).toBe(APP_SCHEMA_VERSION);
     expect(data.properties.length).toBeGreaterThan(10);
     expect(JSON.stringify(data)).not.toMatch(/@[a-z0-9.-]+\.[a-z]{2,}/i);
+  });
+
+  it("creates a clean, valid Lawrenceburg workspace for a signed-in leader", () => {
+    const data = createWorkspaceData("First Baptist Church", {
+      id: "fc77fe56-7784-4b60-9be8-3005bb250c6b",
+      email: "erica@example.org",
+    });
+    expect(neighborWalkDataSchema.safeParse(data).success).toBe(true);
+    expect(data.church.name).toBe("First Baptist Church");
+    expect(data.territories[0].center).toEqual([-87.3347, 35.2423]);
+    expect(data.properties).toHaveLength(0);
+    expect(data.visits).toHaveLength(0);
+    expect(data.volunteers[0]).toMatchObject({ email: "erica@example.org", role: "leader" });
   });
 
   it("calculates territory coverage from the current state", () => {

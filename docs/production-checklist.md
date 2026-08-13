@@ -1,18 +1,16 @@
 # NeighborWalk production checklist
 
-The client is ready for a device-only pilot. Complete every required item below before treating the app as a shared system of record.
+The client and Supabase foundation are ready for an owner-operated connected pilot. Complete every required item below before treating the app as a church-wide system of record.
 
-## Required backend work
+## Supabase and synchronization
 
-- Provision PostgreSQL 16 or newer with PostGIS, run `docs/database/postgres.sql` through your migration system, and retain the migration in source control.
-- Create a least-privileged runtime database role. It must not own the tables or carry `BYPASSRLS`.
-- Implement `docs/api/openapi.yaml` behind HTTPS. Keep database and map/geocoder provider secrets on the server.
-- Verify each authenticated session server-side, resolve its membership, and use `SET LOCAL app.user_id` inside a short transaction before every church-scoped query.
-- Reject cross-origin state-changing requests, use `SameSite`/`Secure`/`HttpOnly` session cookies, and require a CSRF token or an equally strong origin-bound defense.
-- Make sync mutation IDs idempotent, apply writes transactionally, validate public IDs and church ownership, and return the canonical server snapshot.
+- Keep the Supabase migrations in source control and run both Security Advisor and Performance Advisor after every schema change.
+- Set the production Site URL and exact redirect URL in Supabase Auth before testing passwordless sign-in.
+- Add a leader-controlled invitation and membership-revocation flow before inviting volunteers.
+- Replace the pilot snapshot sync with entity-level conflict merging before simultaneous multi-device field use; the current revision check safely rejects stale overwrites.
 - Add cursor pagination, request body limits, rate limits, structured logs, error tracking, database backups, restore drills, and availability alerts.
-- Implement an administrator-only membership provisioning flow. The device-only preview identity selector is not an authorization mechanism.
 - Add retention and erasure jobs for visits, follow-ups, audit entries, soft-deleted properties, mutation receipts, and backups.
+- Configure trusted custom SMTP before a broad rollout so sign-in emails are branded and deliver reliably.
 
 ## Maps and addresses
 

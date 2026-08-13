@@ -1,5 +1,5 @@
-import { NeighborWalkApp } from "./NeighborWalkApp";
+import { NeighborWalkRoot } from "../components/SupabaseGate";
 
 export default function Home() {
-  return <NeighborWalkApp />;
+  return <NeighborWalkRoot />;
 }

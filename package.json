@@ -16,6 +16,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.112.3",
     "cross-env": "^10.1.0",
     "drizzle-orm": "0.45.2",
     "idb": "^8.0.3",
