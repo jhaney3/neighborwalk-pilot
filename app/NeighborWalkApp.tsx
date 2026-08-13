@@ -8,6 +8,7 @@ import {
   ChevronDown,
   CircleUserRound,
   CloudOff,
+  Edit3,
   House,
   Layers3,
   Map as MapIcon,
@@ -29,11 +30,13 @@ import { PropertyDrawer } from "../components/PropertyDrawer";
 import { FollowUpsView, GuideView, LeaderView, Modal, SettingsView } from "../components/Views";
 import {
   coverageForTerritory,
+  centerForBoundary,
   outcomeMeta,
   visitsForProperty,
   type Coordinates,
   type NeighborWalkData,
   type Outcome,
+  type Territory,
 } from "../lib/domain";
 import { useNeighborWalk, type SupabaseUser } from "../lib/use-neighborwalk";
 import { reverseGeocode } from "../lib/geocoding";
@@ -61,7 +64,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const [pendingAdd, setPendingAdd] = useState<AddIntent | null>(null);
   const [drawMode, setDrawMode] = useState(false);
   const [draftBoundary, setDraftBoundary] = useState<Coordinates[]>([]);
-  const [newTerritoryOpen, setNewTerritoryOpen] = useState(false);
+  const [territoryEditorOpen, setTerritoryEditorOpen] = useState(false);
+  const [editingTerritoryId, setEditingTerritoryId] = useState<string | null>(null);
   const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
   const [mapLayersOpen, setMapLayersOpen] = useState(false);
   const [walkStartedAt, setWalkStartedAt] = useState<number | null>(null);
@@ -120,6 +124,9 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const selectedVisits = selectedProperty ? visitsForProperty(data, selectedProperty.id) : [];
   const selectedFollowUp = selectedProperty ? data.followUps.find((followUp) => followUp.propertyId === selectedProperty.id && followUp.status === "scheduled") : undefined;
   const openFollowUps = data.followUps.filter((followUp) => followUp.status === "scheduled").length;
+  const editingTerritory = editingTerritoryId ? data.territories.find((territory) => territory.id === editingTerritoryId) : undefined;
+  const territoryEditorEventId = editingTerritory?.eventId ?? data.preferences.activeEventId;
+  const territoryEditorTeams = data.teams.filter((team) => team.eventId === territoryEditorEventId);
 
   const navigate = (next: View) => {
     setViewOverride(next);
@@ -148,8 +155,35 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
     navigate("map");
     setSelectedPropertyId(null);
     setAddMode(false);
+    setEditingTerritoryId(null);
+    setTerritoryEditorOpen(false);
     setDraftBoundary([]);
     setDrawMode(true);
+  };
+
+  const openTerritoryEditor = (territoryId: string) => {
+    actions.selectTerritory(territoryId);
+    setEditingTerritoryId(territoryId);
+    setTerritoryPickerOpen(false);
+    setTerritoryEditorOpen(true);
+  };
+
+  const startBoundaryRedraw = (territoryId: string) => {
+    navigate("map");
+    actions.selectTerritory(territoryId);
+    setSelectedPropertyId(null);
+    setAddMode(false);
+    setEditingTerritoryId(territoryId);
+    setTerritoryEditorOpen(false);
+    setDraftBoundary([]);
+    setDrawMode(true);
+  };
+
+  const cancelDrawing = () => {
+    setDrawMode(false);
+    setDraftBoundary([]);
+    setEditingTerritoryId(null);
+    setTerritoryEditorOpen(false);
   };
 
   return (
@@ -210,7 +244,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
                 </div>
               </div>
               <div className="map-stage">
-                <MapCanvas territory={activeTerritory} properties={filteredProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} addMode={addMode} drawMode={drawMode} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setAddMode(false); }} onAddIntent={async (intent) => {
+                <MapCanvas territory={activeTerritory} properties={filteredProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setAddMode(false); }} onAddIntent={async (intent) => {
                   setToast("Checking this map location…");
                   try {
                     const address = await reverseGeocode(intent.coordinates);
@@ -222,9 +256,10 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
                 {query && <div className="map-search-results" aria-label="Address search results">{filteredProperties.slice(0, 5).map((property) => <button key={property.id} onClick={() => setSelectedPropertyId(property.id)}><span><strong>{property.address}</strong><small>{outcomeMeta[property.currentOutcome].label}</small></span><i style={{ background: outcomeMeta[property.currentOutcome].color }} /></button>)}{!filteredProperties.length && <p>No locations match “{query}”.</p>}</div>}
                 <div className="map-floating-actions">
                   {!drawMode && <button className={`map-action-button ${addMode ? "active" : ""}`} aria-label={addMode ? "Cancel adding a location" : "Add a location"} onClick={() => { setAddMode((current) => !current); setSelectedPropertyId(null); }}><Plus size={18} /><span>{addMode ? "Cancel adding" : "Add location"}</span></button>}
+                  {canManage && !drawMode && <button className="map-action-button secondary" aria-label={`Edit ${activeTerritory.name}`} onClick={() => openTerritoryEditor(activeTerritory.id)}><Edit3 size={18} /><span>Edit territory</span></button>}
                   {canManage && !drawMode && <button className="map-action-button secondary" aria-label="Draw a territory" onClick={startDrawing}><MapPinned size={18} /><span>Draw territory</span></button>}
                 </div>
-                {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => points.slice(0, -1))}><Undo2 size={15} /> Undo</button><button className="button quiet" onClick={() => { setDrawMode(false); setDraftBoundary([]); }}>Cancel</button><button className="button primary" disabled={draftBoundary.length < 3} onClick={() => setNewTerritoryOpen(true)}><Check size={15} /> Finish boundary</button></div>}
+                {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => points.slice(0, -1))}><Undo2 size={15} /> Undo</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={draftBoundary.length < 3} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
                 {!selectedProperty && !drawMode && <div className="walk-dock"><div><span>{walkStartedAt ? "Walk in progress" : "Ready for the next block"}</span><strong>{walkStartedAt ? formatElapsed(elapsed) : `${coverage.remaining} locations remaining`}</strong></div><button className={walkStartedAt ? "button quiet" : "button primary"} onClick={() => { if (walkStartedAt) { setWalkStartedAt(null); setElapsed(0); setToast("Walk session finished"); } else { setWalkStartedAt(Date.now()); setToast("Walk session started"); } }}>{walkStartedAt ? <><TimerReset size={15} /> Finish</> : <><Navigation size={15} /> Start walk</>}</button></div>}
               </div>
               {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} canManage={canManage} onClose={() => setSelectedPropertyId(null)} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} />}
@@ -232,7 +267,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
           )}
           {view === "followups" && <FollowUpsView data={data} onOpenProperty={(propertyId) => { navigate("map"); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onComplete={(id) => { actions.completeFollowUp(id); setToast("Follow-up completed"); }} onReschedule={(id, date) => { actions.rescheduleFollowUp(id, date); setToast("Follow-up rescheduled"); }} onCancel={(id) => { actions.cancelFollowUp(id); setToast("Follow-up cancelled"); }} />}
           {view === "guide" && <GuideView data={data} canManage={canManage} onUpdate={(id, patch) => { actions.updateGuideStep(id, patch); setToast("Guide step saved"); }} />}
-          {view === "leader" && canManage && <LeaderView data={data} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onStartDrawing={startDrawing} />}
+          {view === "leader" && canManage && <LeaderView data={data} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} />}
           {view === "settings" && <SettingsView data={data} online={online} saving={saving} storageError={storageError} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onReset={actions.resetDemo} onSync={actions.syncNow} />}
         </section>
       </div>
@@ -245,12 +280,23 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
       </nav>
 
       {pendingAdd && <AddPropertyModal intent={pendingAdd} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
-      {territoryPickerOpen && <TerritoryPickerModal data={data} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
-      {newTerritoryOpen && <TerritoryModal hasBoundary={draftBoundary.length >= 3} onClose={() => setNewTerritoryOpen(false)} onSave={(name, color) => {
-        const boundary = draftBoundary.length >= 3 ? draftBoundary : activeTerritory.boundary;
-        const center: Coordinates = [boundary.reduce((sum, point) => sum + point[0], 0) / boundary.length, boundary.reduce((sum, point) => sum + point[1], 0) / boundary.length];
-        actions.addTerritory({ name, color, boundary, center });
-        setDraftBoundary([]); setDrawMode(false); setNewTerritoryOpen(false); setToast("Territory created");
+      {territoryPickerOpen && <TerritoryPickerModal data={data} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onEdit={openTerritoryEditor} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
+      {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} teams={territoryEditorTeams} boundaryChanged={draftBoundary.length >= 3} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onSave={(name, color, assignedTeamId) => {
+        if (editingTerritory) {
+          const replacementBoundary = draftBoundary.length >= 3 ? draftBoundary : undefined;
+          actions.updateTerritory(editingTerritory.id, {
+            name,
+            color,
+            assignedTeamId: assignedTeamId || undefined,
+            boundary: replacementBoundary,
+            center: replacementBoundary ? centerForBoundary(replacementBoundary) : undefined,
+          });
+          setToast("Territory updated");
+        } else if (draftBoundary.length >= 3) {
+          actions.addTerritory({ name, color, assignedTeamId: assignedTeamId || undefined, boundary: draftBoundary, center: centerForBoundary(draftBoundary) });
+          setToast("Territory created");
+        }
+        setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false);
       }} />}
       {toast && <div className="toast" role="status"><Check size={15} />{toast}</div>}
     </main>
@@ -301,15 +347,46 @@ function AddPropertyModal({ intent, onClose, onSave }: { intent: AddIntent; onCl
   return <Modal title="Add this location" description="Confirm the address before recording a visit." onClose={onClose}><div className="location-preview"><House size={20} /><span><strong>Map location selected</strong>{intent.coordinates[1].toFixed(6)}, {intent.coordinates[0].toFixed(6)}{intent.buildingGeometry ? " · Building outline found" : ""}</span></div><div className="form-stack"><label className="form-field"><span>Street address</span><input value={address} onChange={(event) => setAddress(event.target.value)} /></label><label className="form-field"><span>Unit <small>Optional</small></span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Apartment, suite, or unit" /></label></div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={address.trim().length < 3} onClick={() => onSave(address, unit)}><Plus size={15} /> Add location</button></div></Modal>;
 }
 
-function TerritoryModal({ hasBoundary, onClose, onSave }: { hasBoundary: boolean; onClose: () => void; onSave: (name: string, color: string) => void }) {
-  const [name, setName] = useState("");
-  const [color, setColor] = useState("#286c59");
-  return <Modal title={hasBoundary ? "Name this territory" : "Territory options"} description={hasBoundary ? "The boundary will be available to volunteers assigned to this event." : "Choose an existing territory below, or close this panel and use Draw territory."} onClose={onClose}>{hasBoundary ? <><div className="form-stack"><label className="form-field"><span>Territory name</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: Oakwood North" /></label><label className="form-field"><span>Map color</span><input type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label></div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => onSave(name, color)} disabled={name.trim().length < 3}><MapPinned size={15} /> Create territory</button></div></> : <div className="empty-mini"><MapPinned size={24} /><strong>Draw a boundary on the map</strong><span>Tap Draw territory, then mark at least three corners.</span></div>}</Modal>;
+function TerritoryModal({ territory, teams, boundaryChanged, onClose, onRedraw, onSave }: {
+  territory?: Territory;
+  teams: NeighborWalkData["teams"];
+  boundaryChanged: boolean;
+  onClose: () => void;
+  onRedraw?: () => void;
+  onSave: (name: string, color: string, assignedTeamId: string) => void;
+}) {
+  const [name, setName] = useState(territory?.name ?? "");
+  const [color, setColor] = useState(territory?.color ?? "#286c59");
+  const [assignedTeamId, setAssignedTeamId] = useState(territory?.assignedTeamId ?? "");
+  const editing = Boolean(territory);
+  const boundaryPoints = boundaryChanged ? "Replacement boundary ready" : `${territory?.boundary.length ?? 0} boundary points`;
+
+  return (
+    <Modal
+      title={editing ? "Edit territory" : "Finish this territory"}
+      description={editing ? "Change how this territory appears and who is assigned to it." : "Name the boundary and choose the team that will cover it."}
+      onClose={onClose}
+    >
+      <div className="form-stack">
+        <label className="form-field"><span>Territory name</span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: Oakwood North" /></label>
+        <div className="territory-form-row">
+          <label className="form-field"><span>Map color</span><input className="territory-color-input" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
+          <label className="form-field"><span>Assigned team</span><select value={assignedTeamId} onChange={(event) => setAssignedTeamId(event.target.value)}><option value="">Unassigned</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+        </div>
+        <div className={`territory-boundary-summary${boundaryChanged ? " changed" : ""}`}>
+          <span><MapPinned size={18} /></span>
+          <div><strong>{boundaryPoints}</strong><small>Existing locations and visit history stay attached to this territory.</small></div>
+          {editing && onRedraw && <button className="button quiet small" onClick={onRedraw}><Edit3 size={14} /> Redraw</button>}
+        </div>
+      </div>
+      <div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => onSave(name, color, assignedTeamId)} disabled={name.trim().length < 3}><Check size={15} /> {editing ? "Save changes" : "Create territory"}</button></div>
+    </Modal>
+  );
 }
 
-function TerritoryPickerModal({ data, activeTerritoryId, canManage, onClose, onSelect, onDraw }: { data: NeighborWalkData; activeTerritoryId: string; canManage: boolean; onClose: () => void; onSelect: (territoryId: string) => void; onDraw: () => void }) {
+function TerritoryPickerModal({ data, activeTerritoryId, canManage, onClose, onSelect, onEdit, onDraw }: { data: NeighborWalkData; activeTerritoryId: string; canManage: boolean; onClose: () => void; onSelect: (territoryId: string) => void; onEdit: (territoryId: string) => void; onDraw: () => void }) {
   const territories = data.territories.filter((territory) => territory.eventId === data.preferences.activeEventId);
-  return <Modal title="Choose a territory" description="Switch the map and coverage view for this outreach event." onClose={onClose}><div className="territory-picker-list">{territories.map((territory) => { const coverage = coverageForTerritory(data, territory.id); return <button key={territory.id} className={territory.id === activeTerritoryId ? "active" : ""} onClick={() => onSelect(territory.id)}><i style={{ background: territory.color }} /><span><strong>{territory.name}</strong><small>{coverage.percent}% covered · {coverage.remaining} remaining</small></span>{territory.id === activeTerritoryId && <Check size={16} />}</button>; })}</div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Close</button>{canManage && <button className="button primary" onClick={onDraw}><MapPinned size={15} /> Draw a new territory</button>}</div></Modal>;
+  return <Modal title="Choose a territory" description="Switch the map and coverage view for this outreach event." onClose={onClose}><div className="territory-picker-list">{territories.map((territory) => { const coverage = coverageForTerritory(data, territory.id); return <div key={territory.id} className={`territory-picker-row${territory.id === activeTerritoryId ? " active" : ""}`}><i style={{ background: territory.color }} /><button className="territory-picker-select" onClick={() => onSelect(territory.id)}><span><strong>{territory.name}</strong><small>{coverage.percent}% covered · {coverage.remaining} remaining</small></span>{territory.id === activeTerritoryId && <Check size={16} />}</button>{canManage && <button className="territory-picker-edit" onClick={() => onEdit(territory.id)} aria-label={`Edit ${territory.name}`}><Edit3 size={16} /></button>}</div>; })}</div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Close</button>{canManage && <button className="button primary" onClick={onDraw}><MapPinned size={15} /> Draw a new territory</button>}</div></Modal>;
 }
 
 function NavButton({ active, icon, label, count, onClick }: { active: boolean; icon: React.ReactNode; label: string; count?: number; onClick: () => void }) {

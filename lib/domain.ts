@@ -104,6 +104,14 @@ export type Territory = {
   assignedTeamId?: string;
 };
 
+export type TerritoryUpdate = {
+  name: string;
+  color: string;
+  assignedTeamId?: string;
+  boundary?: Coordinates[];
+  center?: Coordinates;
+};
+
 export type Team = {
   id: string;
   churchId: string;
@@ -415,6 +423,44 @@ export function coverageForTerritory(data: NeighborWalkData, territoryId: string
     visited,
     remaining: properties.length - visited,
     percent: properties.length ? Math.round((visited / properties.length) * 100) : 0,
+  };
+}
+
+export function centerForBoundary(boundary: Coordinates[]): Coordinates {
+  if (!boundary.length) return [0, 0];
+  return [
+    boundary.reduce((sum, point) => sum + point[0], 0) / boundary.length,
+    boundary.reduce((sum, point) => sum + point[1], 0) / boundary.length,
+  ];
+}
+
+export function updateTerritoryRecord(
+  data: NeighborWalkData,
+  territoryId: string,
+  update: TerritoryUpdate,
+): NeighborWalkData {
+  const territory = data.territories.find((item) => item.id === territoryId);
+  if (!territory) return data;
+
+  const assignedTeamId = update.assignedTeamId || undefined;
+  return {
+    ...data,
+    territories: data.territories.map((item) => item.id === territoryId
+      ? {
+        ...item,
+        name: update.name.trim(),
+        color: update.color,
+        assignedTeamId,
+        boundary: update.boundary ?? item.boundary,
+        center: update.center ?? item.center,
+      }
+      : item),
+    teams: data.teams.map((team) => {
+      const withoutTerritory = team.territoryIds.filter((id) => id !== territoryId);
+      return team.id === assignedTeamId
+        ? { ...team, territoryIds: [...withoutTerritory, territoryId] }
+        : { ...team, territoryIds: withoutTerritory };
+    }),
   };
 }
 

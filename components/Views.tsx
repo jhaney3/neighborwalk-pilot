@@ -207,10 +207,11 @@ function GuideEditor({ step, onClose, onSave }: { step: GuideStep; onClose: () =
   );
 }
 
-export function LeaderView({ data, activeTerritory, onSelectTerritory, onStartDrawing }: {
+export function LeaderView({ data, activeTerritory, onSelectTerritory, onEditTerritory, onStartDrawing }: {
   data: NeighborWalkData;
   activeTerritory: Territory;
   onSelectTerritory: (id: string) => void;
+  onEditTerritory: (id: string) => void;
   onStartDrawing: () => void;
 }) {
   const activeCoverage = coverageForTerritory(data, activeTerritory.id);
@@ -234,12 +235,15 @@ export function LeaderView({ data, activeTerritory, onSelectTerritory, onStartDr
             const coverage = coverageForTerritory(data, territory.id);
             const team = data.teams.find((item) => item.id === territory.assignedTeamId);
             return (
-              <button key={territory.id} className={`territory-card${territory.id === activeTerritory.id ? " active" : ""}`} style={{ "--territory-color": territory.color } as React.CSSProperties} onClick={() => onSelectTerritory(territory.id)}>
-                <div className="territory-card-map"><MapPinned size={21} /><span>{coverage.percent}%</span></div>
-                <div><strong>{territory.name}</strong><small>{team?.name ?? "Unassigned"}</small></div>
-                <div className="tiny-progress"><i style={{ width: `${coverage.percent}%` }} /></div>
-                <span>{coverage.remaining} remaining</span>
-              </button>
+              <div key={territory.id} className={`territory-card${territory.id === activeTerritory.id ? " active" : ""}`} style={{ "--territory-color": territory.color } as React.CSSProperties}>
+                <button className="territory-card-select" onClick={() => onSelectTerritory(territory.id)} aria-label={`Open ${territory.name}`}>
+                  <span className="territory-card-map"><MapPinned size={21} /><span>{coverage.percent}%</span></span>
+                  <span className="territory-card-copy"><strong>{territory.name}</strong><small>{team?.name ?? "Unassigned"}</small></span>
+                  <span className="tiny-progress"><i style={{ width: `${coverage.percent}%` }} /></span>
+                  <span className="territory-remaining">{coverage.remaining} remaining</span>
+                </button>
+                <button className="territory-card-edit" onClick={() => onEditTerritory(territory.id)} aria-label={`Edit ${territory.name}`}><Edit3 size={15} /></button>
+              </div>
             );
           })}
         </div>

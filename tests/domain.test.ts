@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   APP_SCHEMA_VERSION,
+  centerForBoundary,
   coverageForTerritory,
   enforceRetention,
   isFollowUpOverdue,
   isSafeWebUrl,
   neighborWalkDataSchema,
+  updateTerritoryRecord,
   visitsForProperty,
 } from "../lib/domain";
 import { createSeedData, createWorkspaceData } from "../lib/seed";
@@ -53,6 +55,36 @@ describe("NeighborWalk domain", () => {
       remaining: properties.length - visited,
       percent: properties.length ? Math.round((visited / properties.length) * 100) : 0,
     });
+  });
+
+  it("edits a territory without changing its locations or history", () => {
+    const data = createSeedData();
+    const territory = data.territories[0];
+    const nextTeam = data.teams.find((team) => team.id !== territory.assignedTeamId);
+    const replacementBoundary = territory.boundary.map(([longitude, latitude], index) => [
+      longitude + (index % 2 ? 0.001 : -0.001),
+      latitude + 0.001,
+    ] as [number, number]);
+    const updated = updateTerritoryRecord(data, territory.id, {
+      name: "  Oakwood Updated  ",
+      color: "#245f78",
+      assignedTeamId: nextTeam?.id,
+      boundary: replacementBoundary,
+      center: centerForBoundary(replacementBoundary),
+    });
+
+    expect(updated.territories.find((item) => item.id === territory.id)).toMatchObject({
+      id: territory.id,
+      name: "Oakwood Updated",
+      color: "#245f78",
+      assignedTeamId: nextTeam?.id,
+      boundary: replacementBoundary,
+    });
+    expect(updated.teams.find((team) => team.id === territory.assignedTeamId)?.territoryIds).not.toContain(territory.id);
+    expect(updated.teams.find((team) => team.id === nextTeam?.id)?.territoryIds).toContain(territory.id);
+    expect(updated.properties).toEqual(data.properties);
+    expect(updated.visits).toEqual(data.visits);
+    expect(neighborWalkDataSchema.safeParse(updated).success).toBe(true);
   });
 
   it("sorts property history newest first", () => {

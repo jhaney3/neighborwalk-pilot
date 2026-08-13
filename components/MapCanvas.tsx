@@ -26,6 +26,7 @@ type Props = {
   visibleOutcomes: Set<Outcome>;
   addMode: boolean;
   drawMode: boolean;
+  drawModeLabel?: string;
   draftBoundary: Coordinates[];
   compactMarkers: boolean;
   mapStyleUrl: string;
@@ -219,6 +220,7 @@ export function MapCanvas({
   visibleOutcomes,
   addMode,
   drawMode,
+  drawModeLabel,
   draftBoundary,
   compactMarkers,
   mapStyleUrl,
@@ -405,7 +407,7 @@ export function MapCanvas({
         <div className="map-mode-banner"><MapPin size={15} /><span>Tap a building or location to add it</span></div>
       )}
       {drawMode && (
-        <div className="map-mode-banner draw"><MousePointerClick size={15} /><span>Tap at least 3 corners · {draftBoundary.length} added</span></div>
+        <div className="map-mode-banner draw"><MousePointerClick size={15} /><span>{drawModeLabel ?? "Tap at least 3 corners"} · {draftBoundary.length} added</span></div>
       )}
     </div>
   );

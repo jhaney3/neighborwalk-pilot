@@ -6,6 +6,7 @@ import {
   dueDateFromNow,
   enforceRetention,
   neighborWalkDataSchema,
+  updateTerritoryRecord,
   type AuditEntry,
   type Coordinates,
   type GuideStep,
@@ -13,6 +14,7 @@ import {
   type Outcome,
   type Property,
   type Territory,
+  type TerritoryUpdate,
 } from "./domain";
 import {
   exportNeighborWalkData,
@@ -64,6 +66,7 @@ type NewTerritoryInput = {
   boundary: Coordinates[];
   center: Coordinates;
   color: string;
+  assignedTeamId?: string;
 };
 
 function deviceId() {
@@ -434,14 +437,33 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         center: input.center,
         zoom: 15.5,
         boundary: input.boundary,
+        assignedTeamId: input.assignedTeamId,
       };
       return addAudit({
         ...current,
         territories: [...current.territories, territory],
+        teams: current.teams.map((team) => team.id === input.assignedTeamId
+          ? { ...team, territoryIds: [...team.territoryIds.filter((id) => id !== territoryId), territoryId] }
+          : team),
         preferences: { ...current.preferences, activeTerritoryId: territoryId },
       }, "territory", territoryId, "territory.created", `${territory.name} created`);
     });
     return territoryId;
+  }, [updateData]);
+
+  const updateTerritory = useCallback((territoryId: string, update: TerritoryUpdate) => {
+    updateData((current) => {
+      const existing = current.territories.find((territory) => territory.id === territoryId);
+      if (!existing) return current;
+      const boundaryChanged = Boolean(update.boundary);
+      return addAudit(
+        updateTerritoryRecord(current, territoryId, update),
+        "territory",
+        territoryId,
+        "territory.updated",
+        boundaryChanged ? `${update.name.trim()} details and boundary updated` : `${update.name.trim()} details updated`,
+      );
+    });
   }, [updateData]);
 
   const downloadBackup = useCallback(() => {
@@ -596,6 +618,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       updateGuideStep,
       updateChurch,
       addTerritory,
+      updateTerritory,
       downloadBackup,
       importBackup,
       resetDemo,
