@@ -10,8 +10,17 @@ import {
 } from "../lib/domain";
 import { createSeedData } from "../lib/seed";
 import { withSecurityHeaders } from "../lib/security-headers";
+import { mapTilerStyleUrlForKey } from "../lib/map-config";
 
 describe("NeighborWalk domain", () => {
+  it("builds a MapTiler style URL only from a configured key", () => {
+    expect(mapTilerStyleUrlForKey(undefined)).toBeNull();
+    expect(mapTilerStyleUrlForKey("PASTE_YOUR_MAPTILER_KEY_HERE")).toBeNull();
+    expect(mapTilerStyleUrlForKey("  a-valid-public-key  ")).toBe(
+      "https://api.maptiler.com/maps/streets-v4/style.json?key=a-valid-public-key",
+    );
+  });
+
   it("ships valid fictional starter data", () => {
     const data = createSeedData();
     expect(neighborWalkDataSchema.safeParse(data).success).toBe(true);

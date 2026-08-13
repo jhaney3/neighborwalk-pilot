@@ -3,6 +3,7 @@ import {
   type Coordinates,
   type NeighborWalkData,
 } from "./domain";
+import { DEFAULT_MAP_STYLE_URL, MAP_STYLE_CONFIGURATION_REVISION } from "./map-config";
 
 const CHURCH_ID = "church_grace_harbor_demo";
 const EVENT_ID = "event_saturday_outreach";
@@ -233,7 +234,8 @@ export function createSeedData(): NeighborWalkData {
       activeEventId: EVENT_ID,
       activeTerritoryId: territories[0].id,
       activeVolunteerId: "volunteer_erica",
-      mapStyleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL || "https://tiles.openfreemap.org/styles/bright",
+      mapStyleUrl: DEFAULT_MAP_STYLE_URL,
+      mapStyleRevision: MAP_STYLE_CONFIGURATION_REVISION,
       compactMapMarkers: false,
       notificationsEnabled: false,
       lastView: "map",

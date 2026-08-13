@@ -41,16 +41,19 @@ npm run verify
 
 ## Configuration
 
-Copy `.env.example` to `.env.local` for local development. Do not place provider secrets in variables prefixed with `NEXT_PUBLIC_`.
+Copy `.env.example` to `.env.local` for local development. MapTiler browser keys are visible to visitors by design, so use a dedicated key restricted to the deployed and local origins. Never put server secrets in variables prefixed with `NEXT_PUBLIC_`.
 
 | Variable | Purpose |
 | --- | --- |
+| `NEXT_PUBLIC_MAPTILER_KEY` | Protected browser key used to build the MapTiler Streets style URL automatically. Paste only the key value. |
 | `NEXT_PUBLIC_MAP_STYLE_URL` | MapLibre-compatible style JSON URL. Defaults to OpenFreeMap Bright. |
 | `NEXT_PUBLIC_API_BASE_URL` | Enables connected mode and sends sync requests to `/v1/sync`. |
 | `NEXT_PUBLIC_GEOCODER_URL` | Same-origin or trusted proxy endpoint used for reverse address lookup. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical production origin used for metadata. |
 
 Without `NEXT_PUBLIC_API_BASE_URL`, NeighborWalk intentionally stays in device-only mode. The Settings screen labels the identity picker as a demo preview so it cannot be mistaken for real authorization.
+
+When `NEXT_PUBLIC_MAPTILER_KEY` is configured, new installs use MapTiler Streets and existing version-3 installs migrate once from a bundled OpenFreeMap style. Users can still choose another layer afterward. MapTiler supplies streets and building footprints, not legal parcel boundaries; a separate parcel provider is required for a Zillow-style parcel overlay.
 
 ## Backend handoff
 

@@ -67,7 +67,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(networkFirst(request));
     return;
   }
-  if (url.hostname === "tiles.openfreemap.org") {
+  if (["tiles.openfreemap.org", "api.maptiler.com"].includes(url.hostname)) {
     event.respondWith(cacheMapResource(request));
     return;
   }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const APP_SCHEMA_VERSION = 3;
+export const APP_SCHEMA_VERSION = 4;
 
 export const outcomeValues = [
   "unvisited",
@@ -191,6 +191,7 @@ export type AppPreferences = {
   activeTerritoryId: string;
   activeVolunteerId: string;
   mapStyleUrl: string;
+  mapStyleRevision: number;
   compactMapMarkers: boolean;
   notificationsEnabled: boolean;
   lastView: string;
@@ -348,6 +349,7 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
     activeTerritoryId: z.string().min(1),
     activeVolunteerId: z.string().min(1),
     mapStyleUrl: z.string().url().refine(isSafeWebUrl, "Map style must use https (or localhost during development)"),
+    mapStyleRevision: z.number().int().nonnegative(),
     compactMapMarkers: z.boolean(),
     notificationsEnabled: z.boolean(),
     lastView: z.string(),

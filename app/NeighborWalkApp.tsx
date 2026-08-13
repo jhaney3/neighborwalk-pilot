@@ -37,6 +37,7 @@ import {
 } from "../lib/domain";
 import { useNeighborWalk } from "../lib/use-neighborwalk";
 import { reverseGeocode } from "../lib/geocoding";
+import { MAP_STYLE_OPTIONS } from "../lib/map-config";
 
 type View = "map" | "followups" | "guide" | "leader" | "settings";
 type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[] };
@@ -48,12 +49,6 @@ const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
   { value: "no_answer", label: "No answer" },
   { value: "follow_up", label: "Follow-up" },
   { value: "do_not_visit", label: "Skip" },
-];
-
-const mapStyleOptions = [
-  { label: "Bright", description: "Detailed streets and landmarks", url: "https://tiles.openfreemap.org/styles/bright" },
-  { label: "Liberty", description: "High-contrast field map", url: "https://tiles.openfreemap.org/styles/liberty" },
-  { label: "Positron", description: "Quiet, minimal basemap", url: "https://tiles.openfreemap.org/styles/positron" },
 ];
 
 export function NeighborWalkApp() {
@@ -206,8 +201,8 @@ export function NeighborWalkApp() {
                   <button className="toolbar-icon" aria-label="Map layers" aria-expanded={mapLayersOpen} onClick={() => setMapLayersOpen((open) => !open)}><Layers3 size={18} /></button>
                   {mapLayersOpen && <div className="map-layer-menu" role="menu" aria-label="Choose map style">
                     <p>Map appearance</p>
-                    {mapStyleOptions.map((style) => <button key={style.url} role="menuitemradio" aria-checked={data.preferences.mapStyleUrl === style.url} onClick={() => { actions.setPreference("mapStyleUrl", style.url); setMapLayersOpen(false); setToast(`${style.label} map selected`); }}><span><strong>{style.label}</strong><small>{style.description}</small></span>{data.preferences.mapStyleUrl === style.url && <Check size={15} />}</button>)}
-                    {!mapStyleOptions.some((style) => style.url === data.preferences.mapStyleUrl) && <div className="custom-map-style"><Layers3 size={14} /><span><strong>Custom style</strong><small>Configured in Settings</small></span></div>}
+                    {MAP_STYLE_OPTIONS.map((style) => <button key={style.url} role="menuitemradio" aria-checked={data.preferences.mapStyleUrl === style.url} onClick={() => { actions.setPreference("mapStyleUrl", style.url); setMapLayersOpen(false); setToast(`${style.label} map selected`); }}><span><strong>{style.label}</strong><small>{style.description}</small></span>{data.preferences.mapStyleUrl === style.url && <Check size={15} />}</button>)}
+                    {!MAP_STYLE_OPTIONS.some((style) => style.url === data.preferences.mapStyleUrl) && <div className="custom-map-style"><Layers3 size={14} /><span><strong>Custom style</strong><small>Configured in Settings</small></span></div>}
                   </div>}
                 </div>
               </div>
