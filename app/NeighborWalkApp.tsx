@@ -207,7 +207,7 @@ export function NeighborWalkApp() {
                 </div>
               </div>
               <div className="map-stage">
-                <MapCanvas key={data.preferences.mapStyleUrl} territory={activeTerritory} properties={filteredProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} addMode={addMode} drawMode={drawMode} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setAddMode(false); }} onAddIntent={async (intent) => {
+                <MapCanvas territory={activeTerritory} properties={filteredProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} addMode={addMode} drawMode={drawMode} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setAddMode(false); }} onAddIntent={async (intent) => {
                   setToast("Checking this map location…");
                   try {
                     const address = await reverseGeocode(intent.coordinates);

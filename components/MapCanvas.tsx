@@ -148,6 +148,70 @@ function configureBuildingDetails(map: MapLibreMap) {
   }, numberLayers[0]?.id);
 }
 
+function configureNeighborWalkLayers(map: MapLibreMap, territory: Territory, draftBoundary: Coordinates[]) {
+  configureBuildingDetails(map);
+  if (!map.getSource("active-territory")) {
+    map.addSource("active-territory", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+  }
+  if (!map.getLayer("active-territory-fill")) {
+    map.addLayer({
+      id: "active-territory-fill",
+      type: "fill",
+      source: "active-territory",
+      paint: { "fill-color": territory.color, "fill-opacity": 0.08 },
+    });
+  }
+  if (!map.getLayer("active-territory-outline")) {
+    map.addLayer({
+      id: "active-territory-outline",
+      type: "line",
+      source: "active-territory",
+      paint: { "line-color": territory.color, "line-width": 3, "line-dasharray": [2, 1.5] },
+    });
+  }
+  if (!map.getSource("draft-territory")) {
+    map.addSource("draft-territory", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+  }
+  if (!map.getLayer("draft-territory-fill")) {
+    map.addLayer({
+      id: "draft-territory-fill",
+      type: "fill",
+      source: "draft-territory",
+      paint: { "fill-color": "#e9a84a", "fill-opacity": 0.15 },
+    });
+  }
+  if (!map.getLayer("draft-territory-outline")) {
+    map.addLayer({
+      id: "draft-territory-outline",
+      type: "line",
+      source: "draft-territory",
+      paint: { "line-color": "#b47417", "line-width": 3 },
+    });
+  }
+  if (!map.getLayer("draft-territory-vertices")) {
+    map.addLayer({
+      id: "draft-territory-vertices",
+      type: "circle",
+      source: "draft-territory",
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: {
+        "circle-radius": 6,
+        "circle-color": "#fff8e8",
+        "circle-stroke-color": "#b47417",
+        "circle-stroke-width": 3,
+      },
+    });
+  }
+  updateGeoJsonSource(map, "active-territory", featureCollection(polygonFeature(territory.boundary)));
+  updateGeoJsonSource(map, "draft-territory", draftFeatureCollection(draftBoundary));
+}
+
 export function MapCanvas({
   territory,
   properties,
@@ -167,8 +231,8 @@ export function MapCanvas({
   const markersRef = useRef<MapLibreMarker[]>([]);
   const callbacksRef = useRef({ onSelectProperty, onAddIntent, onDraftBoundaryChange });
   const modesRef = useRef({ addMode, drawMode, draftBoundary });
-  const initialTerritoryRef = useRef(territory);
-  const initialMapStyleUrlRef = useRef(mapStyleUrl);
+  const territoryRef = useRef(territory);
+  const currentMapStyleUrlRef = useRef(mapStyleUrl);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
@@ -193,10 +257,10 @@ export function MapCanvas({
     ]).then(([maplibregl, workerModule]) => {
       if (cancelled || !containerRef.current) return;
       maplibregl.setWorkerUrl(workerModule.default);
-      const initialTerritory = initialTerritoryRef.current;
+      const initialTerritory = territoryRef.current;
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: initialMapStyleUrlRef.current,
+        style: currentMapStyleUrlRef.current,
         center: initialTerritory.center,
         zoom: initialTerritory.zoom,
         minZoom: 3,
@@ -215,54 +279,9 @@ export function MapCanvas({
         if (!mapLoaded) setMapStatus("error");
       }, 15000);
 
-      map.once("style.load", () => {
+      map.on("style.load", () => {
         if (!map) return;
-        configureBuildingDetails(map);
-        map.addSource("active-territory", {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-        map.addLayer({
-          id: "active-territory-fill",
-          type: "fill",
-          source: "active-territory",
-          paint: { "fill-color": initialTerritory.color, "fill-opacity": 0.08 },
-        });
-        map.addLayer({
-          id: "active-territory-outline",
-          type: "line",
-          source: "active-territory",
-          paint: { "line-color": initialTerritory.color, "line-width": 3, "line-dasharray": [2, 1.5] },
-        });
-        map.addSource("draft-territory", {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-        map.addLayer({
-          id: "draft-territory-fill",
-          type: "fill",
-          source: "draft-territory",
-          paint: { "fill-color": "#e9a84a", "fill-opacity": 0.15 },
-        });
-        map.addLayer({
-          id: "draft-territory-outline",
-          type: "line",
-          source: "draft-territory",
-          paint: { "line-color": "#b47417", "line-width": 3 },
-        });
-        map.addLayer({
-          id: "draft-territory-vertices",
-          type: "circle",
-          source: "draft-territory",
-          filter: ["==", ["geometry-type"], "Point"],
-          paint: {
-            "circle-radius": 6,
-            "circle-color": "#fff8e8",
-            "circle-stroke-color": "#b47417",
-            "circle-stroke-width": 3,
-          },
-        });
-        updateGeoJsonSource(map, "active-territory", featureCollection(polygonFeature(initialTerritory.boundary)));
+        configureNeighborWalkLayers(map, territoryRef.current, modesRef.current.draftBoundary);
       });
 
       map.once("load", () => {
@@ -317,6 +336,14 @@ export function MapCanvas({
   }, []);
 
   useEffect(() => {
+    const map = mapRef.current;
+    if (!map || currentMapStyleUrlRef.current === mapStyleUrl) return;
+    currentMapStyleUrlRef.current = mapStyleUrl;
+    map.setStyle(mapStyleUrl);
+  }, [mapStyleUrl]);
+
+  useEffect(() => {
+    territoryRef.current = territory;
     const map = mapRef.current;
     if (!map || mapStatus !== "ready") return;
     updateGeoJsonSource(map, "active-territory", featureCollection(polygonFeature(territory.boundary)));

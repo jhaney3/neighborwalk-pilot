@@ -1,5 +1,5 @@
-const APP_CACHE = "neighborwalk-app-v6";
-const MAP_CACHE = "neighborwalk-map-v1";
+const APP_CACHE = "neighborwalk-app-v7";
+const MAP_CACHE = "neighborwalk-map-v2";
 const CORE = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 const MAP_CACHE_LIMIT = 180;
 const STATIC_DESTINATIONS = new Set(["style", "script", "worker", "image", "font", "manifest"]);
@@ -47,13 +47,18 @@ async function staleWhileRevalidate(request) {
 async function cacheMapResource(request) {
   const cache = await caches.open(MAP_CACHE);
   const cached = await cache.match(request);
-  if (cached) return cached;
-  const response = await fetch(request);
-  if (response.ok || response.type === "opaque") {
-    await cache.put(request, response.clone());
-    void trimCache(MAP_CACHE, MAP_CACHE_LIMIT);
+  const network = fetch(request).then(async (response) => {
+    if (response.ok || response.type === "opaque") {
+      await cache.put(request, response.clone());
+      void trimCache(MAP_CACHE, MAP_CACHE_LIMIT);
+    }
+    return response;
+  }).catch(() => cached || new Response("Map data is unavailable offline.", { status: 503 }));
+  if (cached) {
+    void network;
+    return cached;
   }
-  return response;
+  return network;
 }
 
 self.addEventListener("fetch", (event) => {
