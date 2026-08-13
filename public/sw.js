@@ -1,4 +1,4 @@
-const APP_CACHE = "neighborwalk-app-v5";
+const APP_CACHE = "neighborwalk-app-v6";
 const MAP_CACHE = "neighborwalk-map-v1";
 const CORE = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 const MAP_CACHE_LIMIT = 180;
@@ -67,7 +67,9 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(networkFirst(request));
     return;
   }
-  if (["tiles.openfreemap.org", "api.maptiler.com"].includes(url.hostname)) {
+  const isCacheableMapResource = url.hostname === "tiles.openfreemap.org"
+    || (url.hostname === "api.maptiler.com" && !url.pathname.startsWith("/geocoding/"));
+  if (isCacheableMapResource) {
     event.respondWith(cacheMapResource(request));
     return;
   }

@@ -6,9 +6,15 @@ const MAPTILER_KEY_PLACEHOLDERS = new Set([
   "PASTE_YOUR_MAPTILER_KEY_HERE",
 ]);
 
-export function mapTilerStyleUrlForKey(value: string | undefined): string | null {
+export function usableMapTilerKey(value: string | undefined): string | null {
   const key = value?.trim();
   if (!key || MAPTILER_KEY_PLACEHOLDERS.has(key) || key.length < 10) return null;
+  return key;
+}
+
+export function mapTilerStyleUrlForKey(value: string | undefined): string | null {
+  const key = usableMapTilerKey(value);
+  if (!key) return null;
   return `${MAPTILER_STREETS_PATH}?key=${encodeURIComponent(key)}`;
 }
 

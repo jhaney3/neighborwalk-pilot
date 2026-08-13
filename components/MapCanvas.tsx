@@ -7,6 +7,12 @@ import type { Map as MapLibreMap, Marker as MapLibreMarker, MapMouseEvent } from
 import type { Coordinates, Outcome, Property, Territory } from "../lib/domain";
 import { outcomeMeta } from "../lib/domain";
 
+const BUILDING_OUTLINE_LAYER_ID = "neighborwalk-building-outlines";
+const BUILDING_NUMBER_MIN_ZOOM = 16;
+type MapStyleLayer = ReturnType<MapLibreMap["getStyle"]>["layers"][number];
+type BuildingFootprintLayer = Extract<MapStyleLayer, { type: "fill" }> | Extract<MapStyleLayer, { type: "fill-extrusion" }>;
+type BuildingNumberLayer = Extract<MapStyleLayer, { type: "symbol" }>;
+
 type AddIntent = {
   coordinates: Coordinates;
   suggestedAddress: string;
@@ -73,8 +79,73 @@ function suggestedAddress(properties: Record<string, unknown> | null | undefined
   return `${coordinates[1].toFixed(6)}, ${coordinates[0].toFixed(6)}`;
 }
 
+function ringContainsPoint(point: Coordinates, ring: number[][]) {
+  let inside = false;
+  for (let current = 0, previous = ring.length - 1; current < ring.length; previous = current++) {
+    const [currentLng, currentLat] = ring[current];
+    const [previousLng, previousLat] = ring[previous];
+    const intersects = (currentLat > point[1]) !== (previousLat > point[1])
+      && point[0] < ((previousLng - currentLng) * (point[1] - currentLat)) / (previousLat - currentLat) + currentLng;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function buildingGeometryAtPoint(geometry: Geometry | undefined, point: Coordinates): Coordinates[] | undefined {
+  const polygons = geometry?.type === "Polygon"
+    ? [geometry.coordinates]
+    : geometry?.type === "MultiPolygon"
+      ? geometry.coordinates
+      : [];
+  const polygon = polygons.find((candidate) => (
+    ringContainsPoint(point, candidate[0])
+      && !candidate.slice(1).some((hole) => ringContainsPoint(point, hole))
+  ));
+  return polygon?.[0].map(([lng, lat]) => [lng, lat] as Coordinates);
+}
+
 function redactMapError(message: string) {
   return message.replace(/([?&]key=)[^&\s]+/gi, "$1[redacted]");
+}
+
+function isBuildingFootprintLayer(layer: MapStyleLayer): layer is BuildingFootprintLayer {
+  return (layer.type === "fill" || layer.type === "fill-extrusion")
+    && (layer["source-layer"] === "building" || /building|house|residential/i.test(layer.id));
+}
+
+function isBuildingNumberLayer(layer: MapStyleLayer): layer is BuildingNumberLayer {
+  return layer.type === "symbol"
+    && (layer["source-layer"] === "building_number" || /building number|house ?number|housenumber/i.test(layer.id));
+}
+
+function configureBuildingDetails(map: MapLibreMap) {
+  const layers = map.getStyle().layers;
+  const numberLayers = layers.filter(isBuildingNumberLayer);
+
+  for (const layer of numberLayers) {
+    map.setLayerZoomRange(layer.id, BUILDING_NUMBER_MIN_ZOOM, layer.maxzoom ?? 24);
+    map.setPaintProperty(layer.id, "text-halo-color", "rgba(255, 253, 247, 0.96)");
+    map.setPaintProperty(layer.id, "text-halo-width", 1.25);
+    map.setPaintProperty(layer.id, "text-halo-blur", 0.25);
+  }
+
+  const footprintLayer = layers.find(isBuildingFootprintLayer);
+  if (!footprintLayer || map.getLayer(BUILDING_OUTLINE_LAYER_ID)) return;
+  const sourceLayer = footprintLayer["source-layer"];
+  if (!sourceLayer) return;
+
+  map.addLayer({
+    id: BUILDING_OUTLINE_LAYER_ID,
+    type: "line",
+    source: footprintLayer.source,
+    "source-layer": sourceLayer,
+    minzoom: 15,
+    paint: {
+      "line-color": "#70877d",
+      "line-opacity": 0.78,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 15, 0.35, 18, 1.05],
+    },
+  }, numberLayers[0]?.id);
 }
 
 export function MapCanvas({
@@ -146,6 +217,7 @@ export function MapCanvas({
 
       map.once("style.load", () => {
         if (!map) return;
+        configureBuildingDetails(map);
         map.addSource("active-territory", {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
@@ -217,15 +289,15 @@ export function MapCanvas({
         if (!modesRef.current.addMode) return;
 
         const buildingLayers = map.getStyle().layers
-          .filter((layer) => /building|house|residential/i.test(layer.id) && layer.type === "fill")
+          .filter(isBuildingFootprintLayer)
           .map((layer) => layer.id);
         const features = buildingLayers.length
           ? map.queryRenderedFeatures(event.point, { layers: buildingLayers })
           : [];
-        const feature = features.find((candidate) => candidate.geometry.type === "Polygon");
-        const geometry = feature?.geometry.type === "Polygon"
-          ? feature.geometry.coordinates[0].map((point: number[]) => [point[0], point[1]] as Coordinates)
-          : undefined;
+        const feature = features.find((candidate) => (
+          candidate.geometry.type === "Polygon" || candidate.geometry.type === "MultiPolygon"
+        ));
+        const geometry = buildingGeometryAtPoint(feature?.geometry, coordinates);
         callbacksRef.current.onAddIntent({
           coordinates,
           suggestedAddress: suggestedAddress(feature?.properties, coordinates),
