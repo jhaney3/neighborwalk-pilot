@@ -73,6 +73,10 @@ function suggestedAddress(properties: Record<string, unknown> | null | undefined
   return `${coordinates[1].toFixed(6)}, ${coordinates[0].toFixed(6)}`;
 }
 
+function redactMapError(message: string) {
+  return message.replace(/([?&]key=)[^&\s]+/gi, "$1[redacted]");
+}
+
 export function MapCanvas({
   territory,
   properties,
@@ -109,10 +113,15 @@ export function MapCanvas({
     if (!containerRef.current || mapRef.current) return;
     let cancelled = false;
     let map: MapLibreMap | null = null;
-    let styleLoaded = false;
+    let mapLoaded = false;
+    let loadTimeout: number | undefined;
 
-    void import("maplibre-gl").then((maplibregl) => {
+    void Promise.all([
+      import("maplibre-gl"),
+      import("maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url"),
+    ]).then(([maplibregl, workerModule]) => {
       if (cancelled || !containerRef.current) return;
+      maplibregl.setWorkerUrl(workerModule.default);
       const initialTerritory = initialTerritoryRef.current;
       map = new maplibregl.Map({
         container: containerRef.current,
@@ -131,10 +140,12 @@ export function MapCanvas({
         trackUserLocation: true,
         showAccuracyCircle: true,
       }), "bottom-right");
+      loadTimeout = window.setTimeout(() => {
+        if (!mapLoaded) setMapStatus("error");
+      }, 15000);
 
       map.once("style.load", () => {
         if (!map) return;
-        styleLoaded = true;
         map.addSource("active-territory", {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
@@ -180,11 +191,20 @@ export function MapCanvas({
           },
         });
         updateGeoJsonSource(map, "active-territory", featureCollection(polygonFeature(initialTerritory.boundary)));
+      });
+
+      map.once("load", () => {
+        mapLoaded = true;
+        if (loadTimeout !== undefined) window.clearTimeout(loadTimeout);
         setMapStatus("ready");
       });
 
       map.on("error", (event) => {
-        if (event.error && !styleLoaded) setMapStatus("error");
+        if (!event.error) return;
+        const message = redactMapError(event.error.message || String(event.error));
+        if (containerRef.current) containerRef.current.dataset.mapError = message;
+        console.error("[NeighborWalk map]", message);
+        if (!mapLoaded) setMapStatus("error");
       });
 
       map.on("click", (event: MapMouseEvent) => {
@@ -216,6 +236,7 @@ export function MapCanvas({
 
     return () => {
       cancelled = true;
+      if (loadTimeout !== undefined) window.clearTimeout(loadTimeout);
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       map?.remove();
