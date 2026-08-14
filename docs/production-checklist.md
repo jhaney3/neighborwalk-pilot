@@ -5,7 +5,8 @@ The client and Supabase foundation are ready for an owner-operated connected pil
 ## Supabase and synchronization
 
 - Keep the Supabase migrations in source control and run both Security Advisor and Performance Advisor after every schema change.
-- Set the production Site URL and exact redirect URL in Supabase Auth before testing passwordless sign-in.
+- Set the production Site URL and exact redirect URL in Supabase Auth before testing Google or passwordless sign-in.
+- Configure and test the Google OAuth consent screen, authorized JavaScript origin, Supabase callback URL, Client ID, and Client Secret. Keep the Client Secret only in Supabase.
 - Add a leader-controlled invitation and membership-revocation flow before inviting volunteers.
 - Replace the pilot snapshot sync with entity-level conflict merging before simultaneous multi-device field use; the current revision check safely rejects stale overwrites.
 - Add cursor pagination, request body limits, rate limits, structured logs, error tracking, database backups, restore drills, and availability alerts.

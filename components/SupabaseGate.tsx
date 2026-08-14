@@ -52,8 +52,41 @@ export function NeighborWalkRoot() {
 function EmailSignIn() {
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
+  const [signingInWithGoogle, setSigningInWithGoogle] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const hashParams = new URLSearchParams(url.hash.slice(1));
+    const authError = url.searchParams.get("error_description") ?? hashParams.get("error_description");
+    if (!authError) return;
+    const errorTimer = window.setTimeout(() => setError(authError), 0);
+    for (const key of ["error", "error_code", "error_description"]) url.searchParams.delete(key);
+    url.hash = "";
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    return () => window.clearTimeout(errorTimer);
+  }, []);
+
+  const signInWithGoogle = async () => {
+    const client = getSupabaseBrowserClient();
+    if (!client) {
+      setError("The church workspace connection is not available.");
+      return;
+    }
+    setSigningInWithGoogle(true);
+    setError("");
+    const { error: signInError } = await client.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
+    if (signInError) {
+      setSigningInWithGoogle(false);
+      setError(signInError.message);
+    }
+  };
 
   const sendLink = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -91,7 +124,7 @@ function EmailSignIn() {
         </div>
         <p className="eyebrow">NeighborWalk church workspace</p>
         <h1 id="signin-title">Keep every doorstep accounted for.</h1>
-        <p className="auth-intro">Sign in with your email to securely share territories, visit outcomes, and follow-up reminders with your church team.</p>
+        <p className="auth-intro">Sign in securely to share territories, visit outcomes, and follow-up reminders with your church team.</p>
         {sent ? (
           <div className="auth-confirmation" role="status">
             <Check size={20} />
@@ -99,9 +132,11 @@ function EmailSignIn() {
           </div>
         ) : (
           <div className="auth-form">
+            <button className="button auth-submit auth-google" disabled={signingInWithGoogle || sending} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{signingInWithGoogle ? "Opening Google…" : "Continue with Google"}</button>
+            <div className="auth-divider"><span>or use an email link</span></div>
             <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" onKeyDown={(event) => { if (event.key === "Enter") void sendLink(); }} /></label>
             {error && <p className="auth-error" role="alert">{error}</p>}
-            <button className="button primary auth-submit" disabled={sending} onClick={() => void sendLink()}><Mail size={16} />{sending ? "Sending…" : "Email me a sign-in link"}</button>
+            <button className="button quiet auth-submit" disabled={sending || signingInWithGoogle} onClick={() => void sendLink()}><Mail size={16} />{sending ? "Sending…" : "Email me a sign-in link"}</button>
           </div>
         )}
         <div className="auth-privacy"><ShieldCheck size={16} /><span>Canvassing records are available only to signed-in members of the same church workspace.</span></div>

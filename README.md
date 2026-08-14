@@ -14,7 +14,7 @@ The app remains offline-first with IndexedDB and an installable service worker. 
 - leader dashboard for territories, teams, coverage, outcomes, and audit activity
 - offline device storage, ordered writes, validated import/export, retention enforcement, and a service worker
 - installable PWA manifest, responsive desktop/mobile layouts, reduced-motion support, and device notifications
-- Supabase passwordless email authentication and revision-aware workspace synchronization
+- Supabase Google and passwordless email authentication with revision-aware workspace synchronization
 - production PostgreSQL/PostGIS migrations with explicit grants, row-level security, and a parcel-ready spatial index
 - OpenAPI 3.1 contract for bootstrap, sync, map data, visits, follow-ups, and reverse geocoding
 
@@ -52,11 +52,24 @@ Copy `.env.example` to `.env.local` for local development. MapTiler browser keys
 | `NEXT_PUBLIC_GEOCODER_URL` | Same-origin or trusted proxy endpoint used for reverse address lookup. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical production origin used for metadata. |
 
-Without both Supabase variables, NeighborWalk intentionally stays in device-only demo mode. With them, the app requires email sign-in and offers the first verified user a clean Lawrenceburg church workspace.
+Without both Supabase variables, NeighborWalk intentionally stays in device-only demo mode. With them, the app requires Google or passwordless email sign-in and offers the first verified user a clean Lawrenceburg church workspace.
 
 When `NEXT_PUBLIC_MAPTILER_KEY` is configured, new installs use MapTiler Streets and existing version-3 installs migrate once from a bundled OpenFreeMap style. Users can still choose another layer afterward. MapTiler supplies streets and building footprints, not legal parcel boundaries; a separate parcel provider is required for a Zillow-style parcel overlay.
 
 ## Supabase backend
+
+### Google sign-in setup
+
+NeighborWalk's Google button uses Supabase's hosted OAuth callback. Complete these provider settings once:
+
+1. In Google Auth Platform, create an OAuth client with application type **Web application**.
+2. Add the production app origin under **Authorized JavaScript origins**: `https://neighborwalk-pilot.jhaney.chatgpt.site`.
+3. Add the Supabase callback under **Authorized redirect URIs**: `https://llhrbtlkcneldgrhkwpf.supabase.co/auth/v1/callback`.
+4. Configure the Google consent screen scopes `openid`, `userinfo.email`, and `userinfo.profile`.
+5. In Supabase, open **Authentication > Sign In / Providers > Google**, enable the provider, and paste the Google Client ID and Client Secret.
+6. In Supabase **Authentication > URL Configuration**, set the Site URL to `https://neighborwalk-pilot.jhaney.chatgpt.site` and add the exact redirect `https://neighborwalk-pilot.jhaney.chatgpt.site/` to Redirect URLs. Add the local development origin separately when testing Google sign-in locally.
+
+Do not put the Google Client Secret in a `NEXT_PUBLIC_` environment variable or commit it to this repository. It belongs only in the Supabase provider configuration.
 
 The applied database source is stored in `supabase/migrations/`. It creates:
 

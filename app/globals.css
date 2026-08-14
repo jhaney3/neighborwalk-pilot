@@ -460,6 +460,11 @@ input, textarea, select { color: var(--ink); }
 .auth-intro, .workspace-setup-card > p { margin: 0 0 26px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .auth-form { display: grid; gap: 12px; }
 .auth-submit, .workspace-create-button { width: 100%; min-height: 45px; }
+.auth-google { position: relative; color: #26352f; border-color: #cbd8d3; background: white; box-shadow: 0 4px 13px rgba(22,59,49,.07); font-size: 11px; }
+.auth-google:hover { border-color: #9fb7ae; background: #fbfdfc; }
+.auth-google .google-mark { width: 18px; height: 18px; display: grid; place-items: center; flex: none; color: #4285f4; font: 800 17px/1 Arial, sans-serif; }
+.auth-divider { display: flex; align-items: center; gap: 10px; color: var(--soft); font: 600 8px/1 var(--font-plex-mono), monospace; letter-spacing: .06em; text-transform: uppercase; }
+.auth-divider::before, .auth-divider::after { height: 1px; flex: 1; background: var(--line); content: ""; }
 .auth-error { margin: 0; color: #963c36; font-size: 10px; line-height: 1.45; }
 .auth-confirmation, .workspace-account { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border: 1px solid #b8dace; border-radius: 13px; color: var(--pine-700); background: var(--mint-50); }
 .auth-confirmation svg, .workspace-account svg { flex: none; margin-top: 1px; }
