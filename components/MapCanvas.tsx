@@ -6,6 +6,7 @@ import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon }
 import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { Coordinates, Outcome, Property, Territory } from "../lib/domain";
 import { outcomeMeta } from "../lib/domain";
+import { shouldNavigateToTerritory } from "../lib/map-camera";
 import {
   cacheTerritoryParcels,
   getCachedTerritoryParcels,
@@ -424,6 +425,7 @@ export function MapCanvas({
   const callbacksRef = useRef({ onSelectProperty, onAddIntent, onDraftBoundaryChange });
   const modesRef = useRef({ addMode, drawMode, draftBoundary });
   const territoryRef = useRef(territory);
+  const displayedTerritoryIdRef = useRef(territory.id);
   const currentMapStyleUrlRef = useRef(mapStyleUrl);
   const parcelDataRef = useRef<ParcelFeatureCollection>(EMPTY_PARCELS);
   const mappedLocationsRef = useRef<FeatureCollection>(mappedLocationFeatureCollection(
@@ -439,6 +441,8 @@ export function MapCanvas({
   const [parcelCount, setParcelCount] = useState(0);
   const [parcelTotal, setParcelTotal] = useState(0);
   const boundarySignature = territoryBoundarySignature(territory.boundary);
+  const territoryLongitude = territory.center[0];
+  const territoryLatitude = territory.center[1];
 
   useEffect(() => {
     callbacksRef.current = { onSelectProperty, onAddIntent, onDraftBoundaryChange };
@@ -671,15 +675,30 @@ export function MapCanvas({
 
   useEffect(() => {
     territoryRef.current = territory;
+  }, [territory]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || mapStatus !== "ready") return;
     updateGeoJsonSource(map, "active-territory", featureCollection(polygonFeature(territory.boundary)));
-    map.flyTo({ center: territory.center, zoom: territory.zoom, duration: 650, essential: true });
     const fill = map.getLayer("active-territory-fill");
     if (fill) map.setPaintProperty("active-territory-fill", "fill-color", territory.color);
     const outline = map.getLayer("active-territory-outline");
     if (outline) map.setPaintProperty("active-territory-outline", "line-color", territory.color);
-  }, [territory, mapStatus]);
+  }, [territory.boundary, territory.color, mapStatus]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mapStatus !== "ready") return;
+    if (!shouldNavigateToTerritory(displayedTerritoryIdRef.current, territory.id)) return;
+    displayedTerritoryIdRef.current = territory.id;
+    map.flyTo({
+      center: [territoryLongitude, territoryLatitude],
+      zoom: territory.zoom,
+      duration: 650,
+      essential: true,
+    });
+  }, [mapStatus, territory.id, territory.zoom, territoryLatitude, territoryLongitude]);
 
   useEffect(() => {
     const map = mapRef.current;
