@@ -62,7 +62,7 @@ const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
 ];
 
 export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: SupabaseUser | null; onSignOut?: () => Promise<void> } = {}) {
-  const { data, loading, storageError, online, saving, workspaceStatus, activeTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
+  const { data, loading, storageError, online, saving, syncing, workspaceStatus, activeTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
   const [viewOverride, setViewOverride] = useState<View | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | Outcome>("all");
@@ -123,6 +123,17 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
     return <WorkspaceSetup data={data} user={supabaseUser} creating={workspaceStatus === "creating"} error={data.sync.lastError} onCreate={actions.createWorkspace} onSignOut={onSignOut} />;
   }
   if (!data || !activeTerritory || !activeVolunteer) return <AppFailure error={storageError || "The app could not load its field data."} />;
+
+  const pendingChanges = data.sync.pending.length;
+  const syncStatusLabel = !online
+    ? pendingChanges > 0 ? `${pendingChanges} saved offline` : "Working offline"
+    : data.sync.mode === "device_only"
+      ? "Saved on device"
+      : syncing
+        ? "Syncing changes"
+        : pendingChanges > 0
+          ? "Saving automatically"
+          : "All changes saved";
 
   const canManage = activeVolunteer.role === "leader";
   const requestedView = typeof window === "undefined"
@@ -206,8 +217,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
           <span><strong>NeighborWalk</strong><small>{data.church.name}</small></span>
         </button>
         <div className="header-status">
-          <span className={`network-chip ${online ? "online" : "offline"}`}>{online ? <ShieldCheck size={13} /> : <WifiOff size={13} />}{online ? (data.sync.mode === "connected" ? "Ready to sync" : "Saved on device") : "Working offline"}</span>
-          {saving && <span className="saving-label">Saving…</span>}
+          <span className={`network-chip ${online ? "online" : "offline"}`} aria-live="polite">{online ? <ShieldCheck size={13} /> : <WifiOff size={13} />}{syncStatusLabel}</span>
+          {saving && !syncing && <span className="saving-label">Saving on device…</span>}
           <button className="profile-button" onClick={() => navigate("settings")} aria-label="Open profile and settings"><CircleUserRound size={21} /><span>{activeVolunteer.name}</span></button>
         </div>
       </header>
@@ -231,7 +242,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
             <NavButton active={view === "settings"} icon={<Settings2 size={18} />} label="Settings" onClick={() => navigate("settings")} />
           </nav>
           <div className="sidebar-footer">
-            <div className="local-mode"><CloudOff size={16} /><p><strong>{data.sync.mode === "connected" ? "Connected workspace" : "Device-only mode"}</strong><span>{data.sync.mode === "connected" ? `${data.sync.pending.length} changes waiting` : "Connect your backend to share records."}</span></p></div>
+            <div className="local-mode"><CloudOff size={16} /><p><strong>{data.sync.mode === "connected" ? "Automatic sync" : "Device-only mode"}</strong><span>{data.sync.mode === "connected" ? syncStatusLabel : "Connect your backend to share records."}</span></p></div>
             <span className="privacy-note"><ShieldCheck size={13} /> Privacy-first field records</span>
           </div>
         </aside>
@@ -285,7 +296,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
           {view === "followups" && <FollowUpsView data={data} onOpenProperty={(propertyId) => { navigate("map"); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onComplete={(id) => { actions.completeFollowUp(id); setToast("Follow-up completed"); }} onReschedule={(id, date) => { actions.rescheduleFollowUp(id, date); setToast("Follow-up rescheduled"); }} onCancel={(id) => { actions.cancelFollowUp(id); setToast("Follow-up cancelled"); }} />}
           {view === "guide" && <GuideView data={data} canManage={canManage} onUpdate={(id, patch) => { actions.updateGuideStep(id, patch); setToast("Guide step saved"); }} />}
           {view === "leader" && canManage && <LeaderView data={data} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} />}
-          {view === "settings" && <SettingsView data={data} online={online} saving={saving} storageError={storageError} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onReset={actions.resetDemo} onSync={actions.syncNow} />}
+          {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onReset={actions.resetDemo} onSync={actions.syncNow} />}
         </section>
       </div>
 

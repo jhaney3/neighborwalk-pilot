@@ -369,6 +369,7 @@ input, textarea, select { color: var(--ink); }
 .connection-card span, .connection-card strong { display: block; }
 .connection-card span { font-size: 8px; line-height: 1.4; }
 .connection-card strong { color: var(--ink); font-size: 9px; }
+.sync-warning { color: #82551a; background: var(--amber-soft); border-color: rgba(208, 151, 63, .45); }
 .data-note { display: flex; align-items: flex-start; gap: 7px; color: var(--muted); font-size: 8px; line-height: 1.45; }
 .data-note svg { flex: none; }
 .danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-top: 12px; padding: 14px 16px; border: 1px solid #e4c4c1; border-radius: 13px; background: var(--rose-soft); }

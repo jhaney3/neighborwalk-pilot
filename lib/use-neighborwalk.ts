@@ -23,14 +23,21 @@ import {
   resetNeighborWalkData,
   saveNeighborWalkData,
 } from "./storage";
-import { getSupabaseBrowserClient, type Json } from "./supabase";
+import { getSupabaseBrowserClient, type Json, type NeighborWalkDatabase } from "./supabase";
 import { createWorkspaceData } from "./seed";
+import { mergePendingWorkspaceChanges } from "./workspace-sync";
 
 export type SupabaseUser = { id: string; email: string };
 type WorkspaceStatus = "device_only" | "connecting" | "needs_workspace" | "creating" | "ready";
 type WorkspaceConnection = { userId: string; churchId: string; revision: number };
+type WorkspaceSnapshotRecord = Pick<
+  NeighborWalkDatabase["public"]["Tables"]["workspace_snapshots"]["Row"],
+  "church_id" | "schema_version" | "data" | "revision" | "updated_at"
+>;
 
 const WORKSPACE_CACHE_KEY = "neighborwalk-supabase-workspace";
+const AUTO_SYNC_DELAY_MS = 1200;
+const AUTO_SYNC_MAX_RETRY_MS = 30000;
 
 function readWorkspaceConnection(userId: string): WorkspaceConnection | null {
   try {
@@ -87,16 +94,35 @@ function mutation(
   return { id: createId("mutation"), entityType, entityId, operation, changedAt };
 }
 
+async function fetchWorkspaceSnapshot(
+  client: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>,
+  churchId: string,
+): Promise<WorkspaceSnapshotRecord> {
+  const { data, error } = await client
+    .from("workspace_snapshots")
+    .select("church_id, schema_version, data, revision, updated_at")
+    .eq("church_id", churchId)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const [data, setData] = useState<NeighborWalkData | null>(null);
   const [loading, setLoading] = useState(true);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [autoRetryTick, setAutoRetryTick] = useState(0);
   const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus>(supabaseUser ? "connecting" : "device_only");
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveVersion = useRef(0);
   const workspaceRef = useRef<WorkspaceConnection | null>(null);
+  const dataRef = useRef<NeighborWalkData | null>(null);
+  const onlineRef = useRef(true);
+  const syncInFlightRef = useRef<Promise<boolean> | null>(null);
+  const autoRetryAttemptRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -143,13 +169,15 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           const hasLocalChanges = cachedForUser?.churchId === membership.church_id
             && loaded.sync.mode === "connected"
             && loaded.sync.pending.length > 0;
-          const selected = hasLocalChanges ? loaded : parsedRemote.data;
+          const selected = hasLocalChanges
+            ? mergePendingWorkspaceChanges(parsedRemote.data, loaded)
+            : parsedRemote.data;
           setData({
             ...selected,
             sync: {
               ...selected.sync,
               mode: "connected",
-              lastError: hasLocalChanges ? "This device has changes waiting to be synchronized." : undefined,
+              lastError: undefined,
             },
           });
           setWorkspaceStatus("ready");
@@ -178,7 +206,12 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [supabaseUser]);
 
   useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
+    const update = () => {
+      const nextOnline = navigator.onLine;
+      onlineRef.current = nextOnline;
+      setOnline(nextOnline);
+      if (nextOnline) setAutoRetryTick((current) => current + 1);
+    };
     update();
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
@@ -187,6 +220,10 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       window.removeEventListener("offline", update);
     };
   }, []);
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   useEffect(() => {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
@@ -549,48 +586,128 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     }
   }, [data, online, supabaseUser]);
 
-  const syncNow = useCallback(async () => {
+  const runSync = useCallback(async () => {
     const client = getSupabaseBrowserClient();
-    const workspace = workspaceRef.current;
-    if (!data || !client || !supabaseUser || !workspace || !online) return false;
-    const submittedMutationIds = new Set(data.sync.pending.map((item) => item.id));
-    const submittedUpdatedAt = data.updatedAt;
-    const syncedAt = new Date().toISOString();
-    const submittedData: NeighborWalkData = {
-      ...enforceRetention(data),
-      sync: { ...data.sync, mode: "connected", pending: [], lastSyncedAt: syncedAt, lastError: undefined },
-    };
-    setSaving(true);
+    let workspace = workspaceRef.current;
+    let candidate = dataRef.current;
+    if (!candidate || !client || !supabaseUser || !workspace || !onlineRef.current) return false;
+    if (!candidate.sync.pending.length) return true;
+    setSyncing(true);
     try {
-      const { data: saved, error } = await client
-        .from("workspace_snapshots")
-        .update({ schema_version: submittedData.schemaVersion, data: submittedData as unknown as Json })
-        .eq("church_id", workspace.churchId)
-        .eq("revision", workspace.revision)
-        .select("revision, data, updated_at")
-        .maybeSingle();
-      if (error) throw error;
-      if (!saved) throw new Error("Another device saved newer changes. Reload before synchronizing this device.");
-      const parsedServerData = neighborWalkDataSchema.safeParse(saved.data);
-      if (!parsedServerData.success) throw new Error("Sync returned invalid data.");
-      const nextConnection = { ...workspace, revision: Number(saved.revision) };
-      workspaceRef.current = nextConnection;
-      writeWorkspaceConnection(nextConnection);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const submittedMutationIds = new Set(candidate.sync.pending.map((item) => item.id));
+        const submittedUpdatedAt = candidate.updatedAt;
+        const syncedAt = new Date().toISOString();
+        const submittedData: NeighborWalkData = {
+          ...enforceRetention(candidate),
+          sync: { ...candidate.sync, mode: "connected", pending: [], lastSyncedAt: syncedAt, lastError: undefined },
+        };
+        const { data: saved, error } = await client
+          .from("workspace_snapshots")
+          .update({ schema_version: submittedData.schemaVersion, data: submittedData as unknown as Json })
+          .eq("church_id", workspace.churchId)
+          .eq("revision", workspace.revision)
+          .select("revision, data, updated_at")
+          .maybeSingle();
+        if (error) throw error;
+
+        if (saved) {
+          const parsedServerData = neighborWalkDataSchema.safeParse(saved.data);
+          if (!parsedServerData.success) throw new Error("Sync returned invalid data.");
+          const nextConnection = { ...workspace, revision: Number(saved.revision) };
+          workspaceRef.current = nextConnection;
+          writeWorkspaceConnection(nextConnection);
+          setData((current) => {
+            if (!current) return current;
+            const pending = current.sync.pending.filter((item) => !submittedMutationIds.has(item.id));
+            const sync = { ...current.sync, mode: "connected" as const, pending, lastSyncedAt: syncedAt, lastError: undefined };
+            const next = current.updatedAt !== submittedUpdatedAt
+              ? { ...current, sync }
+              : { ...parsedServerData.data, sync: { ...parsedServerData.data.sync, ...sync } };
+            dataRef.current = next;
+            return next;
+          });
+          autoRetryAttemptRef.current = 0;
+          return true;
+        }
+
+        if (attempt > 0) throw new Error("Another device is still saving changes.");
+        const latestSnapshot = await fetchWorkspaceSnapshot(client, workspace.churchId);
+        const parsedLatest = neighborWalkDataSchema.safeParse(latestSnapshot.data);
+        if (!parsedLatest.success) throw new Error("The latest church workspace data is invalid.");
+        workspace = { ...workspace, revision: Number(latestSnapshot.revision) };
+        workspaceRef.current = workspace;
+        writeWorkspaceConnection(workspace);
+        candidate = mergePendingWorkspaceChanges(parsedLatest.data, dataRef.current ?? candidate);
+        dataRef.current = candidate;
+        setData(candidate);
+      }
+      return false;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "The sync service could not be reached.";
       setData((current) => {
         if (!current) return current;
-        const pending = current.sync.pending.filter((item) => !submittedMutationIds.has(item.id));
-        const sync = { ...current.sync, mode: "connected" as const, pending, lastSyncedAt: syncedAt, lastError: undefined };
-        if (current.updatedAt !== submittedUpdatedAt) return { ...current, sync };
-        return { ...parsedServerData.data, sync: { ...parsedServerData.data.sync, ...sync } };
+        const next = {
+          ...current,
+          sync: {
+            ...current.sync,
+            lastError: `Changes are safe on this device. Automatic sync will retry. ${detail}`,
+          },
+        };
+        dataRef.current = next;
+        return next;
       });
-      return true;
-    } catch (error) {
-      setData((current) => current ? { ...current, sync: { ...current.sync, lastError: error instanceof Error ? error.message : "Sync failed" } } : current);
       return false;
     } finally {
-      setSaving(false);
+      setSyncing(false);
     }
-  }, [data, online, supabaseUser]);
+  }, [supabaseUser]);
+
+  const syncNow = useCallback(() => {
+    if (syncInFlightRef.current) return syncInFlightRef.current;
+    const syncPromise = runSync().finally(() => {
+      if (syncInFlightRef.current === syncPromise) syncInFlightRef.current = null;
+    });
+    syncInFlightRef.current = syncPromise;
+    return syncPromise;
+  }, [runSync]);
+
+  const pendingCount = data?.sync.pending.length ?? 0;
+  const pendingVersion = data?.sync.pending.at(-1)?.id ?? "none";
+  useEffect(() => {
+    if (!online || workspaceStatus !== "ready" || pendingCount === 0) return;
+    const retryDelay = autoRetryAttemptRef.current === 0
+      ? AUTO_SYNC_DELAY_MS
+      : Math.min(AUTO_SYNC_MAX_RETRY_MS, 1000 * (2 ** autoRetryAttemptRef.current));
+    const timeout = window.setTimeout(() => {
+      void syncNow().then((success) => {
+        if (success) {
+          autoRetryAttemptRef.current = 0;
+          return;
+        }
+        autoRetryAttemptRef.current += 1;
+        setAutoRetryTick((current) => current + 1);
+      });
+    }, retryDelay);
+    return () => window.clearTimeout(timeout);
+  }, [autoRetryTick, online, pendingCount, pendingVersion, syncNow, workspaceStatus]);
+
+  useEffect(() => {
+    const retryVisibleChanges = () => {
+      if (document.visibilityState === "hidden") {
+        void syncNow();
+      } else {
+        setAutoRetryTick((current) => current + 1);
+      }
+    };
+    const retryOnFocus = () => setAutoRetryTick((current) => current + 1);
+    document.addEventListener("visibilitychange", retryVisibleChanges);
+    window.addEventListener("focus", retryOnFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", retryVisibleChanges);
+      window.removeEventListener("focus", retryOnFocus);
+    };
+  }, [syncNow]);
 
   const activeTerritory = useMemo(() => data?.territories.find((territory) => territory.id === data.preferences.activeTerritoryId) ?? null, [data]);
   const activeVolunteer = useMemo(() => data?.volunteers.find((volunteer) => volunteer.id === data.preferences.activeVolunteerId) ?? null, [data]);
@@ -601,6 +718,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     storageError,
     online,
     saving,
+    syncing,
     workspaceStatus,
     activeTerritory,
     activeVolunteer,

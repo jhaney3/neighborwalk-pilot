@@ -285,6 +285,7 @@ export function SettingsView({
   data,
   online,
   saving,
+  syncing,
   storageError,
   accountEmail,
   onSignOut,
@@ -299,6 +300,7 @@ export function SettingsView({
   data: NeighborWalkData;
   online: boolean;
   saving: boolean;
+  syncing: boolean;
   storageError: string | null;
   accountEmail?: string;
   onSignOut?: () => Promise<void>;
@@ -415,12 +417,21 @@ export function SettingsView({
           <div className="button-row"><button className="button quiet" onClick={requestNotifications}><Bell size={15} /> Enable reminders</button><button className="button quiet" onClick={installApp}><Smartphone size={15} /> Install app</button></div>
         </SettingsSection>
 
-        <SettingsSection icon={<Database size={18} />} title="Data and synchronization" description={data.sync.mode === "connected" ? "A backend endpoint is configured." : "This build is device-only until your backend is connected."}>
+        <SettingsSection icon={<Database size={18} />} title="Data and synchronization" description={data.sync.mode === "connected" ? "Changes save to the church workspace automatically. Manual sync remains available as a fallback." : "This build is device-only until your backend is connected."}>
           <div className={`connection-card ${data.sync.mode}`}>
             {data.sync.mode === "connected" ? <Wifi size={18} /> : <CloudOff size={18} />}
-            <span><strong>{data.sync.mode === "connected" ? "Backend connected" : "Device-only mode"}</strong>{online ? "Network available" : "Offline"} · {data.sync.pending.length} pending change{data.sync.pending.length === 1 ? "" : "s"}</span>
+            <span><strong>{data.sync.mode === "connected" ? "Automatic sync on" : "Device-only mode"}</strong>{data.sync.mode === "connected"
+              ? syncing
+                ? "Updating the shared church workspace now."
+                : !online
+                  ? `${data.sync.pending.length} change${data.sync.pending.length === 1 ? " is" : "s are"} safely stored on this device until the connection returns.`
+                  : data.sync.pending.length > 0
+                    ? `${data.sync.pending.length} change${data.sync.pending.length === 1 ? " is" : "s are"} queued for automatic sync.`
+                    : "This device is up to date with the church workspace."
+              : "Records remain on this device until a workspace is connected."}</span>
           </div>
-          {data.sync.mode === "connected" && <button className="button primary" onClick={async () => setMessage(await onSync() ? "Changes synchronized." : "Synchronization did not complete.")} disabled={!online || saving}><RefreshCcw size={15} className={saving ? "spin" : ""} /> Sync now</button>}
+          {data.sync.lastError && <div className="data-note sync-warning"><AlertTriangle size={15} /><span>{data.sync.lastError}</span></div>}
+          {data.sync.mode === "connected" && <button className="button quiet" onClick={async () => setMessage(await onSync() ? "Changes synchronized." : "Changes remain safe on this device; automatic retry is still active.")} disabled={!online || saving || syncing}><RefreshCcw size={15} className={syncing ? "spin" : ""} /> {data.sync.pending.length || data.sync.lastError ? "Retry sync" : "Sync now"}</button>}
           <div className="button-row"><button className="button quiet" onClick={onExport}><Download size={15} /> Export backup</button><button className="button quiet" onClick={() => fileRef.current?.click()}><Upload size={15} /> Import backup</button><input ref={fileRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const imported = await onImport(file); applyDataDrafts(imported); setMessage("Backup imported and validated."); } catch (error) { setMessage(error instanceof Error ? error.message : "The backup could not be imported."); } finally { event.target.value = ""; } }} /></div>
           <div className="data-note"><FileJson size={15} /><span>Backups contain ministry records in readable JSON. Store them securely and delete old copies.</span></div>
         </SettingsSection>
