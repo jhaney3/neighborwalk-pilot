@@ -7,10 +7,17 @@ import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { Coordinates, Outcome, Property, Territory } from "../lib/domain";
 import { outcomeMeta } from "../lib/domain";
 import {
-  fetchParcelsInView,
-  PARCEL_RESULT_LIMIT,
+  cacheTerritoryParcels,
+  getCachedTerritoryParcels,
+  isTerritoryParcelCacheFresh,
+} from "../lib/parcel-cache";
+import {
+  fetchParcelDatasetRevision,
+  fetchParcelsForTerritory,
+  territoryBoundarySignature,
   type ParcelDetails,
   type ParcelFeatureCollection,
+  type TerritoryParcelResult,
 } from "../lib/parcels";
 
 const BUILDING_OUTLINE_LAYER_ID = "neighborwalk-building-outlines";
@@ -428,8 +435,10 @@ export function MapCanvas({
   ));
   const parcelRequestRef = useRef(0);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [parcelStatus, setParcelStatus] = useState<"zoom" | "loading" | "ready" | "unavailable">("zoom");
+  const [parcelStatus, setParcelStatus] = useState<"loading" | "ready" | "cached" | "limited" | "unavailable">("loading");
   const [parcelCount, setParcelCount] = useState(0);
+  const [parcelTotal, setParcelTotal] = useState(0);
+  const boundarySignature = territoryBoundarySignature(territory.boundary);
 
   useEffect(() => {
     callbacksRef.current = { onSelectProperty, onAddIntent, onDraftBoundaryChange };
@@ -439,6 +448,78 @@ export function MapCanvas({
     modesRef.current = { addMode, drawMode, draftBoundary };
     if (mapRef.current) mapRef.current.getCanvas().style.cursor = addMode || drawMode ? "crosshair" : "grab";
   }, [addMode, drawMode, draftBoundary]);
+
+  useEffect(() => {
+    const requestId = ++parcelRequestRef.current;
+    let cancelled = false;
+    let hasCachedParcels = false;
+
+    const display = (result: TerritoryParcelResult, status: "ready" | "cached" | "limited") => {
+      if (cancelled || requestId !== parcelRequestRef.current) return;
+      parcelDataRef.current = result.parcels;
+      setParcelCount(result.parcels.features.length);
+      setParcelTotal(result.totalCount);
+      setParcelStatus(result.truncated ? "limited" : status);
+      const map = mapRef.current;
+      if (map?.getSource(PARCEL_SOURCE_ID)) updateGeoJsonSource(map, PARCEL_SOURCE_ID, result.parcels);
+    };
+
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled || requestId !== parcelRequestRef.current) return;
+      parcelDataRef.current = EMPTY_PARCELS;
+      setParcelCount(0);
+      setParcelTotal(0);
+      setParcelStatus("loading");
+      if (mapRef.current?.getSource(PARCEL_SOURCE_ID)) {
+        updateGeoJsonSource(mapRef.current, PARCEL_SOURCE_ID, EMPTY_PARCELS);
+      }
+
+      let cached = null;
+      try {
+        cached = await getCachedTerritoryParcels(territory.id, boundarySignature);
+      } catch {
+        // IndexedDB can be unavailable in restrictive browser modes; online loading still works.
+      }
+      if (cancelled || requestId !== parcelRequestRef.current) return;
+
+      if (cached) {
+        hasCachedParcels = true;
+        const cacheIsFresh = isTerritoryParcelCacheFresh(cached.cachedAt);
+        display(cached, cacheIsFresh ? "ready" : "cached");
+        if (cacheIsFresh) return;
+        try {
+          const revision = await fetchParcelDatasetRevision();
+          if (revision && revision === cached.datasetRevision) {
+            await cacheTerritoryParcels(territory.id, boundarySignature, cached).catch(() => undefined);
+            display(cached, "ready");
+            return;
+          }
+        } catch {
+          display(cached, "cached");
+          return;
+        }
+      }
+
+      try {
+        const result = await fetchParcelsForTerritory(territory.boundary);
+        if (!result) {
+          if (!hasCachedParcels && !cancelled) setParcelStatus("unavailable");
+          return;
+        }
+        display(result, "ready");
+        await cacheTerritoryParcels(territory.id, boundarySignature, result).catch(() => undefined);
+      } catch {
+        if (!hasCachedParcels && !cancelled && requestId === parcelRequestRef.current) {
+          setParcelStatus("unavailable");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [territory.id, territory.boundary, boundarySignature]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -475,42 +556,6 @@ export function MapCanvas({
         if (!mapLoaded) setMapStatus("error");
       }, 15000);
 
-      const refreshParcels = () => {
-        if (!map) return;
-        const requestId = ++parcelRequestRef.current;
-        if (map.getZoom() < PARCEL_MIN_ZOOM) {
-          parcelDataRef.current = EMPTY_PARCELS;
-          updateGeoJsonSource(map, PARCEL_SOURCE_ID, EMPTY_PARCELS);
-          setParcelCount(0);
-          setParcelStatus("zoom");
-          return;
-        }
-        const bounds = map.getBounds();
-        setParcelStatus("loading");
-        void fetchParcelsInView({
-          minLat: bounds.getSouth(),
-          minLong: bounds.getWest(),
-          maxLat: bounds.getNorth(),
-          maxLong: bounds.getEast(),
-        }).then((parcels) => {
-          if (cancelled || requestId !== parcelRequestRef.current) return;
-          if (!parcels) {
-            setParcelStatus("unavailable");
-            return;
-          }
-          parcelDataRef.current = parcels;
-          updateGeoJsonSource(map!, PARCEL_SOURCE_ID, parcels);
-          setParcelCount(parcels.features.length);
-          setParcelStatus("ready");
-        }).catch(() => {
-          if (cancelled || requestId !== parcelRequestRef.current) return;
-          parcelDataRef.current = EMPTY_PARCELS;
-          updateGeoJsonSource(map!, PARCEL_SOURCE_ID, EMPTY_PARCELS);
-          setParcelCount(0);
-          setParcelStatus("unavailable");
-        });
-      };
-
       map.on("style.load", () => {
         if (!map) return;
         configureNeighborWalkLayers(
@@ -526,10 +571,7 @@ export function MapCanvas({
         mapLoaded = true;
         if (loadTimeout !== undefined) window.clearTimeout(loadTimeout);
         setMapStatus("ready");
-        refreshParcels();
       });
-
-      map.on("moveend", refreshParcels);
 
       map.on("mousemove", (event: MapMouseEvent) => {
         if (!map || modesRef.current.addMode || modesRef.current.drawMode) return;
@@ -671,11 +713,13 @@ export function MapCanvas({
       {mapStatus === "ready" && parcelStatus !== "unavailable" && (
         <div className={`parcel-status ${parcelStatus}`}>
           {parcelStatus === "loading" ? <LoaderCircle className="spin" size={14} /> : <MapPinned size={14} />}
-          <span>{parcelStatus === "zoom"
-            ? "Zoom in for official parcels"
-            : parcelStatus === "loading"
-              ? "Loading official parcels"
-              : `${parcelCount === PARCEL_RESULT_LIMIT ? `${PARCEL_RESULT_LIMIT.toLocaleString()}+` : parcelCount.toLocaleString()} parcels visible · Status colors mark saved locations`}</span>
+          <span>{parcelStatus === "loading"
+            ? "Preparing official parcels for this territory"
+            : parcelStatus === "cached"
+              ? `${parcelCount.toLocaleString()} cached territory parcels · available offline`
+              : parcelStatus === "limited"
+                ? `${parcelCount.toLocaleString()} of ${parcelTotal.toLocaleString()} parcels ready · split this large territory for full detail`
+                : `${parcelCount.toLocaleString()} territory parcels ready · status colors mark saved locations`}</span>
         </div>
       )}
       {addMode && (

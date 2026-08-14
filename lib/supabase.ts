@@ -107,6 +107,18 @@ export type NeighborWalkDatabase = {
           geometry: Json;
         }[];
       };
+      parcels_for_territory_v1: {
+        Args: {
+          territory_geometry: Json;
+          buffer_meters?: number;
+          result_limit?: number;
+        };
+        Returns: Json;
+      };
+      parcel_dataset_revision_v1: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

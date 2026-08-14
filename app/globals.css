@@ -121,6 +121,8 @@ input, textarea, select { color: var(--ink); }
 .map-mode-banner.draw { color: white; border-color: rgba(255,255,255,.28); background: rgba(16,43,36,.92); }
 .parcel-status { position: absolute; z-index: 9; left: 14px; bottom: 14px; display: flex; align-items: center; gap: 6px; max-width: calc(100% - 120px); padding: 8px 10px; border: 1px solid rgba(219,229,225,.9); border-radius: 99px; color: var(--pine-700); background: rgba(255,255,255,.92); box-shadow: var(--shadow-sm); font: 600 8px/1 var(--font-plex-mono), monospace; backdrop-filter: blur(10px); }
 .parcel-status.loading { color: var(--amber-deep); }
+.parcel-status.cached { color: #3f665b; }
+.parcel-status.limited { color: #8a5411; border-color: rgba(222, 170, 87, .65); }
 .map-floating-actions { position: absolute; z-index: 10; top: 14px; right: 14px; display: grid; gap: 7px; }
 .map-search-results { position: absolute; z-index: 13; top: 14px; left: 14px; width: min(300px,calc(100% - 110px)); overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.97); box-shadow: var(--shadow-lg); }
 .map-search-results button { width: 100%; min-height: 45px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--line); background: transparent; cursor: pointer; text-align: left; }
