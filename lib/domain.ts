@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const APP_SCHEMA_VERSION = 4;
+export const APP_SCHEMA_VERSION = 5;
 
 export const outcomeValues = [
   "unvisited",
@@ -122,6 +122,12 @@ export type Team = {
   status: "ready" | "active" | "finished";
 };
 
+export type ParcelReference = {
+  id?: number;
+  countyFips: string;
+  gislink: string;
+};
+
 export type Property = {
   id: string;
   churchId: string;
@@ -130,6 +136,7 @@ export type Property = {
   unit?: string;
   coordinates: Coordinates;
   buildingGeometry?: Coordinates[];
+  parcel?: ParcelReference;
   currentOutcome: Outcome;
   lastVisitedAt?: string;
   visitCount: number;
@@ -301,6 +308,11 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
     unit: z.string().max(60).optional(),
     coordinates: coordinatesSchema,
     buildingGeometry: z.array(coordinatesSchema).optional(),
+    parcel: z.object({
+      id: z.number().int().positive().optional(),
+      countyFips: z.string().regex(/^[0-9]{5}$/),
+      gislink: z.string().min(1).max(120),
+    }).optional(),
     currentOutcome: outcomeSchema,
     lastVisitedAt: z.string().datetime().optional(),
     visitCount: z.number().int().min(0),

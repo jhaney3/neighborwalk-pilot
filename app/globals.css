@@ -173,6 +173,14 @@ input, textarea, select { color: var(--ink); }
 .drawer-address > small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; }
 .address-edit-row { display: grid; grid-template-columns: minmax(0,1fr) 70px auto; gap: 5px; }
 .address-edit-row input { min-width: 0; height: 33px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--mist-50); font-size: 10px; }
+.drawer-parcel-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px; margin-top: 11px; padding: 5px; border: 1px solid #c7dbd3; border-radius: 11px; background: var(--mint-50); }
+.drawer-parcel-row > button { border: 0; color: var(--pine-700); background: transparent; cursor: pointer; }
+.drawer-parcel-row > button:first-child { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 5px 6px; text-align: left; }
+.drawer-parcel-row > button:first-child > svg { flex: none; }
+.drawer-parcel-row span, .drawer-parcel-row strong, .drawer-parcel-row small { display: block; }
+.drawer-parcel-row strong { color: var(--ink); font-size: 9px; }
+.drawer-parcel-row small { margin-top: 2px; color: var(--muted); font-size: 8px; }
+.drawer-add-dwelling { width: 36px; display: grid; place-items: center; border-radius: 8px !important; color: white !important; background: var(--pine-900) !important; }
 .do-not-visit-banner, .drawer-followup-banner { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 10px; border-radius: 10px; }
 .do-not-visit-banner { color: #7f322e; background: var(--rose-soft); }
 .drawer-followup-banner { color: #80500d; background: var(--amber-soft); }
@@ -415,6 +423,28 @@ input, textarea, select { color: var(--ink); }
 .parcel-preview small { margin-top: 2px; color: var(--muted); font-size: 8px; line-height: 1.4; }
 .parcel-preview > svg { color: var(--pine-500); }
 .parcel-preview > small { grid-column: 1 / -1; }
+.parcel-existing-note, .parcel-meaning { display: flex; align-items: flex-start; gap: 9px; margin: -4px 0 13px; padding: 10px 11px; border: 1px solid #e4c37d; border-radius: 10px; color: #80500d; background: var(--amber-soft); }
+.parcel-existing-note svg, .parcel-meaning svg { flex: none; }
+.parcel-existing-note span, .parcel-existing-note strong { display: block; }
+.parcel-existing-note span, .parcel-meaning span { font-size: 8px; line-height: 1.45; }
+.parcel-existing-note strong { margin-bottom: 2px; color: var(--ink); font-size: 9px; }
+.parcel-tally { display: grid; grid-template-columns: 92px minmax(0,1fr); align-items: center; gap: 15px; margin-bottom: 13px; padding: 13px; border-radius: 13px; color: white; background: var(--pine-950); }
+.parcel-tally > div:first-child { padding-right: 14px; border-right: 1px solid rgba(255,255,255,.16); }
+.parcel-tally span, .parcel-tally strong { display: block; }
+.parcel-tally span { color: #bcd0c8; font: 600 8px/1.3 var(--font-plex-mono), monospace; letter-spacing: .04em; text-transform: uppercase; }
+.parcel-tally strong { margin-top: 4px; font-size: 30px; line-height: 1; letter-spacing: -.06em; }
+.parcel-tally strong small { color: #9bb5ab; font-size: 15px; }
+.parcel-tally-track { height: 6px; margin-top: 8px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.13); }
+.parcel-tally-track i { display: block; height: 100%; border-radius: inherit; background: var(--amber); }
+.parcel-dwelling-list { display: grid; gap: 6px; }
+.parcel-dwelling-list button { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 9px; width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--mist-50); cursor: pointer; text-align: left; }
+.parcel-dwelling-list button:hover { border-color: #b8dace; background: var(--mint-50); }
+.parcel-dwelling-list button > i { width: 11px; height: 11px; border: 1px solid rgba(0,0,0,.12); border-radius: 50%; }
+.parcel-dwelling-list span, .parcel-dwelling-list strong, .parcel-dwelling-list small { min-width: 0; display: block; }
+.parcel-dwelling-list strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.parcel-dwelling-list small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.parcel-dwelling-list button > svg { color: var(--pine-500); }
+.parcel-meaning { margin: 11px 0 0; border-color: #c7dbd3; color: var(--pine-700); background: var(--mint-50); }
 .toast { position: fixed; z-index: 120; top: 14px; left: 50%; display: flex; align-items: center; gap: 7px; padding: 9px 13px; border-radius: 99px; color: white; background: var(--pine-975); box-shadow: var(--shadow-lg); font-size: 9px; font-weight: 700; transform: translateX(-50%); animation: toast-in .18s ease-out; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%,-7px); } }
 .spin { animation: spin .9s linear infinite; }

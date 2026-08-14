@@ -2,14 +2,17 @@
 
 import {
   AlertOctagon,
+  Building2,
   CalendarClock,
   Check,
   ChevronDown,
+  ChevronRight,
   ClipboardList,
   Clock3,
   History,
   MapPin,
   PencilLine,
+  Plus,
   Save,
   ShieldCheck,
   Trash2,
@@ -47,21 +50,27 @@ const recordableOutcomes: Exclude<Outcome, "unvisited">[] = [
 
 export function PropertyDrawer({
   property,
+  parcelDwellings,
   data,
   visits,
   openFollowUp,
   canManage,
   onClose,
+  onViewParcel,
+  onAddDwelling,
   onRecordVisit,
   onUpdateProperty,
   onDeleteProperty,
 }: {
   property: Property;
+  parcelDwellings: Property[];
   data: NeighborWalkData;
   visits: Visit[];
   openFollowUp?: FollowUp;
   canManage: boolean;
   onClose: () => void;
+  onViewParcel?: () => void;
+  onAddDwelling?: () => void;
   onRecordVisit: (input: VisitInput) => void;
   onUpdateProperty: (propertyId: string, patch: Pick<Property, "address" | "unit">) => void;
   onDeleteProperty: (propertyId: string) => void;
@@ -116,7 +125,7 @@ export function PropertyDrawer({
           {editingAddress ? (
             <div className="address-edit-row">
               <input value={address} onChange={(event) => setAddress(event.target.value)} aria-label="Street address" />
-              <input value={unit} onChange={(event) => setUnit(event.target.value)} aria-label="Unit" placeholder="Unit" />
+              <input value={unit} onChange={(event) => setUnit(event.target.value)} aria-label="Dwelling label or unit" placeholder="Unit or label" />
               <button className="small-icon-button" onClick={() => setEditingAddress(false)} aria-label="Finish editing address"><Check size={16} /></button>
             </div>
           ) : (
@@ -128,6 +137,17 @@ export function PropertyDrawer({
         </div>
         <button className="close-button" onClick={onClose} aria-label="Close location details"><X size={19} /></button>
       </div>
+
+      {property.parcel && parcelDwellings.length > 0 && (
+        <div className="drawer-parcel-row">
+          <button onClick={onViewParcel} disabled={!onViewParcel}>
+            <Building2 size={17} />
+            <span><strong>{parcelDwellings.length} {parcelDwellings.length === 1 ? "dwelling" : "dwellings"} on this parcel</strong><small>View every doorstep and its visit status</small></span>
+            <ChevronRight size={16} />
+          </button>
+          {onAddDwelling && <button className="drawer-add-dwelling" onClick={onAddDwelling} aria-label="Add another dwelling to this parcel"><Plus size={16} /></button>}
+        </div>
+      )}
 
       {property.currentOutcome === "do_not_visit" && (
         <div className="do-not-visit-banner"><AlertOctagon size={17} /><span><strong>Do not approach this location</strong>The resident’s preference should be honored.</span></div>

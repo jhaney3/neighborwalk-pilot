@@ -29,7 +29,7 @@ function getDatabase() {
   return databasePromise;
 }
 
-function migrate(candidate: unknown): unknown {
+export function migrateNeighborWalkData(candidate: unknown): unknown {
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return candidate;
   const data = candidate as Record<string, unknown>;
   const version = typeof data.schemaVersion === "number" ? data.schemaVersion : 1;
@@ -74,7 +74,7 @@ export async function loadNeighborWalkData(): Promise<NeighborWalkData> {
     await database.put(STORE, seeded, DATA_KEY);
     return seeded;
   }
-  const migratedCandidate = migrate(stored);
+  const migratedCandidate = migrateNeighborWalkData(stored);
   const parsed = neighborWalkDataSchema.safeParse(migratedCandidate);
   if (!parsed.success) {
     const backupKey = `invalid_${Date.now()}`;
@@ -95,7 +95,7 @@ export async function saveNeighborWalkData(data: NeighborWalkData): Promise<void
 }
 
 export async function replaceNeighborWalkData(candidate: unknown): Promise<NeighborWalkData> {
-  const parsed = neighborWalkDataSchema.parse(migrate(candidate));
+  const parsed = neighborWalkDataSchema.parse(migrateNeighborWalkData(candidate));
   const retained = enforceRetention(parsed);
   await saveNeighborWalkData(retained);
   return retained;

@@ -3,9 +3,11 @@
 import {
   BarChart3,
   BookOpenText,
+  Building2,
   CalendarClock,
   Check,
   ChevronDown,
+  ChevronRight,
   CircleUserRound,
   CloudOff,
   Edit3,
@@ -35,15 +37,18 @@ import {
   type Coordinates,
   type NeighborWalkData,
   type Outcome,
+  type ParcelReference,
   type Territory,
 } from "../lib/domain";
 import { useNeighborWalk, type SupabaseUser } from "../lib/use-neighborwalk";
 import { reverseGeocode } from "../lib/geocoding";
 import { MAP_STYLE_OPTIONS } from "../lib/map-config";
+import { dwellingsForParcel, parcelProgress } from "../lib/parcel-groups";
 import type { ParcelDetails } from "../lib/parcels";
 
 type View = "map" | "followups" | "guide" | "leader" | "settings";
-type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[]; parcel?: ParcelDetails };
+type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[]; parcel?: ParcelDetails; legacyPropertyIds?: string[] };
+type ParcelSelection = { parcel: ParcelReference; situsAddress?: string | null; propertyIds: string[] };
 
 const PARCEL_COUNTY_NAMES: Record<string, string> = {
   "47055": "Giles County",
@@ -51,6 +56,10 @@ const PARCEL_COUNTY_NAMES: Record<string, string> = {
   "47101": "Lewis County",
   "47181": "Wayne County",
 };
+
+function parcelReference(parcel: ParcelDetails): ParcelReference {
+  return { id: parcel.id, countyFips: parcel.countyFips, gislink: parcel.gislink };
+}
 
 const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
   { value: "all", label: "All" },
@@ -69,6 +78,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const [query, setQuery] = useState("");
   const [addMode, setAddMode] = useState(false);
   const [pendingAdd, setPendingAdd] = useState<AddIntent | null>(null);
+  const [selectedParcel, setSelectedParcel] = useState<ParcelSelection | null>(null);
   const [drawMode, setDrawMode] = useState(false);
   const [draftBoundary, setDraftBoundary] = useState<Coordinates[]>([]);
   const [territoryEditorOpen, setTerritoryEditorOpen] = useState(false);
@@ -146,6 +156,18 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const selectedProperty = data.properties.find((property) => property.id === selectedPropertyId) ?? null;
   const selectedVisits = selectedProperty ? visitsForProperty(data, selectedProperty.id) : [];
   const selectedFollowUp = selectedProperty ? data.followUps.find((followUp) => followUp.propertyId === selectedProperty.id && followUp.status === "scheduled") : undefined;
+  const selectedPropertyDwellings = selectedProperty?.parcel
+    ? dwellingsForParcel(data.properties, selectedProperty.parcel)
+    : [];
+  const selectedParcelDwellings = selectedParcel
+    ? selectedParcel.propertyIds.flatMap((propertyId) => {
+      const property = data.properties.find((candidate) => candidate.id === propertyId);
+      return property ? [property] : [];
+    })
+    : [];
+  const pendingParcelDwellings = pendingAdd?.parcel
+    ? dwellingsForParcel(data.properties, pendingAdd.parcel)
+    : [];
   const openFollowUps = data.followUps.filter((followUp) => followUp.status === "scheduled").length;
   const editingTerritory = editingTerritoryId ? data.territories.find((territory) => territory.id === editingTerritoryId) : undefined;
   const territoryEditorEventId = editingTerritory?.eventId ?? data.preferences.activeEventId;
@@ -154,6 +176,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const navigate = (next: View) => {
     setViewOverride(next);
     setSelectedPropertyId(null);
+    setSelectedParcel(null);
     setAddMode(false);
     setMapLayersOpen(false);
     if (next !== "map") {
@@ -171,7 +194,15 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
     setPendingAdd(null);
     setAddMode(false);
     setSelectedPropertyId(propertyId);
-    setToast("Location added to this territory");
+    setToast(pendingAdd.parcel ? "Dwelling added to this parcel" : "Location added to this territory");
+  };
+
+  const beginAddingDwelling = () => {
+    setSelectedParcel(null);
+    setSelectedPropertyId(null);
+    setPendingAdd(null);
+    setAddMode(true);
+    setToast("Tap the next dwelling or entrance on the parcel");
   };
 
   const startDrawing = () => {
@@ -267,8 +298,29 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
                 </div>
               </div>
               <div className="map-stage">
-                <MapCanvas territory={activeTerritory} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchQuery={query} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setAddMode(false); }} onAddIntent={async (intent) => {
+                <MapCanvas territory={activeTerritory} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchQuery={query} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={(id) => { setSelectedPropertyId(id); setSelectedParcel(null); setAddMode(false); }} onAddIntent={async (intent) => {
+                  if (intent.parcel) {
+                    const linkedDwellings = dwellingsForParcel(territoryProperties, intent.parcel);
+                    const legacyPropertyIds = intent.legacyPropertyIds ?? [];
+                    if (legacyPropertyIds.length) {
+                      actions.associatePropertiesWithParcel(legacyPropertyIds, parcelReference(intent.parcel));
+                    }
+                    const propertyIds = [...new Set([
+                      ...linkedDwellings.map((property) => property.id),
+                      ...legacyPropertyIds,
+                    ])];
+                    if (!addMode && propertyIds.length) {
+                      setSelectedPropertyId(null);
+                      setSelectedParcel({
+                        parcel: parcelReference(intent.parcel),
+                        situsAddress: intent.parcel.situsAddress,
+                        propertyIds,
+                      });
+                      return;
+                    }
+                  }
                   if (intent.parcel?.situsAddress) {
+                    setSelectedParcel(null);
                     setPendingAdd(intent);
                     setToast("Official parcel selected");
                     return;
@@ -280,17 +332,17 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
                   } catch {
                     setPendingAdd(intent);
                   }
-                }} onDraftBoundaryChange={setDraftBoundary} />
-                {query && <div className="map-search-results" aria-label="Address search results">{filteredProperties.slice(0, 5).map((property) => <button key={property.id} onClick={() => setSelectedPropertyId(property.id)}><span><strong>{property.address}</strong><small>{outcomeMeta[property.currentOutcome].label}</small></span><i style={{ background: outcomeMeta[property.currentOutcome].color }} /></button>)}{!filteredProperties.length && <p>No locations match “{query}”.</p>}</div>}
+                }} onAssociatePropertiesWithParcel={(propertyIds, parcel) => actions.associatePropertiesWithParcel(propertyIds, parcelReference(parcel))} onDraftBoundaryChange={setDraftBoundary} />
+                {query && <div className="map-search-results" aria-label="Address search results">{filteredProperties.slice(0, 5).map((property) => <button key={property.id} onClick={() => { setSelectedPropertyId(property.id); setSelectedParcel(null); }}><span><strong>{property.address}{property.unit ? ` · ${property.unit}` : ""}</strong><small>{outcomeMeta[property.currentOutcome].label}</small></span><i style={{ background: outcomeMeta[property.currentOutcome].color }} /></button>)}{!filteredProperties.length && <p>No locations match “{query}”.</p>}</div>}
                 <div className="map-floating-actions">
-                  {!drawMode && <button className={`map-action-button ${addMode ? "active" : ""}`} aria-label={addMode ? "Cancel adding a location" : "Add a location"} onClick={() => { setAddMode((current) => !current); setSelectedPropertyId(null); }}><Plus size={18} /><span>{addMode ? "Cancel adding" : "Add location"}</span></button>}
+                  {!drawMode && <button className={`map-action-button ${addMode ? "active" : ""}`} aria-label={addMode ? "Cancel adding a location" : "Add a location"} onClick={() => { setAddMode((current) => !current); setSelectedPropertyId(null); setSelectedParcel(null); }}><Plus size={18} /><span>{addMode ? "Cancel adding" : "Add location"}</span></button>}
                   {canManage && !drawMode && <button className="map-action-button secondary" aria-label={`Edit ${activeTerritory.name}`} onClick={() => openTerritoryEditor(activeTerritory.id)}><Edit3 size={18} /><span>Edit territory</span></button>}
                   {canManage && !drawMode && <button className="map-action-button secondary" aria-label="Draw a territory" onClick={startDrawing}><MapPinned size={18} /><span>Draw territory</span></button>}
                 </div>
                 {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => points.slice(0, -1))}><Undo2 size={15} /> Undo</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={draftBoundary.length < 3} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
                 {!selectedProperty && !drawMode && <div className="walk-dock"><div><span>{walkStartedAt ? "Walk in progress" : "Ready for the next block"}</span><strong>{walkStartedAt ? formatElapsed(elapsed) : `${coverage.remaining} locations remaining`}</strong></div><button className={walkStartedAt ? "button quiet" : "button primary"} onClick={() => { if (walkStartedAt) { setWalkStartedAt(null); setElapsed(0); setToast("Walk session finished"); } else { setWalkStartedAt(Date.now()); setToast("Walk session started"); } }}>{walkStartedAt ? <><TimerReset size={15} /> Finish</> : <><Navigation size={15} /> Start walk</>}</button></div>}
               </div>
-              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} canManage={canManage} onClose={() => setSelectedPropertyId(null)} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} />}
+              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} canManage={canManage} onClose={() => setSelectedPropertyId(null)} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} />}
             </section>
           )}
           {view === "followups" && <FollowUpsView data={data} onOpenProperty={(propertyId) => { navigate("map"); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onComplete={(id) => { actions.completeFollowUp(id); setToast("Follow-up completed"); }} onReschedule={(id, date) => { actions.rescheduleFollowUp(id, date); setToast("Follow-up rescheduled"); }} onCancel={(id) => { actions.cancelFollowUp(id); setToast("Follow-up cancelled"); }} />}
@@ -307,7 +359,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
         {canManage ? <MobileNav active={view === "leader"} icon={<Users size={20} />} label="Leader" onClick={() => navigate("leader")} /> : <MobileNav active={view === "settings"} icon={<Settings2 size={20} />} label="Settings" onClick={() => navigate("settings")} />}
       </nav>
 
-      {pendingAdd && <AddPropertyModal intent={pendingAdd} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
+      {pendingAdd && <AddPropertyModal intent={pendingAdd} existingDwellingCount={pendingParcelDwellings.length} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
+      {selectedParcel && <ParcelSummaryModal selection={selectedParcel} dwellings={selectedParcelDwellings} onClose={() => setSelectedParcel(null)} onOpenDwelling={(propertyId) => { setSelectedParcel(null); setSelectedPropertyId(propertyId); }} onAddDwelling={beginAddingDwelling} />}
       {territoryPickerOpen && <TerritoryPickerModal data={data} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onEdit={openTerritoryEditor} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
       {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} teams={territoryEditorTeams} boundaryChanged={draftBoundary.length >= 3} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onSave={(name, color, assignedTeamId) => {
         if (editingTerritory) {
@@ -369,11 +422,58 @@ function WorkspaceSetup({
   );
 }
 
-function AddPropertyModal({ intent, onClose, onSave }: { intent: AddIntent; onClose: () => void; onSave: (address: string, unit: string) => void }) {
+function AddPropertyModal({ intent, existingDwellingCount, onClose, onSave }: { intent: AddIntent; existingDwellingCount: number; onClose: () => void; onSave: (address: string, unit: string) => void }) {
   const [address, setAddress] = useState(intent.suggestedAddress);
   const [unit, setUnit] = useState("");
   const countyName = intent.parcel ? PARCEL_COUNTY_NAMES[intent.parcel.countyFips] ?? "Tennessee" : null;
-  return <Modal title="Add this location" description={intent.parcel ? "Confirm the official parcel address before recording a visit." : "Confirm the address before recording a visit."} onClose={onClose}><div className="location-preview"><MapPinned size={20} /><span><strong>{intent.parcel ? `Official ${countyName} parcel` : "Map location selected"}</strong>{intent.coordinates[1].toFixed(6)}, {intent.coordinates[0].toFixed(6)}{intent.buildingGeometry ? " · Boundary found" : ""}</span></div>{intent.parcel && <div className="parcel-preview"><span><strong>{intent.parcel.propertyClass ?? "Unclassified parcel"}</strong><small>{intent.parcel.landUse ?? "No land-use description in the county file"}</small></span><ShieldCheck size={15} /><small>Owner names and property values are not stored.</small></div>}<div className="form-stack"><label className="form-field"><span>Street address</span><input value={address} onChange={(event) => setAddress(event.target.value)} /></label><label className="form-field"><span>Unit <small>Optional</small></span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Apartment, suite, or unit" /></label></div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={address.trim().length < 3} onClick={() => onSave(address, unit)}><Plus size={15} /> Add location</button></div></Modal>;
+  const needsLabel = existingDwellingCount > 0;
+  const canSave = address.trim().length >= 3 && (!needsLabel || unit.trim().length > 0);
+  return (
+    <Modal
+      title={needsLabel ? "Add another dwelling" : "Add this location"}
+      description={intent.parcel ? "Each dwelling keeps its own visits, outcome, and follow-ups." : "Confirm the address before recording a visit."}
+      onClose={onClose}
+    >
+      <div className="location-preview"><MapPinned size={20} /><span><strong>{intent.parcel ? `Official ${countyName} parcel` : "Map location selected"}</strong>{intent.coordinates[1].toFixed(6)}, {intent.coordinates[0].toFixed(6)}{intent.buildingGeometry ? " · Building found" : ""}</span></div>
+      {intent.parcel && <div className="parcel-preview"><span><strong>{intent.parcel.propertyClass ?? "Unclassified parcel"}</strong><small>{intent.parcel.landUse ?? "No land-use description in the county file"}</small></span><ShieldCheck size={15} /><small>Owner names and property values are not stored.</small></div>}
+      {needsLabel && <div className="parcel-existing-note"><Building2 size={17} /><span><strong>{existingDwellingCount} {existingDwellingCount === 1 ? "dwelling is" : "dwellings are"} already mapped here</strong>Add a clear label so the next volunteer can choose the right door.</span></div>}
+      <div className="form-stack">
+        <label className="form-field"><span>Street address</span><input value={address} onChange={(event) => setAddress(event.target.value)} /></label>
+        <label className="form-field"><span>Dwelling label or unit <small>{needsLabel ? "Required" : "Optional"}</small></span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Rear house, Unit B, Apartment 2" /></label>
+      </div>
+      <div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={!canSave} onClick={() => onSave(address, unit)}><Plus size={15} /> Add dwelling</button></div>
+    </Modal>
+  );
+}
+
+function ParcelSummaryModal({ selection, dwellings, onClose, onOpenDwelling, onAddDwelling }: {
+  selection: ParcelSelection;
+  dwellings: NeighborWalkData["properties"];
+  onClose: () => void;
+  onOpenDwelling: (propertyId: string) => void;
+  onAddDwelling: () => void;
+}) {
+  const progress = parcelProgress(dwellings);
+  const address = selection.situsAddress ?? dwellings[0]?.address ?? "Selected parcel";
+  return (
+    <Modal title={`${progress.total} ${progress.total === 1 ? "dwelling" : "dwellings"} on this parcel`} description={address} onClose={onClose}>
+      <div className="parcel-tally">
+        <div><span>Doorstep tally</span><strong>{progress.visited}<small> / {progress.total}</small></strong></div>
+        <div><span>{progress.remaining ? `${progress.remaining} still to visit` : "Every dwelling visited"}</span><div className="parcel-tally-track"><i style={{ width: `${progress.percent}%` }} /></div></div>
+      </div>
+      <div className="parcel-dwelling-list" aria-label="Dwellings on this parcel">
+        {dwellings.map((property) => (
+          <button key={property.id} onClick={() => onOpenDwelling(property.id)}>
+            <i style={{ background: outcomeMeta[property.currentOutcome].color }} />
+            <span><strong>{property.unit || property.address}</strong><small>{property.unit ? property.address : "Main dwelling"} · {outcomeMeta[property.currentOutcome].label}</small></span>
+            <ChevronRight size={16} />
+          </button>
+        ))}
+      </div>
+      <div className="parcel-meaning"><Building2 size={16} /><span>The parcel stays neutral on the map. Each dwelling dot carries its own visit color.</span></div>
+      <div className="modal-actions"><button className="button quiet" onClick={onClose}>Close</button><button className="button primary" onClick={onAddDwelling}><Plus size={15} /> Add another dwelling</button></div>
+    </Modal>
+  );
 }
 
 function TerritoryModal({ territory, teams, boundaryChanged, onClose, onRedraw, onSave }: {

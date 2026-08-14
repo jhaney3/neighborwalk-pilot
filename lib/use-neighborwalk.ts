@@ -12,6 +12,7 @@ import {
   type GuideStep,
   type NeighborWalkData,
   type Outcome,
+  type ParcelReference,
   type Property,
   type Territory,
   type TerritoryUpdate,
@@ -20,6 +21,7 @@ import {
   exportNeighborWalkData,
   importNeighborWalkFile,
   loadNeighborWalkData,
+  migrateNeighborWalkData,
   resetNeighborWalkData,
   saveNeighborWalkData,
 } from "./storage";
@@ -66,6 +68,7 @@ type NewPropertyInput = {
   unit?: string;
   coordinates: Coordinates;
   buildingGeometry?: Coordinates[];
+  parcel?: ParcelReference;
 };
 
 type NewTerritoryInput = {
@@ -160,7 +163,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
             .single();
           if (!active) return;
           if (snapshotError) throw snapshotError;
-          const parsedRemote = neighborWalkDataSchema.safeParse(snapshot.data);
+          const parsedRemote = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(snapshot.data));
           if (!parsedRemote.success) throw new Error("The church workspace contains data from an unsupported app version.");
           const cachedForUser = readWorkspaceConnection(supabaseUser.id);
           const connection = { userId: supabaseUser.id, churchId: membership.church_id, revision: Number(snapshot.revision) };
@@ -309,6 +312,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         unit: input.unit?.trim() || undefined,
         coordinates: input.coordinates,
         buildingGeometry: input.buildingGeometry,
+        parcel: input.parcel,
         currentOutcome: "unvisited",
         visitCount: 0,
         createdAt: now,
@@ -324,6 +328,32 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       );
     });
     return propertyId;
+  }, [updateData]);
+
+  const associatePropertiesWithParcel = useCallback((propertyIds: string[], parcel: ParcelReference) => {
+    const targetIds = new Set(propertyIds);
+    if (!targetIds.size) return;
+    updateData((current) => {
+      const changed = current.properties.filter((property) => (
+        targetIds.has(property.id)
+        && (property.parcel?.countyFips !== parcel.countyFips || property.parcel.gislink !== parcel.gislink)
+      ));
+      if (!changed.length) return current;
+      const now = new Date().toISOString();
+      const next = {
+        ...current,
+        properties: current.properties.map((property) => targetIds.has(property.id)
+          ? { ...property, parcel, updatedAt: now }
+          : property),
+      };
+      return changed.reduce((result, property) => addAudit(
+        result,
+        "property",
+        property.id,
+        "property.parcel_linked",
+        `${property.address} linked to its official parcel`,
+      ), next);
+    });
   }, [updateData]);
 
   const updateProperty = useCallback((propertyId: string, patch: Pick<Property, "address" | "unit">) => {
@@ -569,7 +599,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       if (error) throw error;
       const workspace = created?.[0];
       if (!workspace) throw new Error("The church workspace was not created.");
-      const parsed = neighborWalkDataSchema.safeParse(workspace.data);
+      const parsed = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(workspace.data));
       if (!parsed.success) throw new Error("The church workspace returned invalid data.");
       const connection = { userId: supabaseUser.id, churchId: workspace.church_id, revision: Number(workspace.revision) };
       workspaceRef.current = connection;
@@ -612,7 +642,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         if (error) throw error;
 
         if (saved) {
-          const parsedServerData = neighborWalkDataSchema.safeParse(saved.data);
+          const parsedServerData = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(saved.data));
           if (!parsedServerData.success) throw new Error("Sync returned invalid data.");
           const nextConnection = { ...workspace, revision: Number(saved.revision) };
           workspaceRef.current = nextConnection;
@@ -633,7 +663,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
         if (attempt > 0) throw new Error("Another device is still saving changes.");
         const latestSnapshot = await fetchWorkspaceSnapshot(client, workspace.churchId);
-        const parsedLatest = neighborWalkDataSchema.safeParse(latestSnapshot.data);
+        const parsedLatest = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(latestSnapshot.data));
         if (!parsedLatest.success) throw new Error("The latest church workspace data is invalid.");
         workspace = { ...workspace, revision: Number(latestSnapshot.revision) };
         workspaceRef.current = workspace;
@@ -727,6 +757,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       setPreference,
       selectTerritory,
       addProperty,
+      associatePropertiesWithParcel,
       updateProperty,
       deleteProperty,
       recordVisit,

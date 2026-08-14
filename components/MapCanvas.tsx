@@ -7,6 +7,7 @@ import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { Coordinates, Outcome, Property, Territory } from "../lib/domain";
 import { outcomeMeta } from "../lib/domain";
 import { shouldNavigateToTerritory } from "../lib/map-camera";
+import { parcelKey, parcelProgress, propertyParcelKey } from "../lib/parcel-groups";
 import {
   cacheTerritoryParcels,
   getCachedTerritoryParcels,
@@ -27,6 +28,7 @@ const PARCEL_MIN_ZOOM = 14.5;
 const PARCEL_SOURCE_ID = "official-parcels";
 const PARCEL_FILL_LAYER_ID = "official-parcels-fill";
 const PARCEL_OUTLINE_LAYER_ID = "official-parcels-outline";
+const PARCEL_PROGRESS_LAYER_ID = "official-parcels-progress";
 const LOCATION_SOURCE_ID = "mapped-locations";
 const LOCATION_AREA_HIT_LAYER_ID = "mapped-location-area-hit";
 const LOCATION_FILL_LAYER_ID = "mapped-location-fill";
@@ -44,6 +46,7 @@ type AddIntent = {
   suggestedAddress: string;
   buildingGeometry?: Coordinates[];
   parcel?: ParcelDetails;
+  legacyPropertyIds?: string[];
 };
 
 type Props = {
@@ -60,6 +63,7 @@ type Props = {
   mapStyleUrl: string;
   onSelectProperty: (id: string) => void;
   onAddIntent: (intent: AddIntent) => void;
+  onAssociatePropertiesWithParcel: (propertyIds: string[], parcel: ParcelDetails) => void;
   onDraftBoundaryChange: (points: Coordinates[]) => void;
 };
 
@@ -103,6 +107,11 @@ function mappedLocationFeatureCollection(
 ): FeatureCollection {
   const features: Feature<Geometry>[] = [];
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const parcelDwellingCounts = new Map<string, number>();
+  for (const property of properties) {
+    const key = propertyParcelKey(property);
+    if (key) parcelDwellingCounts.set(key, (parcelDwellingCounts.get(key) ?? 0) + 1);
+  }
   for (const property of properties) {
     const matchesSearch = !normalizedQuery
       || `${property.address} ${property.unit ?? ""}`.toLowerCase().includes(normalizedQuery);
@@ -110,6 +119,8 @@ function mappedLocationFeatureCollection(
     const selected = selectedPropertyId === property.id;
     const visited = property.currentOutcome !== "unvisited";
     const statusColor = outcomeMeta[property.currentOutcome].color;
+    const propertyParcel = propertyParcelKey(property);
+    const parcelDwellingCount = propertyParcel ? parcelDwellingCounts.get(propertyParcel) ?? 1 : 1;
     const mapProperties = {
       propertyId: property.id,
       outcome: property.currentOutcome,
@@ -119,9 +130,10 @@ function mappedLocationFeatureCollection(
       selected,
       visited,
       compact,
+      parcelDwellingCount,
     };
     const footprint = polygonFeature(property.buildingGeometry ?? []);
-    if (footprint) features.push({ ...footprint, properties: mapProperties });
+    if (footprint && parcelDwellingCount === 1) features.push({ ...footprint, properties: mapProperties });
     features.push({
       type: "Feature",
       properties: mapProperties,
@@ -129,6 +141,55 @@ function mappedLocationFeatureCollection(
     });
   }
   return { type: "FeatureCollection", features };
+}
+
+function mappedParcelFeatureCollection(parcels: ParcelFeatureCollection, properties: Property[]): ParcelFeatureCollection {
+  const grouped = new Map<string, Property[]>();
+  const legacyProperties = properties.filter((property) => !property.parcel);
+  for (const property of properties) {
+    const key = propertyParcelKey(property);
+    if (!key) continue;
+    const group = grouped.get(key) ?? [];
+    group.push(property);
+    grouped.set(key, group);
+  }
+
+  return {
+    ...parcels,
+    features: parcels.features.map((feature) => {
+      const key = parcelKey(feature.properties);
+      const linked = grouped.get(key) ?? [];
+      const inferred = legacyProperties.filter((property) => geometryContainsPoint(feature.geometry, property.coordinates));
+      const progress = parcelProgress([...linked, ...inferred]);
+      return {
+        ...feature,
+        properties: {
+          ...feature.properties,
+          dwellingCount: progress.total,
+          visitedDwellingCount: progress.visited,
+          remainingDwellingCount: progress.remaining,
+          allDwellingsVisited: progress.total > 0 && progress.remaining === 0,
+        },
+      };
+    }),
+  };
+}
+
+function legacyParcelAssociations(parcels: ParcelFeatureCollection, properties: Property[]) {
+  const unlinked = new Map(properties
+    .filter((property) => !property.parcel)
+    .map((property) => [property.id, property]));
+  const associations: Array<{ parcel: ParcelDetails; propertyIds: string[] }> = [];
+  for (const feature of parcels.features) {
+    const propertyIds = [...unlinked.values()]
+      .filter((property) => geometryContainsPoint(feature.geometry, property.coordinates))
+      .map((property) => property.id);
+    if (!propertyIds.length) continue;
+    associations.push({ parcel: feature.properties, propertyIds });
+    for (const propertyId of propertyIds) unlinked.delete(propertyId);
+    if (!unlinked.size) break;
+  }
+  return associations;
 }
 
 function updateGeoJsonSource(map: MapLibreMap, sourceId: string, data: FeatureCollection) {
@@ -155,6 +216,18 @@ function ringContainsPoint(point: Coordinates, ring: number[][]) {
     if (intersects) inside = !inside;
   }
   return inside;
+}
+
+function geometryContainsPoint(geometry: Geometry, point: Coordinates) {
+  const polygons = geometry.type === "Polygon"
+    ? [geometry.coordinates]
+    : geometry.type === "MultiPolygon"
+      ? geometry.coordinates
+      : [];
+  return polygons.some((polygon) => (
+    ringContainsPoint(point, polygon[0])
+    && !polygon.slice(1).some((hole) => ringContainsPoint(point, hole))
+  ));
 }
 
 function buildingGeometryAtPoint(geometry: Geometry | undefined, point: Coordinates): Coordinates[] | undefined {
@@ -232,8 +305,8 @@ function configureNeighborWalkLayers(
       source: PARCEL_SOURCE_ID,
       minzoom: PARCEL_MIN_ZOOM,
       paint: {
-        "fill-color": ["case", ["==", ["get", "isResidential"], true], "#e3a33b", "#56776c"],
-        "fill-opacity": ["interpolate", ["linear"], ["zoom"], PARCEL_MIN_ZOOM, 0.035, 18, 0.1],
+        "fill-color": ["case", [">", ["get", "dwellingCount"], 0], "#789087", ["==", ["get", "isResidential"], true], "#e3a33b", "#56776c"],
+        "fill-opacity": ["interpolate", ["linear"], ["zoom"], PARCEL_MIN_ZOOM, 0.035, 18, ["case", [">", ["get", "dwellingCount"], 0], 0.12, 0.08]],
       },
     });
   }
@@ -244,9 +317,35 @@ function configureNeighborWalkLayers(
       source: PARCEL_SOURCE_ID,
       minzoom: PARCEL_MIN_ZOOM,
       paint: {
-        "line-color": ["case", ["==", ["get", "isResidential"], true], "#a56b12", "#385b50"],
+        "line-color": ["case",
+          ["==", ["get", "allDwellingsVisited"], true], "#286c59",
+          [">", ["get", "visitedDwellingCount"], 0], "#a9660d",
+          [">", ["get", "dwellingCount"], 0], "#315c50",
+          ["==", ["get", "isResidential"], true], "#a56b12",
+          "#385b50",
+        ],
         "line-opacity": ["interpolate", ["linear"], ["zoom"], PARCEL_MIN_ZOOM, 0.5, 18, 0.86],
-        "line-width": ["interpolate", ["linear"], ["zoom"], PARCEL_MIN_ZOOM, 0.55, 18, 1.25],
+        "line-width": ["interpolate", ["linear"], ["zoom"], PARCEL_MIN_ZOOM, 0.55, 18, ["case", [">", ["get", "dwellingCount"], 0], 1.8, 1.25]],
+      },
+    });
+  }
+  if (!map.getLayer(PARCEL_PROGRESS_LAYER_ID)) {
+    map.addLayer({
+      id: PARCEL_PROGRESS_LAYER_ID,
+      type: "symbol",
+      source: PARCEL_SOURCE_ID,
+      minzoom: 15.5,
+      filter: [">", ["get", "dwellingCount"], 1],
+      layout: {
+        "text-field": ["concat", ["to-string", ["get", "visitedDwellingCount"]], " / ", ["to-string", ["get", "dwellingCount"]]],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 15.5, 10, 18, 12],
+        "text-allow-overlap": false,
+        "text-padding": 3,
+      },
+      paint: {
+        "text-color": "#163b31",
+        "text-halo-color": "rgba(255,255,255,0.96)",
+        "text-halo-width": 2.5,
       },
     });
   }
@@ -418,16 +517,18 @@ export function MapCanvas({
   mapStyleUrl,
   onSelectProperty,
   onAddIntent,
+  onAssociatePropertiesWithParcel,
   onDraftBoundaryChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const callbacksRef = useRef({ onSelectProperty, onAddIntent, onDraftBoundaryChange });
+  const callbacksRef = useRef({ onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange });
   const modesRef = useRef({ addMode, drawMode, draftBoundary });
   const territoryRef = useRef(territory);
   const displayedTerritoryIdRef = useRef(territory.id);
   const currentMapStyleUrlRef = useRef(mapStyleUrl);
   const parcelDataRef = useRef<ParcelFeatureCollection>(EMPTY_PARCELS);
+  const propertiesRef = useRef(properties);
   const mappedLocationsRef = useRef<FeatureCollection>(mappedLocationFeatureCollection(
     properties,
     selectedPropertyId,
@@ -445,8 +546,8 @@ export function MapCanvas({
   const territoryLatitude = territory.center[1];
 
   useEffect(() => {
-    callbacksRef.current = { onSelectProperty, onAddIntent, onDraftBoundaryChange };
-  }, [onSelectProperty, onAddIntent, onDraftBoundaryChange]);
+    callbacksRef.current = { onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange };
+  }, [onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange]);
 
   useEffect(() => {
     modesRef.current = { addMode, drawMode, draftBoundary };
@@ -464,8 +565,13 @@ export function MapCanvas({
       setParcelCount(result.parcels.features.length);
       setParcelTotal(result.totalCount);
       setParcelStatus(result.truncated ? "limited" : status);
+      for (const association of legacyParcelAssociations(result.parcels, propertiesRef.current)) {
+        callbacksRef.current.onAssociatePropertiesWithParcel(association.propertyIds, association.parcel);
+      }
       const map = mapRef.current;
-      if (map?.getSource(PARCEL_SOURCE_ID)) updateGeoJsonSource(map, PARCEL_SOURCE_ID, result.parcels);
+      if (map?.getSource(PARCEL_SOURCE_ID)) {
+        updateGeoJsonSource(map, PARCEL_SOURCE_ID, mappedParcelFeatureCollection(result.parcels, propertiesRef.current));
+      }
     };
 
     void (async () => {
@@ -566,7 +672,7 @@ export function MapCanvas({
           map,
           territoryRef.current,
           modesRef.current.draftBoundary,
-          parcelDataRef.current,
+          mappedParcelFeatureCollection(parcelDataRef.current, propertiesRef.current),
           mappedLocationsRef.current,
         );
       });
@@ -612,10 +718,21 @@ export function MapCanvas({
           ? map.queryRenderedFeatures(event.point, { layers: locationLayers })[0]
           : undefined;
         const mappedPropertyId = mappedLocation?.properties?.propertyId;
-        if (mappedPropertyId) {
+        if (mappedPropertyId && !modesRef.current.addMode) {
           callbacksRef.current.onSelectProperty(String(mappedPropertyId));
           return;
         }
+
+        const buildingLayers = map.getStyle().layers
+          .filter(isBuildingFootprintLayer)
+          .map((layer) => layer.id);
+        const buildingFeatures = buildingLayers.length
+          ? map.queryRenderedFeatures(event.point, { layers: buildingLayers })
+          : [];
+        const buildingFeature = buildingFeatures.find((candidate) => (
+          candidate.geometry.type === "Polygon" || candidate.geometry.type === "MultiPolygon"
+        ));
+        const buildingGeometry = buildingGeometryAtPoint(buildingFeature?.geometry, coordinates);
 
         const parcelFeature = map.getLayer(PARCEL_FILL_LAYER_ID)
           ? map.queryRenderedFeatures(event.point, { layers: [PARCEL_FILL_LAYER_ID] })[0]
@@ -625,7 +742,10 @@ export function MapCanvas({
           callbacksRef.current.onAddIntent({
             coordinates,
             suggestedAddress: String(properties?.situsAddress || `${coordinates[1].toFixed(6)}, ${coordinates[0].toFixed(6)}`),
-            buildingGeometry: buildingGeometryAtPoint(parcelFeature.geometry, coordinates),
+            buildingGeometry,
+            legacyPropertyIds: propertiesRef.current
+              .filter((property) => !property.parcel && geometryContainsPoint(parcelFeature.geometry, property.coordinates))
+              .map((property) => property.id),
             parcel: {
               id: Number(properties?.id),
               countyFips: String(properties?.countyFips || ""),
@@ -639,21 +759,10 @@ export function MapCanvas({
           return;
         }
         if (!modesRef.current.addMode) return;
-
-        const buildingLayers = map.getStyle().layers
-          .filter(isBuildingFootprintLayer)
-          .map((layer) => layer.id);
-        const features = buildingLayers.length
-          ? map.queryRenderedFeatures(event.point, { layers: buildingLayers })
-          : [];
-        const feature = features.find((candidate) => (
-          candidate.geometry.type === "Polygon" || candidate.geometry.type === "MultiPolygon"
-        ));
-        const geometry = buildingGeometryAtPoint(feature?.geometry, coordinates);
         callbacksRef.current.onAddIntent({
           coordinates,
-          suggestedAddress: suggestedAddress(feature?.properties, coordinates),
-          buildingGeometry: geometry,
+          suggestedAddress: suggestedAddress(buildingFeature?.properties, coordinates),
+          buildingGeometry,
         });
       });
     }).catch(() => setMapStatus("error"));
@@ -707,6 +816,13 @@ export function MapCanvas({
   }, [draftBoundary, mapStatus]);
 
   useEffect(() => {
+    propertiesRef.current = properties;
+    const map = mapRef.current;
+    if (!map || mapStatus !== "ready") return;
+    updateGeoJsonSource(map, PARCEL_SOURCE_ID, mappedParcelFeatureCollection(parcelDataRef.current, properties));
+  }, [properties, mapStatus]);
+
+  useEffect(() => {
     const map = mapRef.current;
     const mappedLocations = mappedLocationFeatureCollection(
       properties,
@@ -738,11 +854,11 @@ export function MapCanvas({
               ? `${parcelCount.toLocaleString()} cached territory parcels · available offline`
               : parcelStatus === "limited"
                 ? `${parcelCount.toLocaleString()} of ${parcelTotal.toLocaleString()} parcels ready · split this large territory for full detail`
-                : `${parcelCount.toLocaleString()} territory parcels ready · status colors mark saved locations`}</span>
+                : `${parcelCount.toLocaleString()} territory parcels ready · dwelling dots show visit status`}</span>
         </div>
       )}
       {addMode && (
-        <div className="map-mode-banner"><MapPin size={15} /><span>Tap an official parcel—or anywhere on the map</span></div>
+        <div className="map-mode-banner"><MapPin size={15} /><span>Tap the next dwelling or entrance</span></div>
       )}
       {drawMode && (
         <div className="map-mode-banner draw"><MousePointerClick size={15} /><span>{drawModeLabel ?? "Tap at least 3 corners"} · {draftBoundary.length} added</span></div>
