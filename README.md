@@ -63,11 +63,11 @@ When `NEXT_PUBLIC_MAPTILER_KEY` is configured, new installs use MapTiler Streets
 NeighborWalk's Google button uses Supabase's hosted OAuth callback. Complete these provider settings once:
 
 1. In Google Auth Platform, create an OAuth client with application type **Web application**.
-2. Add the production app origin under **Authorized JavaScript origins**: `https://neighborwalk-pilot.jhaney.chatgpt.site`.
+2. Add the production app origin under **Authorized JavaScript origins**: `https://neighborwalk-pilot.vercel.app`.
 3. Add the Supabase callback under **Authorized redirect URIs**: `https://llhrbtlkcneldgrhkwpf.supabase.co/auth/v1/callback`.
 4. Configure the Google consent screen scopes `openid`, `userinfo.email`, and `userinfo.profile`.
 5. In Supabase, open **Authentication > Sign In / Providers > Google**, enable the provider, and paste the Google Client ID and Client Secret.
-6. In Supabase **Authentication > URL Configuration**, set the Site URL to `https://neighborwalk-pilot.jhaney.chatgpt.site` and add the exact redirect `https://neighborwalk-pilot.jhaney.chatgpt.site/` to Redirect URLs. Add the local development origin separately when testing Google sign-in locally.
+6. In Supabase **Authentication > URL Configuration**, set the Site URL to `https://neighborwalk-pilot.vercel.app` and add the exact redirect `https://neighborwalk-pilot.vercel.app/` to Redirect URLs. Add the local development origin separately when testing Google sign-in locally.
 
 Do not put the Google Client Secret in a `NEXT_PUBLIC_` environment variable or commit it to this repository. It belongs only in the Supabase provider configuration.
 
@@ -90,4 +90,12 @@ Exported backups are readable JSON and can contain sensitive ministry records. S
 
 ## Deployment status
 
-The current Sites deployment is private and installable as a PWA. Supabase Auth controls the signed-in church identity, while PostgreSQL grants and RLS protect workspace and parcel records. See [`docs/production-checklist.md`](docs/production-checklist.md) before a live canvassing rollout.
+The production PWA is publicly reachable at [neighborwalk-pilot.vercel.app](https://neighborwalk-pilot.vercel.app). The public app shell requires its own Google or passwordless Supabase sign-in; PostgreSQL grants and row-level security protect workspace and parcel records after authentication. The former Sites deployment remains available only as a temporary cutover fallback.
+
+Vercel project: `jhaney3s-projects/neighborwalk-pilot`. Production and Preview both contain the browser-safe MapTiler and Supabase variables listed above. Deployment Protection is disabled so volunteers do not encounter a separate Vercel login screen. To publish the linked workspace again:
+
+```bash
+npx vercel deploy --prod --yes --scope jhaney3s-projects
+```
+
+See [`docs/production-checklist.md`](docs/production-checklist.md) before a live canvassing rollout.

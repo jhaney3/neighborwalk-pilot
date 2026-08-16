@@ -30,7 +30,7 @@ The client and Supabase foundation are ready for an owner-operated connected pil
 
 ## Authentication and devices
 
-- Keep the hosted site private or add server-enforced membership checks to every protected request.
+- Keep the app shell public, but require Supabase authentication and server-enforced church membership on every protected data request.
 - Require device screen locks and current browsers; define what to do when a phone is lost or a volunteer leaves.
 - Verify sign-out and account-switch behavior does not expose cached resident data. Consider managed devices or encrypted native storage for higher-risk deployments.
 - Add real push delivery if reminders must arrive while the PWA is closed. The current notification is an on-device reminder shown when the app runs.
