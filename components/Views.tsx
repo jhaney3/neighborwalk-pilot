@@ -48,6 +48,8 @@ import {
   type Property,
   type Territory,
 } from "../lib/domain";
+import type { WorkspaceMembership } from "../lib/use-neighborwalk";
+import { MembersPanel } from "./MembersPanel";
 
 export function FollowUpsView({
   data,
@@ -207,8 +209,9 @@ function GuideEditor({ step, onClose, onSave }: { step: GuideStep; onClose: () =
   );
 }
 
-export function LeaderView({ data, activeTerritory, onSelectTerritory, onEditTerritory, onStartDrawing }: {
+export function LeaderView({ data, membership, activeTerritory, onSelectTerritory, onEditTerritory, onStartDrawing }: {
   data: NeighborWalkData;
+  membership?: WorkspaceMembership | null;
   activeTerritory: Territory;
   onSelectTerritory: (id: string) => void;
   onEditTerritory: (id: string) => void;
@@ -227,6 +230,8 @@ export function LeaderView({ data, activeTerritory, onSelectTerritory, onEditTer
         <Metric icon={<CalendarClock size={19} />} label="Open follow-ups" value={String(scheduledFollowUps)} detail="Permission-based return visits" tone="amber" />
         <Metric icon={<Users size={19} />} label="Active teams" value={String(data.teams.filter((team) => team.status === "active").length)} detail={`${data.volunteers.filter((volunteer) => volunteer.active).length} volunteers available`} tone="blue" />
       </div>
+
+      {membership?.role === "leader" && <MembersPanel membership={membership} />}
 
       <section className="leader-section">
         <div className="section-heading"><div><p className="eyebrow">Assignments</p><h2>Territories</h2></div><span>{data.territories.length} total</span></div>
@@ -287,6 +292,7 @@ export function SettingsView({
   saving,
   syncing,
   storageError,
+  canManage,
   accountEmail,
   onSignOut,
   onUpdateChurch,
@@ -302,6 +308,7 @@ export function SettingsView({
   saving: boolean;
   syncing: boolean;
   storageError: string | null;
+  canManage: boolean;
   accountEmail?: string;
   onSignOut?: () => Promise<void>;
   onUpdateChurch: (patch: Partial<NeighborWalkData["church"]>) => void;
@@ -386,21 +393,26 @@ export function SettingsView({
 
   return (
     <div className="content-view settings-view">
-      <ViewHeading eyebrow="Church and device" title="Settings" description="Set ministry guardrails, prepare offline use, and manage this device’s data." />
+      <ViewHeading eyebrow="Church and device" title="Settings" description={canManage ? "Set ministry guardrails, prepare offline use, and manage workspace data." : "Manage your account, map, reminders, and this device."} />
       {message && <div className="settings-message" role="status"><Check size={15} />{message}</div>}
       {storageError && <div className="settings-message error" role="alert"><AlertTriangle size={15} />{storageError}</div>}
       <div className="settings-grid">
-        <SettingsSection icon={<Church size={18} />} title="Church profile" description="Shown to volunteers in this workspace.">
+        {data.sync.mode === "connected" && <SettingsSection icon={<LockKeyhole size={18} />} title="Account and access" description="Your access level is assigned by a church leader.">
+          <div className="connection-card connected"><LockKeyhole size={18} /><span><strong>Signed-in church account</strong>{accountEmail || "Authenticated member"} · {canManage ? "Leader access" : "Volunteer access"}</span></div>
+          {onSignOut && <button className="button quiet" onClick={() => void onSignOut()}><LogOut size={15} /> Sign out</button>}
+        </SettingsSection>}
+
+        {(canManage || data.sync.mode === "device_only") && <SettingsSection icon={<Church size={18} />} title="Church profile" description="Shown to volunteers in this workspace.">
           <label className="form-field"><span>Church name</span><input maxLength={120} value={churchName} onChange={(event) => setChurchName(event.target.value)} /></label>
           <label className="form-field"><span>Timezone</span><input value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="America/Chicago" /></label>
           <button className="button quiet" onClick={saveChurchProfile}><Save size={15} /> Save church profile</button>
-          {data.sync.mode === "device_only" ? <>
+          {data.sync.mode === "device_only" && <>
             <label className="form-field"><span>Preview identity <small>Device-only demo</small></span><select value={data.preferences.activeVolunteerId} onChange={(event) => onSetPreference("activeVolunteerId", event.target.value)}>{data.volunteers.map((volunteer) => <option value={volunteer.id} key={volunteer.id}>{volunteer.name} · {volunteer.role}</option>)}</select></label>
             <div className="data-note"><LockKeyhole size={15} /><span>This selector previews volunteer and leader experiences. A connected deployment must derive roles from the authenticated backend session.</span></div>
-          </> : <><div className="connection-card connected"><LockKeyhole size={18} /><span><strong>Signed-in church account</strong>{accountEmail || "Authenticated member"} · Roles are protected by the workspace.</span></div>{onSignOut && <button className="button quiet" onClick={() => void onSignOut()}><LogOut size={15} /> Sign out</button>}</>}
-        </SettingsSection>
+          </>}
+        </SettingsSection>}
 
-        <SettingsSection icon={<ShieldCheck size={18} />} title="Privacy guardrails" description="Applied to every field record on this device.">
+        {(canManage || data.sync.mode === "device_only") && <SettingsSection icon={<ShieldCheck size={18} />} title="Privacy guardrails" description="Applied to every field record on this device.">
           <div className="form-row">
             <label className="form-field"><span>Retention period</span><select value={data.church.retentionDays} onChange={(event) => onUpdateChurch({ retentionDays: Number(event.target.value) })}><option value={90}>90 days</option><option value={180}>180 days</option><option value={365}>1 year</option><option value={730}>2 years</option></select></label>
             <label className="form-field"><span>Note limit</span><input type="number" min={80} max={2000} value={noteLimit} onChange={(event) => setNoteLimit(event.target.value)} /></label>
@@ -408,7 +420,7 @@ export function SettingsView({
           <label className="form-field"><span>Default follow-up timing <small>Days</small></span><input type="number" min={1} max={90} value={followUpDays} onChange={(event) => setFollowUpDays(event.target.value)} /></label>
           <label className="toggle-row"><input type="checkbox" checked={data.church.requireFollowUpConsent} onChange={(event) => onUpdateChurch({ requireFollowUpConsent: event.target.checked })} /><span><strong>Require explicit follow-up permission</strong>Volunteers cannot schedule a return without confirming consent.</span></label>
           <div className="button-row"><button className="button quiet" onClick={savePrivacyLimits}><Save size={15} /> Save limits</button><button className="button quiet" onClick={() => { onPurge(); setMessage("The retention policy was applied."); }}><Trash2 size={15} /> Apply retention now</button></div>
-        </SettingsSection>
+        </SettingsSection>}
 
         <SettingsSection icon={<MapPinned size={18} />} title="Map and field use" description="Map tiles need a connection; saved records do not.">
           <label className="form-field"><span>Map style URL</span><input inputMode="url" value={mapStyleUrl} onChange={(event) => setMapStyleUrl(event.target.value)} /></label>
@@ -432,11 +444,11 @@ export function SettingsView({
           </div>
           {data.sync.lastError && <div className="data-note sync-warning"><AlertTriangle size={15} /><span>{data.sync.lastError}</span></div>}
           {data.sync.mode === "connected" && <button className="button quiet" onClick={async () => setMessage(await onSync() ? "Changes synchronized." : "Changes remain safe on this device; automatic retry is still active.")} disabled={!online || saving || syncing}><RefreshCcw size={15} className={syncing ? "spin" : ""} /> {data.sync.pending.length || data.sync.lastError ? "Retry sync" : "Sync now"}</button>}
-          <div className="button-row"><button className="button quiet" onClick={onExport}><Download size={15} /> Export backup</button><button className="button quiet" onClick={() => fileRef.current?.click()}><Upload size={15} /> Import backup</button><input ref={fileRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const imported = await onImport(file); applyDataDrafts(imported); setMessage("Backup imported and validated."); } catch (error) { setMessage(error instanceof Error ? error.message : "The backup could not be imported."); } finally { event.target.value = ""; } }} /></div>
-          <div className="data-note"><FileJson size={15} /><span>Backups contain ministry records in readable JSON. Store them securely and delete old copies.</span></div>
+          {(canManage || data.sync.mode === "device_only") && <><div className="button-row"><button className="button quiet" onClick={onExport}><Download size={15} /> Export backup</button><button className="button quiet" onClick={() => fileRef.current?.click()}><Upload size={15} /> Import backup</button><input ref={fileRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const imported = await onImport(file); applyDataDrafts(imported); setMessage("Backup imported and validated."); } catch (error) { setMessage(error instanceof Error ? error.message : "The backup could not be imported."); } finally { event.target.value = ""; } }} /></div>
+          <div className="data-note"><FileJson size={15} /><span>Backups contain ministry records in readable JSON. Store them securely and delete old copies.</span></div></>}
         </SettingsSection>
       </div>
-      <section className="danger-zone"><div><strong>Reset this device</strong><span>Remove local changes and restore the fictional Grace Harbor sample data.</span></div><button className="button danger" onClick={async () => { if (window.confirm("Reset all NeighborWalk data on this device? Export a backup first if you need these records.")) { const reset = await onReset(); applyDataDrafts(reset); setMessage("Demo data restored."); } }}><RotateCcw size={15} /> Reset demo</button></section>
+      {(canManage || data.sync.mode === "device_only") && <section className="danger-zone"><div><strong>Reset this device</strong><span>Remove local changes and restore the fictional Grace Harbor sample data.</span></div><button className="button danger" onClick={async () => { if (window.confirm("Reset all NeighborWalk data on this device? Export a backup first if you need these records.")) { const reset = await onReset(); applyDataDrafts(reset); setMessage("Demo data restored."); } }}><RotateCcw size={15} /> Reset demo</button></section>}
     </div>
   );
 }

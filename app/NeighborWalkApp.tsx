@@ -71,7 +71,7 @@ const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
 ];
 
 export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: SupabaseUser | null; onSignOut?: () => Promise<void> } = {}) {
-  const { data, loading, storageError, online, saving, syncing, workspaceStatus, activeTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
+  const { data, loading, storageError, online, saving, syncing, workspaceStatus, workspaceMembership, activeTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
   const [viewOverride, setViewOverride] = useState<View | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | Outcome>("all");
@@ -129,8 +129,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   }), [query, territoryProperties, visibleOutcomes]);
 
   if (loading || workspaceStatus === "connecting") return <AppLoading />;
-  if (data && supabaseUser && (workspaceStatus === "needs_workspace" || workspaceStatus === "creating")) {
-    return <WorkspaceSetup data={data} user={supabaseUser} creating={workspaceStatus === "creating"} error={data.sync.lastError} onCreate={actions.createWorkspace} onSignOut={onSignOut} />;
+  if (data && supabaseUser && workspaceStatus === "invitation_required") {
+    return <InvitationRequired user={supabaseUser} error={data.sync.lastError} onSignOut={onSignOut} />;
   }
   if (!data || !activeTerritory || !activeVolunteer) return <AppFailure error={storageError || "The app could not load its field data."} />;
 
@@ -145,7 +145,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
           ? "Saving automatically"
           : "All changes saved";
 
-  const canManage = activeVolunteer.role === "leader";
+  const canManage = workspaceMembership ? workspaceMembership.role === "leader" : activeVolunteer.role === "leader";
   const requestedView = typeof window === "undefined"
     ? data.preferences.lastView
     : new URLSearchParams(window.location.search).get("view") ?? data.preferences.lastView;
@@ -347,8 +347,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
           )}
           {view === "followups" && <FollowUpsView data={data} onOpenProperty={(propertyId) => { navigate("map"); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onComplete={(id) => { actions.completeFollowUp(id); setToast("Follow-up completed"); }} onReschedule={(id, date) => { actions.rescheduleFollowUp(id, date); setToast("Follow-up rescheduled"); }} onCancel={(id) => { actions.cancelFollowUp(id); setToast("Follow-up cancelled"); }} />}
           {view === "guide" && <GuideView data={data} canManage={canManage} onUpdate={(id, patch) => { actions.updateGuideStep(id, patch); setToast("Guide step saved"); }} />}
-          {view === "leader" && canManage && <LeaderView data={data} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} />}
-          {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onReset={actions.resetDemo} onSync={actions.syncNow} />}
+          {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} />}
+          {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onReset={actions.resetDemo} onSync={actions.syncNow} />}
         </section>
       </div>
 
@@ -384,39 +384,18 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   );
 }
 
-function WorkspaceSetup({
-  data,
-  user,
-  creating,
-  error,
-  onCreate,
-  onSignOut,
-}: {
-  data: NeighborWalkData;
-  user: SupabaseUser;
-  creating: boolean;
-  error?: string;
-  onCreate: (churchName: string, includeDeviceData?: boolean) => Promise<boolean>;
-  onSignOut?: () => Promise<void>;
-}) {
-  const [churchName, setChurchName] = useState(data.church.name === "Grace Harbor Church" ? "" : data.church.name);
-  const [includeDeviceData, setIncludeDeviceData] = useState(false);
-  const deviceRecordCount = data.properties.length + data.visits.length + data.followUps.length;
-
+function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; error?: string; onSignOut?: () => Promise<void> }) {
   return (
     <main className="workspace-setup-shell">
       <section className="workspace-setup-card" aria-labelledby="workspace-title">
-        <div className="workspace-setup-mark"><Navigation size={22} /></div>
-        <p className="eyebrow">First connected workspace</p>
-        <h1 id="workspace-title">Name your church workspace</h1>
-        <p>This creates the private shared space where your church’s territories and field records will synchronize.</p>
+        <div className="workspace-setup-mark"><Users size={22} /></div>
+        <p className="eyebrow">Invitation required</p>
+        <h1 id="workspace-title">Ask your leader for an invitation link.</h1>
+        <p>NeighborWalk is private to your church team. Open the one-time link from a leader, then sign in with the exact email address they invited.</p>
         <div className="workspace-account"><CircleUserRound size={17} /><span><strong>Signed in</strong>{user.email}</span></div>
-        <label className="form-field"><span>Church name</span><input maxLength={120} value={churchName} onChange={(event) => setChurchName(event.target.value)} placeholder="Example: First Baptist Church" /></label>
-        {deviceRecordCount > 0 && <label className="toggle-row workspace-import-choice"><input type="checkbox" checked={includeDeviceData} onChange={(event) => setIncludeDeviceData(event.target.checked)} /><span><strong>Bring over this device’s current records</strong>Includes {data.properties.length} mapped location{data.properties.length === 1 ? "" : "s"}, {data.visits.length} visit{data.visits.length === 1 ? "" : "s"}, and any demo data currently shown.</span></label>}
-        {!includeDeviceData && <div className="data-note"><ShieldCheck size={16} /><span>A clean Lawrenceburg pilot will be created. The fictional demo records will stay only on this device until you choose to reset or import them.</span></div>}
+        <div className="data-note"><ShieldCheck size={16} /><span>Invitation links expire after 7 days, work once, and cannot be used by a different email.</span></div>
         {error && <p className="auth-error" role="alert">{error}</p>}
-        <button className="button primary workspace-create-button" disabled={creating || churchName.trim().length < 2} onClick={() => void onCreate(churchName, includeDeviceData)}>{creating ? "Creating workspace…" : "Create church workspace"}</button>
-        {onSignOut && <button className="button quiet" disabled={creating} onClick={() => void onSignOut()}>Use a different email</button>}
+        {onSignOut && <button className="button quiet" onClick={() => void onSignOut()}>Use a different account</button>}
       </section>
     </main>
   );

@@ -34,9 +34,27 @@ export type NeighborWalkDatabase = {
         Relationships: [];
       };
       church_memberships: {
-        Row: { church_id: string; user_id: string; role: "leader" | "volunteer"; active: boolean; joined_at: string };
-        Insert: { church_id: string; user_id: string; role: "leader" | "volunteer"; active?: boolean; joined_at?: string };
-        Update: { role?: "leader" | "volunteer"; active?: boolean };
+        Row: { church_id: string; user_id: string; role: "leader" | "volunteer"; active: boolean; joined_at: string; member_email: string | null; display_name: string | null };
+        Insert: { church_id: string; user_id: string; role: "leader" | "volunteer"; active?: boolean; joined_at?: string; member_email?: string | null; display_name?: string | null };
+        Update: { role?: "leader" | "volunteer"; active?: boolean; member_email?: string | null; display_name?: string | null };
+        Relationships: [];
+      };
+      church_invitations: {
+        Row: {
+          id: string;
+          church_id: string;
+          invited_email: string;
+          role: "leader" | "volunteer";
+          token_hash: string;
+          created_by: string;
+          created_at: string;
+          expires_at: string;
+          accepted_by: string | null;
+          accepted_at: string | null;
+          revoked_at: string | null;
+        };
+        Insert: never;
+        Update: never;
         Relationships: [];
       };
       workspace_snapshots: {
@@ -68,6 +86,22 @@ export type NeighborWalkDatabase = {
       create_church_workspace: {
         Args: { workspace_name: string; initial_data: Json; initial_schema_version: number };
         Returns: { church_id: string; role: "leader"; revision: number; data: Json }[];
+      };
+      create_church_invitation: {
+        Args: { invited_email: string; invitation_role?: "leader" | "volunteer"; valid_for_hours?: number };
+        Returns: { invitation_id: string; invitation_token: string; email: string; role: "leader" | "volunteer"; expires_at: string }[];
+      };
+      accept_church_invitation: {
+        Args: { invitation_token: string };
+        Returns: { church_id: string; user_id: string; role: "leader" | "volunteer"; member_email: string; display_name: string }[];
+      };
+      revoke_church_invitation: {
+        Args: { invitation_id: string };
+        Returns: boolean;
+      };
+      update_church_member: {
+        Args: { target_user_id: string; member_role: "leader" | "volunteer"; member_active: boolean };
+        Returns: { user_id: string; role: "leader" | "volunteer"; active: boolean }[];
       };
       parcels_in_view: {
         Args: {

@@ -40,13 +40,28 @@ export function NeighborWalkRoot() {
 
   return (
     <NeighborWalkApp
-      supabaseUser={{ id: session.user.id, email: session.user.email ?? "" }}
+      supabaseUser={{
+        id: session.user.id,
+        email: session.user.email ?? "",
+        name: typeof session.user.user_metadata?.full_name === "string"
+          ? session.user.user_metadata.full_name
+          : typeof session.user.user_metadata?.name === "string"
+            ? session.user.user_metadata.name
+            : undefined,
+      }}
       onSignOut={async () => {
         const client = getSupabaseBrowserClient();
         if (client) await client.auth.signOut();
       }}
     />
   );
+}
+
+function authRedirectUrl() {
+  const url = new URL(window.location.origin);
+  const invitation = new URL(window.location.href).searchParams.get("invite");
+  if (invitation) url.searchParams.set("invite", invitation);
+  return url.toString();
 }
 
 function EmailSignIn() {
@@ -79,7 +94,7 @@ function EmailSignIn() {
     const { error: signInError } = await client.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: authRedirectUrl(),
       },
     });
     if (signInError) {
@@ -105,7 +120,7 @@ function EmailSignIn() {
       email: normalizedEmail,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: authRedirectUrl(),
       },
     });
     setSending(false);
