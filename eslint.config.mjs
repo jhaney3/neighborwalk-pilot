@@ -13,6 +13,7 @@ const eslintConfig = defineConfig([
     "dist/**",
     "out/**",
     "build/**",
+    "public/maplibre-gl-worker.mjs",
     "next-env.d.ts",
   ]),
   eslint.configs.recommended,
