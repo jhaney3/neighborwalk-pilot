@@ -18,6 +18,7 @@
 /.vinext/
 /out/
 /public/maplibre-gl-worker.mjs
+/public/maplibre-gl-shared.mjs
 
 # misc
 .DS_Store
