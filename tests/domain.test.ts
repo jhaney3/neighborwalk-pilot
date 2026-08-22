@@ -3,6 +3,8 @@ import {
   APP_SCHEMA_VERSION,
   centerForBoundary,
   coverageForTerritory,
+  deleteTeamRecord,
+  deleteTerritoryRecord,
   enforceRetention,
   isFollowUpOverdue,
   isSafeWebUrl,
@@ -133,6 +135,63 @@ describe("NeighborWalk domain", () => {
     expect(updated.properties).toEqual(data.properties);
     expect(updated.visits).toEqual(data.visits);
     expect(neighborWalkDataSchema.safeParse(updated).success).toBe(true);
+  });
+
+  it("deletes a territory by moving its records to another territory", () => {
+    const data = createSeedData();
+    const territory = data.territories[0];
+    const destination = data.territories.find((item) => item.id !== territory.id && item.eventId === territory.eventId)!;
+    const property = data.properties.find((item) => item.territoryId === territory.id)!;
+    const timestamp = "2026-08-12T16:00:00.000Z";
+    const resident = {
+      id: "resident_preserved",
+      churchId: data.church.id,
+      propertyId: property.id,
+      name: "Shared voluntarily",
+      faithStatus: "exploring" as const,
+      preferredContact: "none" as const,
+      consentToStore: true as const,
+      consentToContact: false,
+      consentRecordedAt: timestamp,
+      notes: "Requested information about service times.",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    const current = { ...data, residents: [resident] };
+    const propertyIds = current.properties.map((item) => item.id);
+    const visitIds = current.visits.map((item) => item.id);
+    const followUpIds = current.followUps.map((item) => item.id);
+
+    const deleted = deleteTerritoryRecord(current, territory.id, destination.id);
+
+    expect(deleted.territories.some((item) => item.id === territory.id)).toBe(false);
+    expect(deleted.properties.map((item) => item.id)).toEqual(propertyIds);
+    expect(deleted.visits.map((item) => item.id)).toEqual(visitIds);
+    expect(deleted.followUps.map((item) => item.id)).toEqual(followUpIds);
+    expect(deleted.residents).toEqual([resident]);
+    expect(deleted.properties.filter((item) => item.territoryId === destination.id).length)
+      .toBeGreaterThan(data.properties.filter((item) => item.territoryId === destination.id).length);
+    expect(deleted.visits.some((visit) => visit.territoryId === territory.id)).toBe(false);
+    expect(deleted.teams.every((team) => !team.territoryIds.includes(territory.id))).toBe(true);
+    expect(deleted.preferences.activeTerritoryId).toBe(destination.id);
+    expect(neighborWalkDataSchema.safeParse(deleted).success).toBe(true);
+  });
+
+  it("deletes a team and leaves its territory and follow-up assignments unassigned", () => {
+    const data = createSeedData();
+    const team = data.teams.find((item) => data.territories.some((territory) => territory.assignedTeamId === item.id))!;
+    const assignedTerritoryIds = data.territories.filter((territory) => territory.assignedTeamId === team.id).map((territory) => territory.id);
+    const assignedFollowUpIds = data.followUps.filter((followUp) => followUp.assignedTeamId === team.id).map((followUp) => followUp.id);
+
+    const deleted = deleteTeamRecord(data, team.id);
+
+    expect(deleted.teams.some((item) => item.id === team.id)).toBe(false);
+    expect(deleted.territories.filter((territory) => assignedTerritoryIds.includes(territory.id)).every((territory) => territory.assignedTeamId === undefined)).toBe(true);
+    expect(deleted.followUps.filter((followUp) => assignedFollowUpIds.includes(followUp.id)).every((followUp) => followUp.assignedTeamId === undefined)).toBe(true);
+    expect(deleted.properties).toEqual(data.properties);
+    expect(deleted.visits).toEqual(data.visits);
+    expect(deleted.residents).toEqual(data.residents);
+    expect(neighborWalkDataSchema.safeParse(deleted).success).toBe(true);
   });
 
   it("sorts property history newest first", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, LoaderCircle, MapPin, MapPinned, MousePointerClick } from "lucide-react";
+import { AlertTriangle, LoaderCircle, MapPin, MousePointerClick } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon } from "geojson";
 import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
@@ -539,9 +539,6 @@ export function MapCanvas({
   ));
   const parcelRequestRef = useRef(0);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [parcelStatus, setParcelStatus] = useState<"loading" | "ready" | "cached" | "limited" | "unavailable">("loading");
-  const [parcelCount, setParcelCount] = useState(0);
-  const [parcelTotal, setParcelTotal] = useState(0);
   const boundarySignature = territoryBoundarySignature(territory.boundary);
   const territoryLongitude = territory.center[0];
   const territoryLatitude = territory.center[1];
@@ -558,14 +555,10 @@ export function MapCanvas({
   useEffect(() => {
     const requestId = ++parcelRequestRef.current;
     let cancelled = false;
-    let hasCachedParcels = false;
 
-    const display = (result: TerritoryParcelResult, status: "ready" | "cached" | "limited") => {
+    const display = (result: TerritoryParcelResult) => {
       if (cancelled || requestId !== parcelRequestRef.current) return;
       parcelDataRef.current = result.parcels;
-      setParcelCount(result.parcels.features.length);
-      setParcelTotal(result.totalCount);
-      setParcelStatus(result.truncated ? "limited" : status);
       for (const association of legacyParcelAssociations(result.parcels, propertiesRef.current)) {
         callbacksRef.current.onAssociatePropertiesWithParcel(association.propertyIds, association.parcel);
       }
@@ -579,9 +572,6 @@ export function MapCanvas({
       await Promise.resolve();
       if (cancelled || requestId !== parcelRequestRef.current) return;
       parcelDataRef.current = EMPTY_PARCELS;
-      setParcelCount(0);
-      setParcelTotal(0);
-      setParcelStatus("loading");
       if (mapRef.current?.getSource(PARCEL_SOURCE_ID)) {
         updateGeoJsonSource(mapRef.current, PARCEL_SOURCE_ID, EMPTY_PARCELS);
       }
@@ -595,35 +585,29 @@ export function MapCanvas({
       if (cancelled || requestId !== parcelRequestRef.current) return;
 
       if (cached) {
-        hasCachedParcels = true;
         const cacheIsFresh = isTerritoryParcelCacheFresh(cached.cachedAt);
-        display(cached, cacheIsFresh ? "ready" : "cached");
+        display(cached);
         if (cacheIsFresh) return;
         try {
           const revision = await fetchParcelDatasetRevision();
           if (revision && revision === cached.datasetRevision) {
             await cacheTerritoryParcels(territory.id, boundarySignature, cached).catch(() => undefined);
-            display(cached, "ready");
+            display(cached);
             return;
           }
         } catch {
-          display(cached, "cached");
+          display(cached);
           return;
         }
       }
 
       try {
         const result = await fetchParcelsForTerritory(territory.boundary);
-        if (!result) {
-          if (!hasCachedParcels && !cancelled) setParcelStatus("unavailable");
-          return;
-        }
-        display(result, "ready");
+        if (!result) return;
+        display(result);
         await cacheTerritoryParcels(territory.id, boundarySignature, result).catch(() => undefined);
       } catch {
-        if (!hasCachedParcels && !cancelled && requestId === parcelRequestRef.current) {
-          setParcelStatus("unavailable");
-        }
+        // The parcel overlay is optional; mapped locations and visit records remain available.
       }
     })();
 
@@ -842,18 +826,6 @@ export function MapCanvas({
       )}
       {mapStatus === "error" && (
         <div className="map-state error"><AlertTriangle size={23} /><strong>The map tiles did not load</strong><span>Visit records still work. Check the map style URL or your connection.</span></div>
-      )}
-      {mapStatus === "ready" && parcelStatus !== "unavailable" && (
-        <div className={`parcel-status ${parcelStatus}`}>
-          {parcelStatus === "loading" ? <LoaderCircle className="spin" size={14} /> : <MapPinned size={14} />}
-          <span>{parcelStatus === "loading"
-            ? "Preparing official parcels for this territory"
-            : parcelStatus === "cached"
-              ? `${parcelCount.toLocaleString()} cached territory parcels · available offline`
-              : parcelStatus === "limited"
-                ? `${parcelCount.toLocaleString()} of ${parcelTotal.toLocaleString()} parcels ready · split this large territory for full detail`
-                : `${parcelCount.toLocaleString()} territory parcels ready · dwelling dots show visit status`}</span>
-        </div>
       )}
       {addMode && (
         <div className="map-mode-banner"><MapPin size={15} /><span>Tap the next dwelling or entrance</span></div>

@@ -161,6 +161,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const editingTerritory = editingTerritoryId ? data.territories.find((territory) => territory.id === editingTerritoryId) : undefined;
   const territoryEditorEventId = editingTerritory?.eventId ?? data.preferences.activeEventId;
   const territoryEditorTeams = data.teams.filter((team) => team.eventId === territoryEditorEventId);
+  const territoryEditorTerritories = data.territories.filter((territory) => territory.eventId === territoryEditorEventId);
 
   const navigate = (next: View) => {
     setViewOverride(next);
@@ -348,9 +349,10 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
       {pendingAdd && <AddPropertyModal intent={pendingAdd} existingDwellingCount={pendingParcelDwellings.length} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
       {selectedParcel && <ParcelSummaryModal selection={selectedParcel} dwellings={selectedParcelDwellings} onClose={() => setSelectedParcel(null)} onOpenDwelling={(propertyId) => { setSelectedParcel(null); setSelectedPropertyId(propertyId); }} onAddDwelling={beginAddingDwelling} />}
       {territoryPickerOpen && <TerritoryPickerModal data={data} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onEdit={openTerritoryEditor} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
-      {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} teams={territoryEditorTeams} boundaryChanged={draftBoundary.length >= 3} canDelete={data.territories.length > 1} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onDelete={editingTerritory ? () => {
-        actions.deleteTerritory(editingTerritory.id);
-        setSelectedPropertyId(null); setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false); setToast("Territory deleted");
+      {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} territories={territoryEditorTerritories} teams={territoryEditorTeams} boundaryChanged={draftBoundary.length >= 3} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onDelete={editingTerritory ? (destinationTerritoryId) => {
+        const destination = data.territories.find((territory) => territory.id === destinationTerritoryId);
+        actions.deleteTerritory(editingTerritory.id, destinationTerritoryId);
+        setSelectedPropertyId(null); setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false); setToast(destination ? `Territory deleted; records moved to ${destination.name}` : "Territory deleted");
       } : undefined} onSave={(name, color, assignedTeamId) => {
         if (editingTerritory) {
           const replacementBoundary = draftBoundary.length >= 3 ? draftBoundary : undefined;
@@ -444,14 +446,14 @@ function ParcelSummaryModal({ selection, dwellings, onClose, onOpenDwelling, onA
   );
 }
 
-function TerritoryModal({ territory, teams, boundaryChanged, canDelete, onClose, onRedraw, onDelete, onSave }: {
+function TerritoryModal({ territory, territories, teams, boundaryChanged, onClose, onRedraw, onDelete, onSave }: {
   territory?: Territory;
+  territories: NeighborWalkData["territories"];
   teams: NeighborWalkData["teams"];
   boundaryChanged: boolean;
-  canDelete: boolean;
   onClose: () => void;
   onRedraw?: () => void;
-  onDelete?: () => void;
+  onDelete?: (destinationTerritoryId: string) => void;
   onSave: (name: string, color: string, assignedTeamId: string) => void;
 }) {
   const [name, setName] = useState(territory?.name ?? "");
@@ -460,6 +462,9 @@ function TerritoryModal({ territory, teams, boundaryChanged, canDelete, onClose,
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const editing = Boolean(territory);
+  const deleteTargets = territories.filter((item) => item.id !== territory?.id);
+  const [deleteDestinationId, setDeleteDestinationId] = useState(deleteTargets[0]?.id ?? "");
+  const canDelete = deleteTargets.length > 0;
   const boundaryPoints = boundaryChanged ? "Replacement boundary ready" : `${territory?.boundary.length ?? 0} boundary points`;
 
   return (
@@ -479,10 +484,10 @@ function TerritoryModal({ territory, teams, boundaryChanged, canDelete, onClose,
           <div><strong>{boundaryPoints}</strong><small>Existing locations and visit history stay attached to this territory.</small></div>
           {editing && onRedraw && <button className="button quiet small" onClick={onRedraw}><Edit3 size={14} /> Redraw</button>}
         </div>
-        {editing && deleting && <div className="territory-delete-confirm"><strong>Delete this territory and its records?</strong><p>Mapped locations, visits, follow-ups, and person records inside this territory will be deleted. Type the territory name to confirm.</p><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} aria-label="Territory name confirmation" /></div>}
+        {editing && deleting && <div className="territory-delete-confirm"><strong>Delete this territory?</strong><p>Nothing recorded here will be deleted. Locations and visit history will move to the territory you choose; follow-ups and people stay with their locations.</p><label className="form-field"><span>Move records to</span><select value={deleteDestinationId} onChange={(event) => setDeleteDestinationId(event.target.value)}>{deleteTargets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="form-field"><span>Type <strong>{territory?.name}</strong> to confirm</span><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} aria-label="Territory name confirmation" /></label></div>}
       </div>
-      <div className="modal-actions split">{editing && onDelete ? <button className="button danger" disabled={!canDelete || (deleting && deleteConfirmation !== territory?.name)} onClick={() => deleting ? onDelete() : setDeleting(true)}>{deleting ? "Confirm deletion" : "Delete territory"}</button> : <span />}<div><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => onSave(name, color, assignedTeamId)} disabled={name.trim().length < 3}><Check size={15} /> {editing ? "Save changes" : "Create territory"}</button></div></div>
-      {editing && !canDelete && <p className="modal-footnote">Create another territory before deleting the last one.</p>}
+      <div className="modal-actions split">{editing && onDelete ? <button className="button danger" disabled={!canDelete || (deleting && (deleteConfirmation !== territory?.name || !deleteDestinationId))} onClick={() => deleting ? onDelete(deleteDestinationId) : setDeleting(true)}>{deleting ? "Delete and move records" : "Delete territory"}</button> : <span />}<div><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => onSave(name, color, assignedTeamId)} disabled={name.trim().length < 3}><Check size={15} /> {editing ? "Save changes" : "Create territory"}</button></div></div>
+      {editing && !canDelete && <p className="modal-footnote">Create another territory in this event before deleting its last one.</p>}
     </Modal>
   );
 }

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createId,
+  deleteTeamRecord,
+  deleteTerritoryRecord,
   dueDateFromNow,
   enforceRetention,
   neighborWalkDataSchema,
@@ -754,27 +756,16 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     });
   }, [supabaseUser, updateData]);
 
-  const deleteTerritory = useCallback((territoryId: string) => {
+  const deleteTerritory = useCallback((territoryId: string, destinationTerritoryId: string) => {
     if (supabaseUser && roleRef.current !== "leader") return;
     updateData((current) => {
       const territory = current.territories.find((item) => item.id === territoryId);
-      if (!territory || current.territories.length <= 1) return current;
-      const propertyIds = new Set(current.properties.filter((property) => property.territoryId === territoryId).map((property) => property.id));
-      const fallback = current.territories.find((item) => item.id !== territoryId)!;
-      const cleared = {
-        ...current,
-        territories: current.territories.filter((item) => item.id !== territoryId),
-        teams: current.teams.map((team) => ({ ...team, territoryIds: team.territoryIds.filter((id) => id !== territoryId) })),
-        properties: current.properties.filter((property) => !propertyIds.has(property.id)),
-        visits: current.visits.filter((visit) => !propertyIds.has(visit.propertyId)),
-        followUps: current.followUps.filter((followUp) => !propertyIds.has(followUp.propertyId)),
-        residents: current.residents.filter((resident) => !propertyIds.has(resident.propertyId)),
-        preferences: {
-          ...current.preferences,
-          activeTerritoryId: current.preferences.activeTerritoryId === territoryId ? fallback.id : current.preferences.activeTerritoryId,
-        },
-      };
-      const audited = addAudit(cleared, "territory", territoryId, "territory.deleted", `${territory.name} and its outreach records deleted`, "delete");
+      const destination = current.territories.find((item) => item.id === destinationTerritoryId);
+      if (!territory || !destination || territory.eventId !== destination.eventId) return current;
+      const movedLocationCount = current.properties.filter((property) => property.territoryId === territoryId).length;
+      const reassigned = deleteTerritoryRecord(current, territoryId, destinationTerritoryId);
+      if (reassigned === current) return current;
+      const audited = addAudit(reassigned, "territory", territoryId, "territory.deleted", `${territory.name} deleted; ${movedLocationCount} locations moved to ${destination.name}`, "delete");
       return {
         ...audited,
         sync: { ...audited.sync, pending: [...audited.sync.pending, mutation("data", current.church.id)].slice(-2000) },
@@ -815,16 +806,14 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     updateData((current) => {
       const team = current.teams.find((item) => item.id === teamId);
       if (!team) return current;
-      return addAudit({
-        ...current,
-        teams: current.teams.filter((item) => item.id !== teamId),
-        territories: current.territories.map((territory) => territory.assignedTeamId === teamId
-          ? { ...territory, assignedTeamId: undefined }
-          : territory),
-        followUps: current.followUps.map((followUp) => followUp.assignedTeamId === teamId
-          ? { ...followUp, assignedTeamId: undefined }
-          : followUp),
-      }, "team", teamId, "team.deleted", `${team.name} deleted`, "delete");
+      return addAudit(
+        deleteTeamRecord(current, teamId),
+        "team",
+        teamId,
+        "team.deleted",
+        `${team.name} deleted; territory and follow-up assignments cleared`,
+        "delete",
+      );
     });
   }, [supabaseUser, updateData]);
 

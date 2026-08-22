@@ -590,6 +590,57 @@ export function updateTerritoryRecord(
   };
 }
 
+export function deleteTerritoryRecord(
+  data: NeighborWalkData,
+  territoryId: string,
+  destinationTerritoryId: string,
+): NeighborWalkData {
+  const territory = data.territories.find((item) => item.id === territoryId);
+  const destination = data.territories.find((item) => item.id === destinationTerritoryId);
+  if (
+    !territory
+    || !destination
+    || territory.id === destination.id
+    || territory.eventId !== destination.eventId
+    || data.territories.length <= 1
+  ) return data;
+
+  return {
+    ...data,
+    territories: data.territories.filter((item) => item.id !== territoryId),
+    teams: data.teams.map((team) => ({
+      ...team,
+      territoryIds: team.territoryIds.filter((id) => id !== territoryId),
+    })),
+    properties: data.properties.map((property) => property.territoryId === territoryId
+      ? { ...property, territoryId: destination.id }
+      : property),
+    visits: data.visits.map((visit) => visit.territoryId === territoryId
+      ? { ...visit, territoryId: destination.id }
+      : visit),
+    preferences: {
+      ...data.preferences,
+      activeTerritoryId: data.preferences.activeTerritoryId === territoryId
+        ? destination.id
+        : data.preferences.activeTerritoryId,
+    },
+  };
+}
+
+export function deleteTeamRecord(data: NeighborWalkData, teamId: string): NeighborWalkData {
+  if (!data.teams.some((team) => team.id === teamId)) return data;
+  return {
+    ...data,
+    teams: data.teams.filter((team) => team.id !== teamId),
+    territories: data.territories.map((territory) => territory.assignedTeamId === teamId
+      ? { ...territory, assignedTeamId: undefined }
+      : territory),
+    followUps: data.followUps.map((followUp) => followUp.assignedTeamId === teamId
+      ? { ...followUp, assignedTeamId: undefined }
+      : followUp),
+  };
+}
+
 export function enforceRetention(data: NeighborWalkData, now = new Date()): NeighborWalkData {
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - data.church.retentionDays);

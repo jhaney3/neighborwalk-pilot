@@ -18,6 +18,7 @@ import {
   History,
   LockKeyhole,
   LogOut,
+  Mail,
   Map as MapIcon,
   MapPinned,
   MessageCircle,
@@ -27,6 +28,7 @@ import {
   Save,
   ShieldCheck,
   Smartphone,
+  Phone,
   Trash2,
   Upload,
   Users,
@@ -36,6 +38,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   coverageForTerritory,
   dateInputValue,
+  faithStatusLabels,
   formatDateTime,
   isFollowUpOverdue,
   isSafeWebUrl,
@@ -46,6 +49,7 @@ import {
   type NeighborWalkData,
   type Outcome,
   type Property,
+  type Resident,
   type Territory,
   type TeamUpdate,
 } from "../lib/domain";
@@ -69,6 +73,16 @@ export function FollowUpsView({
   const [query, setQuery] = useState("");
   const propertyMap = useMemo(() => new Map(data.properties.map((property) => [property.id, property])), [data.properties]);
   const teamMap = useMemo(() => new Map(data.teams.map((team) => [team.id, team.name])), [data.teams]);
+  const residentMap = useMemo(() => {
+    const residents = new Map<string, Resident[]>();
+    for (const resident of data.residents) {
+      residents.set(resident.propertyId, [...(residents.get(resident.propertyId) ?? []), resident]);
+    }
+    for (const propertyResidents of residents.values()) {
+      propertyResidents.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    }
+    return residents;
+  }, [data.residents]);
   const today = new Date().toISOString().slice(0, 10);
   const tasks = data.followUps
     .filter((followUp) => {
@@ -83,7 +97,16 @@ export function FollowUpsView({
     })
     .filter((followUp) => {
       const property = propertyMap.get(followUp.propertyId);
-      return !query || property?.address.toLowerCase().includes(query.toLowerCase()) || followUp.note?.toLowerCase().includes(query.toLowerCase());
+      const normalizedQuery = query.trim().toLowerCase();
+      if (!normalizedQuery) return true;
+      const residentText = (residentMap.get(followUp.propertyId) ?? []).flatMap((resident) => [
+        resident.name,
+        resident.phone,
+        resident.email,
+        resident.notes,
+        faithStatusLabels[resident.faithStatus],
+      ]).filter(Boolean).join(" ");
+      return `${property?.address ?? ""} ${followUp.note ?? ""} ${residentText}`.toLowerCase().includes(normalizedQuery);
     })
     .sort((a, b) => filter === "completed" || filter === "cancelled"
       ? b.createdAt.localeCompare(a.createdAt)
@@ -96,7 +119,7 @@ export function FollowUpsView({
         <div className="segmented-control" aria-label="Follow-up date filter">
           {(["open", "overdue", "today", "upcoming", "completed", "cancelled"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
         </div>
-        <input className="search-field" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search address or note" aria-label="Search follow-ups" />
+        <input className="search-field" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search address, person, or note" aria-label="Search follow-ups" />
       </div>
 
       {tasks.length ? (
@@ -104,7 +127,7 @@ export function FollowUpsView({
           {tasks.map((followUp) => {
             const property = propertyMap.get(followUp.propertyId);
             if (!property) return null;
-            return <FollowUpCard key={followUp.id} followUp={followUp} property={property} teams={data.teams} teamName={followUp.assignedTeamId ? teamMap.get(followUp.assignedTeamId) : undefined} noteLimit={data.church.noteCharacterLimit} onOpen={() => onOpenProperty(property.id)} onComplete={(input) => onComplete(followUp.id, input)} onReschedule={(date, note) => onReschedule(followUp.id, date, note)} onCancel={(note) => onCancel(followUp.id, note)} />;
+            return <FollowUpCard key={followUp.id} followUp={followUp} property={property} residents={residentMap.get(property.id) ?? []} teams={data.teams} teamName={followUp.assignedTeamId ? teamMap.get(followUp.assignedTeamId) : undefined} noteLimit={data.church.noteCharacterLimit} onOpen={() => onOpenProperty(property.id)} onComplete={(input) => onComplete(followUp.id, input)} onReschedule={(date, note) => onReschedule(followUp.id, date, note)} onCancel={(note) => onCancel(followUp.id, note)} />;
           })}
         </div>
       ) : (
@@ -114,9 +137,10 @@ export function FollowUpsView({
   );
 }
 
-function FollowUpCard({ followUp, property, teams, teamName, noteLimit, onOpen, onComplete, onReschedule, onCancel }: {
+function FollowUpCard({ followUp, property, residents, teams, teamName, noteLimit, onOpen, onComplete, onReschedule, onCancel }: {
   followUp: FollowUp;
   property: Property;
+  residents: Resident[];
   teams: NeighborWalkData["teams"];
   teamName?: string;
   noteLimit: number;
@@ -144,6 +168,7 @@ function FollowUpCard({ followUp, property, teams, teamName, noteLimit, onOpen, 
         <div><Users size={13} /> {teamName || "Unassigned"}<span>·</span><ShieldCheck size={13} /> Permission recorded</div>
         {followUp.completionNote && <p className="completion-note"><Check size={13} /> {followUp.completionNote}</p>}
         {followUp.history.length > 1 && <details className="followup-history"><summary>{followUp.history.length} updates</summary>{followUp.history.slice().reverse().map((activity) => <div key={activity.id}><strong>{activity.action.replaceAll("_", " ")}</strong><span>{activity.note || (activity.dueAt ? formatDateTime(activity.dueAt, { month: "short", day: "numeric" }) : "No note")}</span><small>{formatDateTime(activity.createdAt)}</small></div>)}</details>}
+        <FollowUpPeople residents={residents} />
       </div>
       {followUp.status !== "scheduled" ? (
         <div className="followup-actions"><button className="button quiet small" onClick={onOpen}><MapIcon size={14} /> Map</button></div>
@@ -168,6 +193,32 @@ function FollowUpCard({ followUp, property, teams, teamName, noteLimit, onOpen, 
       {completing && <CompleteFollowUpModal followUp={followUp} teams={teams} noteLimit={noteLimit} onClose={() => setCompleting(false)} onSave={(input) => { onComplete(input); setCompleting(false); }} />}
     </article>
   );
+}
+
+function FollowUpPeople({ residents }: { residents: Resident[] }) {
+  return <section className="followup-people" aria-label="People recorded at this location">
+    <div className="followup-people-heading"><span><Users size={14} /> People</span><strong>{residents.length}</strong></div>
+    {residents.length ? <div className="followup-person-list">{residents.map((resident) => {
+      const smsNumber = resident.phone?.replace(/[^\d+]/g, "");
+      const canText = resident.consentToContact && Boolean(smsNumber);
+      const canEmail = resident.consentToContact && Boolean(resident.email);
+      return <article className="followup-person" key={resident.id}>
+        <div className="followup-person-copy">
+          <div><strong>{resident.name || "Name not provided"}</strong><span>{faithStatusLabels[resident.faithStatus]}</span></div>
+          {resident.notes && <p>{resident.notes}</p>}
+          {!resident.consentToContact
+            ? <small><ShieldCheck size={12} /> No permission to contact</small>
+            : !canText && !canEmail
+              ? <small><ShieldCheck size={12} /> Contact permission recorded; no contact details saved</small>
+              : null}
+        </div>
+        {(canText || canEmail) && <div className="followup-contact-actions">
+          {canText && <a href={`sms:${smsNumber}`} aria-label={`Text ${resident.name || "this person"} at ${resident.phone}`}><MessageCircle size={14} /><span><small>{resident.preferredContact === "text" ? "Preferred text" : "Text"}</small><strong>{resident.phone}</strong></span></a>}
+          {canEmail && <a href={`mailto:${resident.email}`} aria-label={`Email ${resident.name || "this person"} at ${resident.email}`}><Mail size={14} /><span><small>{resident.preferredContact === "email" ? "Preferred email" : "Email"}</small><strong>{resident.email}</strong></span></a>}
+        </div>}
+      </article>;
+    })}</div> : <p className="followup-people-empty"><Phone size={13} /> No permission-based people are recorded at this location.</p>}
+  </section>;
 }
 
 function CompleteFollowUpModal({ followUp, teams, noteLimit, onClose, onSave }: {
