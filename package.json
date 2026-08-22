@@ -6,6 +6,10 @@
     "node": "22.x"
   },
   "scripts": {
+    "prepare:map-worker": "node scripts/copy-maplibre-worker.mjs",
+    "postinstall": "npm run prepare:map-worker",
+    "prebuild": "npm run prepare:map-worker",
+    "prebuild:sites": "npm run prepare:map-worker",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

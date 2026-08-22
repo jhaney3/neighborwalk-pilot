@@ -7,6 +7,7 @@ import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { Coordinates, Outcome, Property, Territory } from "../lib/domain";
 import { outcomeMeta } from "../lib/domain";
 import { shouldNavigateToTerritory } from "../lib/map-camera";
+import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
 import { parcelKey, parcelProgress, propertyParcelKey } from "../lib/parcel-groups";
 import {
   cacheTerritoryParcels,
@@ -638,12 +639,9 @@ export function MapCanvas({
     let mapLoaded = false;
     let loadTimeout: number | undefined;
 
-    void Promise.all([
-      import("maplibre-gl"),
-      import("maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url"),
-    ]).then(([maplibregl, workerModule]) => {
+    void import("maplibre-gl").then((maplibregl) => {
       if (cancelled || !containerRef.current) return;
-      maplibregl.setWorkerUrl(workerModule.default);
+      maplibregl.setWorkerUrl(MAPLIBRE_WORKER_URL);
       const initialTerritory = territoryRef.current;
       map = new maplibregl.Map({
         container: containerRef.current,
