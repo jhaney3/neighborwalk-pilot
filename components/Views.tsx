@@ -132,7 +132,7 @@ function FollowUpCard({ followUp, property, teams, teamName, noteLimit, onOpen, 
   const overdue = isFollowUpOverdue(followUp) && followUp.dueAt.slice(0, 10) !== new Date().toISOString().slice(0, 10);
   const validDate = Boolean(date) && date >= new Date().toISOString().slice(0, 10);
   return (
-    <article className={`followup-card${overdue ? " overdue" : ""}`}>
+    <article className={`followup-card ${followUp.status}${overdue ? " overdue" : ""}`}>
       <div className="followup-date">
         <span>{followUp.status === "completed" ? "Completed" : followUp.status === "cancelled" ? "Cancelled" : overdue ? "Overdue" : followUp.dueAt.slice(0, 10) === new Date().toISOString().slice(0, 10) ? "Today" : "Scheduled"}</span>
         <strong>{formatDateTime(followUp.dueAt, { month: "short", day: "numeric" })}</strong>
@@ -501,7 +501,7 @@ export function SettingsView({
           <div className="data-note"><FileJson size={15} /><span>Backups contain ministry records in readable JSON. Store them securely and delete old copies.</span></div></>}
         </SettingsSection>
       </div>
-      {(canManage || data.sync.mode === "device_only") && <section className="danger-zone"><div><strong>Clear sample and outreach records</strong><span>Delete mapped locations, visits, follow-ups, and permission-based person records. Church settings, groups, members, territories, and the guide remain.</span></div><button className="button danger" onClick={() => setClearing(true)}><Trash2 size={15} /> Clear records</button></section>}
+      {(canManage || data.sync.mode === "device_only") && <section className="danger-zone"><div><strong>Clear outreach records</strong><span>Delete mapped locations, visits, follow-ups, and permission-based person records. Church settings, groups, members, territories, and the guide remain.</span></div><button className="button danger" onClick={() => setClearing(true)}><Trash2 size={15} /> Clear records</button></section>}
       {clearing && <Modal title="Clear outreach records?" description="This removes the shared records listed below. Export a backup first if you may need them later." onClose={() => { setClearing(false); setClearConfirmation(""); }}>
         <div className="clear-data-summary"><div><strong>{data.properties.length}</strong><span>locations</span></div><div><strong>{data.visits.length}</strong><span>visits</span></div><div><strong>{data.followUps.length}</strong><span>follow-ups</span></div><div><strong>{data.residents.length}</strong><span>people</span></div></div>
         <label className="form-field"><span>Type <strong>CLEAR</strong> to confirm</span><input autoComplete="off" value={clearConfirmation} onChange={(event) => setClearConfirmation(event.target.value)} /></label>
