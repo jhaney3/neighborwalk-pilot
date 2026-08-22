@@ -12,22 +12,29 @@ import {
   History,
   MapPin,
   PencilLine,
+  Phone,
   Plus,
   Save,
   ShieldCheck,
   Trash2,
+  UserRound,
+  Users,
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   dateInputValue,
   dueDateFromNow,
+  faithStatusLabels,
+  faithStatusValues,
   formatDateTime,
   outcomeMeta,
   type FollowUp,
   type NeighborWalkData,
   type Outcome,
   type Property,
+  type Resident,
+  type ResidentInput,
   type Visit,
 } from "../lib/domain";
 
@@ -61,6 +68,8 @@ export function PropertyDrawer({
   onRecordVisit,
   onUpdateProperty,
   onDeleteProperty,
+  onUpsertResident,
+  onDeleteResident,
 }: {
   property: Property;
   parcelDwellings: Property[];
@@ -74,8 +83,10 @@ export function PropertyDrawer({
   onRecordVisit: (input: VisitInput) => void;
   onUpdateProperty: (propertyId: string, patch: Pick<Property, "address" | "unit">) => void;
   onDeleteProperty: (propertyId: string) => void;
+  onUpsertResident: (propertyId: string, input: ResidentInput, residentId?: string) => void;
+  onDeleteResident: (residentId: string) => void;
 }) {
-  const [tab, setTab] = useState<"record" | "history">("record");
+  const [tab, setTab] = useState<"record" | "people" | "history">("record");
   const [outcome, setOutcome] = useState<Exclude<Outcome, "unvisited">>("conversation");
   const [note, setNote] = useState("");
   const [followUpConsent, setFollowUpConsent] = useState(false);
@@ -84,6 +95,8 @@ export function PropertyDrawer({
   const [editingAddress, setEditingAddress] = useState(property.address === "Confirm this address");
   const [address, setAddress] = useState(property.address);
   const [unit, setUnit] = useState(property.unit ?? "");
+  const [editingResident, setEditingResident] = useState<Resident | "new" | null>(null);
+  const residents = data.residents.filter((resident) => resident.propertyId === property.id);
 
   const noteRemaining = data.church.noteCharacterLimit - note.length;
   const canSave = address.trim().length > 2
@@ -159,6 +172,7 @@ export function PropertyDrawer({
 
       <div className="drawer-tabs" role="tablist" aria-label="Location record sections">
         <button role="tab" aria-selected={tab === "record"} className={tab === "record" ? "active" : ""} onClick={() => setTab("record")}><ClipboardList size={15} /> Record visit</button>
+        <button role="tab" aria-selected={tab === "people"} className={tab === "people" ? "active" : ""} onClick={() => setTab("people")}><Users size={15} /> People <span>{residents.length}</span></button>
         <button role="tab" aria-selected={tab === "history"} className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}><History size={15} /> History <span>{visits.length}</span></button>
       </div>
 
@@ -235,7 +249,7 @@ export function PropertyDrawer({
             }}><Trash2 size={14} /> Remove unvisited location</button>
           )}
         </div>
-      ) : (
+      ) : tab === "history" ? (
         <div className="history-list" role="tabpanel">
           {visits.length ? visits.map((visit) => (
             <VisitHistoryItem visit={visit} volunteerName={volunteerNames.get(visit.volunteerId) ?? "Volunteer"} key={visit.id} />
@@ -243,8 +257,109 @@ export function PropertyDrawer({
             <div className="empty-mini"><History size={21} /><strong>No visit history</strong><span>The first saved visit will appear here.</span></div>
           )}
         </div>
+      ) : (
+        <div className="people-panel" role="tabpanel">
+          <div className="people-permission-note">
+            <ShieldCheck size={18} />
+            <span><strong>Permission comes first</strong>Only record information the person offered and clearly allowed the church to keep. Do not create records for minors.</span>
+          </div>
+          {editingResident ? (
+            <ResidentForm
+              resident={editingResident === "new" ? undefined : editingResident}
+              noteLimit={data.church.noteCharacterLimit}
+              onCancel={() => setEditingResident(null)}
+              onSave={(input) => {
+                onUpsertResident(property.id, input, editingResident === "new" ? undefined : editingResident.id);
+                setEditingResident(null);
+              }}
+            />
+          ) : (
+            <>
+              <button className="button primary people-add" onClick={() => setEditingResident("new")}><UserRound size={16} /> Add person with permission</button>
+              <div className="resident-list">
+                {residents.map((resident) => (
+                  <article className="resident-card" key={resident.id}>
+                    <span className="resident-avatar">{resident.name?.charAt(0).toUpperCase() || <UserRound size={17} />}</span>
+                    <div>
+                      <strong>{resident.name || "Name not provided"}</strong>
+                      <small>{faithStatusLabels[resident.faithStatus]}</small>
+                      {resident.consentToContact && <p><Phone size={12} /> {resident.preferredContact === "none" ? "Contact permission recorded" : `Prefers ${resident.preferredContact}`}</p>}
+                    </div>
+                    <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>
+                    <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
+                      if (window.confirm("Delete this person record? Use this whenever permission is withdrawn.")) onDeleteResident(resident.id);
+                    }}><Trash2 size={14} /></button>
+                  </article>
+                ))}
+                {!residents.length && <div className="empty-mini"><Users size={21} /><strong>No person records</strong><span>That is normal. Add one only when someone gives permission.</span></div>}
+              </div>
+            </>
+          )}
+        </div>
       )}
     </aside>
+  );
+}
+
+function ResidentForm({ resident, noteLimit, onCancel, onSave }: {
+  resident?: Resident;
+  noteLimit: number;
+  onCancel: () => void;
+  onSave: (input: ResidentInput) => void;
+}) {
+  const [consentToStore, setConsentToStore] = useState(Boolean(resident?.consentToStore));
+  const [name, setName] = useState(resident?.name ?? "");
+  const [faithStatus, setFaithStatus] = useState(resident?.faithStatus ?? "not_discussed");
+  const [notes, setNotes] = useState(resident?.notes ?? "");
+  const [consentToContact, setConsentToContact] = useState(Boolean(resident?.consentToContact));
+  const [phone, setPhone] = useState(resident?.phone ?? "");
+  const [email, setEmail] = useState(resident?.email ?? "");
+  const [preferredContact, setPreferredContact] = useState(resident?.preferredContact ?? "none");
+  const contactMethodValid = preferredContact === "email" ? Boolean(email.trim())
+    : preferredContact === "text" || preferredContact === "call" ? Boolean(phone.trim()) : true;
+  const canSave = consentToStore && notes.length <= noteLimit && (!consentToContact || contactMethodValid);
+
+  return (
+    <div className="resident-form">
+      <div className={`permission-card${consentToStore ? " granted" : ""}`}>
+        <label>
+          <input type="checkbox" checked={consentToStore} onChange={(event) => setConsentToStore(event.target.checked)} />
+          <span><ShieldCheck size={17} /><strong>Permission to store</strong>The person agreed that the church may keep the information below.</span>
+        </label>
+      </div>
+      <div className="form-stack">
+        <label className="form-field"><span>Name <small>Optional</small></span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Only if they choose to share it" /></label>
+        <label className="form-field"><span>Faith status <small>Self-described only</small></span><select value={faithStatus} onChange={(event) => setFaithStatus(event.target.value as Resident["faithStatus"])}>{faithStatusValues.map((value) => <option value={value} key={value}>{faithStatusLabels[value]}</option>)}</select></label>
+        <label className="form-field"><span>Objective note <small>Optional</small></span><textarea rows={2} maxLength={noteLimit + 1} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Record only what helps honor their request." /><em className={notes.length > noteLimit ? "over" : ""}>{noteLimit - notes.length} characters remaining</em></label>
+      </div>
+      <div className={`permission-card contact${consentToContact ? " granted" : ""}`}>
+        <label>
+          <input type="checkbox" checked={consentToContact} onChange={(event) => {
+            setConsentToContact(event.target.checked);
+            if (!event.target.checked) { setPhone(""); setEmail(""); setPreferredContact("none"); }
+          }} />
+          <span><Phone size={17} /><strong>Separate permission to contact</strong>The person agreed that the church may use contact details for follow-up.</span>
+        </label>
+        {consentToContact && <div className="contact-fields">
+          <label className="form-field"><span>Phone <small>Optional</small></span><input inputMode="tel" autoComplete="off" maxLength={40} value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
+          <label className="form-field"><span>Email <small>Optional</small></span><input type="email" inputMode="email" autoComplete="off" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+          <label className="form-field"><span>Preferred contact</span><select value={preferredContact} onChange={(event) => setPreferredContact(event.target.value as Resident["preferredContact"])}><option value="none">No preference</option><option value="text">Text message</option><option value="call">Phone call</option><option value="email">Email</option></select></label>
+        </div>}
+      </div>
+      {!consentToStore && <p className="form-warning">Confirm permission to store before saving.</p>}
+      {consentToContact && !contactMethodValid && <p className="form-warning">Enter the phone number or email needed for the selected contact method.</p>}
+      <div className="modal-actions"><button className="button quiet" onClick={onCancel}>Cancel</button><button className="button primary" disabled={!canSave} onClick={() => onSave({
+        name: name.trim() || undefined,
+        faithStatus,
+        notes: notes.trim() || undefined,
+        phone: consentToContact ? phone.trim() || undefined : undefined,
+        email: consentToContact ? email.trim() || undefined : undefined,
+        preferredContact: consentToContact ? preferredContact : "none",
+        consentToStore: true,
+        consentToContact,
+        consentRecordedAt: resident?.consentRecordedAt ?? new Date().toISOString(),
+      })}><Save size={15} /> Save person</button></div>
+    </div>
   );
 }
 

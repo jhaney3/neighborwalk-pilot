@@ -96,4 +96,43 @@ describe("workspace synchronization", () => {
 
     expect(merged.properties.some((property) => property.id === removed.id)).toBe(false);
   });
+
+  it("merges permission-based resident records and leader-managed groups independently", () => {
+    const seed = connected(createSeedData());
+    const createdAt = "2030-08-13T12:05:00.000Z";
+    const resident = {
+      id: "resident_local",
+      churchId: seed.church.id,
+      propertyId: seed.properties[0].id,
+      name: "Neighbor",
+      faithStatus: "not_discussed" as const,
+      preferredContact: "none" as const,
+      consentToStore: true as const,
+      consentToContact: false,
+      consentRecordedAt: createdAt,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    const team = {
+      id: "team_local",
+      churchId: seed.church.id,
+      eventId: seed.preferences.activeEventId,
+      name: "Team Local",
+      memberIds: [],
+      territoryIds: [],
+      status: "ready" as const,
+    };
+    const local = {
+      ...seed,
+      residents: [resident],
+      teams: [...seed.teams, team],
+      sync: { mode: "connected" as const, pending: [pending("resident", resident.id), pending("team", team.id)] },
+    };
+
+    const merged = mergePendingWorkspaceChanges(seed, local);
+
+    expect(merged.residents).toContainEqual(resident);
+    expect(merged.teams).toContainEqual(team);
+    expect(neighborWalkDataSchema.safeParse(merged).success).toBe(true);
+  });
 });

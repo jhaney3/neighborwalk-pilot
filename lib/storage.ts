@@ -53,6 +53,12 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   return {
     ...data,
     schemaVersion: APP_SCHEMA_VERSION,
+    residents: Array.isArray(data.residents) ? data.residents : [],
+    followUps: Array.isArray(data.followUps)
+      ? data.followUps.map((followUp) => followUp && typeof followUp === "object"
+        ? { ...followUp as Record<string, unknown>, history: Array.isArray((followUp as Record<string, unknown>).history) ? (followUp as Record<string, unknown>).history : [] }
+        : followUp)
+      : [],
     preferences: {
       ...defaults.preferences,
       ...storedPreferences,

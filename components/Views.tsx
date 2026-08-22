@@ -24,7 +24,6 @@ import {
   Navigation,
   Plus,
   RefreshCcw,
-  RotateCcw,
   Save,
   ShieldCheck,
   Smartphone,
@@ -42,11 +41,13 @@ import {
   isSafeWebUrl,
   outcomeMeta,
   type FollowUp,
+  type FollowUpCompletionInput,
   type GuideStep,
   type NeighborWalkData,
   type Outcome,
   type Property,
   type Territory,
+  type TeamUpdate,
 } from "../lib/domain";
 import type { WorkspaceMembership } from "../lib/use-neighborwalk";
 import { MembersPanel } from "./MembersPanel";
@@ -60,19 +61,21 @@ export function FollowUpsView({
 }: {
   data: NeighborWalkData;
   onOpenProperty: (propertyId: string) => void;
-  onComplete: (followUpId: string) => void;
-  onReschedule: (followUpId: string, date: string) => void;
-  onCancel: (followUpId: string) => void;
+  onComplete: (followUpId: string, input: FollowUpCompletionInput) => void;
+  onReschedule: (followUpId: string, date: string, note?: string) => void;
+  onCancel: (followUpId: string, note?: string) => void;
 }) {
-  const [filter, setFilter] = useState<"all" | "overdue" | "today" | "upcoming">("all");
+  const [filter, setFilter] = useState<"open" | "overdue" | "today" | "upcoming" | "completed" | "cancelled">("open");
   const [query, setQuery] = useState("");
   const propertyMap = useMemo(() => new Map(data.properties.map((property) => [property.id, property])), [data.properties]);
   const teamMap = useMemo(() => new Map(data.teams.map((team) => [team.id, team.name])), [data.teams]);
   const today = new Date().toISOString().slice(0, 10);
   const tasks = data.followUps
-    .filter((followUp) => followUp.status === "scheduled")
     .filter((followUp) => {
       const dueDate = followUp.dueAt.slice(0, 10);
+      if (filter === "completed") return followUp.status === "completed";
+      if (filter === "cancelled") return followUp.status === "cancelled";
+      if (followUp.status !== "scheduled") return false;
       if (filter === "overdue") return isFollowUpOverdue(followUp) && dueDate !== today;
       if (filter === "today") return dueDate === today;
       if (filter === "upcoming") return dueDate > today;
@@ -82,14 +85,16 @@ export function FollowUpsView({
       const property = propertyMap.get(followUp.propertyId);
       return !query || property?.address.toLowerCase().includes(query.toLowerCase()) || followUp.note?.toLowerCase().includes(query.toLowerCase());
     })
-    .sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+    .sort((a, b) => filter === "completed" || filter === "cancelled"
+      ? b.createdAt.localeCompare(a.createdAt)
+      : a.dueAt.localeCompare(b.dueAt));
 
   return (
     <div className="content-view followups-view">
       <ViewHeading eyebrow="Care continues" title="Follow-ups" description="Return only where someone clearly invited another conversation." aside={<div className="heading-count"><CalendarClock size={18} /><strong>{data.followUps.filter((item) => item.status === "scheduled").length}</strong><span>open</span></div>} />
       <div className="list-toolbar">
         <div className="segmented-control" aria-label="Follow-up date filter">
-          {(["all", "overdue", "today", "upcoming"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
+          {(["open", "overdue", "today", "upcoming", "completed", "cancelled"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
         </div>
         <input className="search-field" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search address or note" aria-label="Search follow-ups" />
       </div>
@@ -99,33 +104,37 @@ export function FollowUpsView({
           {tasks.map((followUp) => {
             const property = propertyMap.get(followUp.propertyId);
             if (!property) return null;
-            return <FollowUpCard key={followUp.id} followUp={followUp} property={property} teamName={followUp.assignedTeamId ? teamMap.get(followUp.assignedTeamId) : undefined} onOpen={() => onOpenProperty(property.id)} onComplete={() => onComplete(followUp.id)} onReschedule={(date) => onReschedule(followUp.id, date)} onCancel={() => onCancel(followUp.id)} />;
+            return <FollowUpCard key={followUp.id} followUp={followUp} property={property} teams={data.teams} teamName={followUp.assignedTeamId ? teamMap.get(followUp.assignedTeamId) : undefined} noteLimit={data.church.noteCharacterLimit} onOpen={() => onOpenProperty(property.id)} onComplete={(input) => onComplete(followUp.id, input)} onReschedule={(date, note) => onReschedule(followUp.id, date, note)} onCancel={(note) => onCancel(followUp.id, note)} />;
           })}
         </div>
       ) : (
-        <EmptyState icon={<ClipboardCheck size={25} />} title="Nothing in this view" copy={filter === "all" ? "New permission-based return visits will appear here." : "Try another date filter or clear your search."} />
+        <EmptyState icon={<ClipboardCheck size={25} />} title="Nothing in this view" copy={filter === "open" ? "New permission-based return visits will appear here." : "Try another filter or clear your search."} />
       )}
     </div>
   );
 }
 
-function FollowUpCard({ followUp, property, teamName, onOpen, onComplete, onReschedule, onCancel }: {
+function FollowUpCard({ followUp, property, teams, teamName, noteLimit, onOpen, onComplete, onReschedule, onCancel }: {
   followUp: FollowUp;
   property: Property;
+  teams: NeighborWalkData["teams"];
   teamName?: string;
+  noteLimit: number;
   onOpen: () => void;
-  onComplete: () => void;
-  onReschedule: (date: string) => void;
-  onCancel: () => void;
+  onComplete: (input: FollowUpCompletionInput) => void;
+  onReschedule: (date: string, note?: string) => void;
+  onCancel: (note?: string) => void;
 }) {
   const [editingDate, setEditingDate] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const [date, setDate] = useState(dateInputValue(followUp.dueAt));
+  const [rescheduleNote, setRescheduleNote] = useState("");
   const overdue = isFollowUpOverdue(followUp) && followUp.dueAt.slice(0, 10) !== new Date().toISOString().slice(0, 10);
   const validDate = Boolean(date) && date >= new Date().toISOString().slice(0, 10);
   return (
     <article className={`followup-card${overdue ? " overdue" : ""}`}>
       <div className="followup-date">
-        <span>{overdue ? "Overdue" : followUp.dueAt.slice(0, 10) === new Date().toISOString().slice(0, 10) ? "Today" : "Scheduled"}</span>
+        <span>{followUp.status === "completed" ? "Completed" : followUp.status === "cancelled" ? "Cancelled" : overdue ? "Overdue" : followUp.dueAt.slice(0, 10) === new Date().toISOString().slice(0, 10) ? "Today" : "Scheduled"}</span>
         <strong>{formatDateTime(followUp.dueAt, { month: "short", day: "numeric" })}</strong>
         <small>{formatDateTime(followUp.dueAt, { weekday: "short" })}</small>
       </div>
@@ -133,23 +142,62 @@ function FollowUpCard({ followUp, property, teamName, onOpen, onComplete, onResc
         <h2>{property.address}{property.unit ? ` · ${property.unit}` : ""}</h2>
         <p>{followUp.note || "A return visit was requested. No additional note was recorded."}</p>
         <div><Users size={13} /> {teamName || "Unassigned"}<span>·</span><ShieldCheck size={13} /> Permission recorded</div>
+        {followUp.completionNote && <p className="completion-note"><Check size={13} /> {followUp.completionNote}</p>}
+        {followUp.history.length > 1 && <details className="followup-history"><summary>{followUp.history.length} updates</summary>{followUp.history.slice().reverse().map((activity) => <div key={activity.id}><strong>{activity.action.replaceAll("_", " ")}</strong><span>{activity.note || (activity.dueAt ? formatDateTime(activity.dueAt, { month: "short", day: "numeric" }) : "No note")}</span><small>{formatDateTime(activity.createdAt)}</small></div>)}</details>}
       </div>
-      {editingDate ? (
+      {followUp.status !== "scheduled" ? (
+        <div className="followup-actions"><button className="button quiet small" onClick={onOpen}><MapIcon size={14} /> Map</button></div>
+      ) : editingDate ? (
         <div className="inline-date-editor">
           <input type="date" value={date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setDate(event.target.value)} aria-label="New follow-up date" />
-          <button className="button primary small" disabled={!validDate} onClick={() => { onReschedule(date); setEditingDate(false); }}><Save size={14} /> Save</button>
+          <input value={rescheduleNote} maxLength={noteLimit} onChange={(event) => setRescheduleNote(event.target.value)} placeholder="Reason or note (optional)" aria-label="Reschedule note" />
+          <button className="button primary small" disabled={!validDate} onClick={() => { onReschedule(date, rescheduleNote); setEditingDate(false); }}><Save size={14} /> Save</button>
           <button className="icon-text-button" onClick={() => setEditingDate(false)}>Cancel</button>
         </div>
       ) : (
         <div className="followup-actions">
           <button className="button quiet small" onClick={onOpen}><MapIcon size={14} /> Map</button>
           <button className="button quiet small" onClick={() => setEditingDate(true)}><CalendarClock size={14} /> Reschedule</button>
-          <button className="button primary small" onClick={onComplete}><Check size={15} /> Complete</button>
-          <button className="more-danger" onClick={() => window.confirm("Cancel this follow-up? The visit record will remain.") && onCancel()} aria-label="Cancel follow-up"><Trash2 size={15} /></button>
+          <button className="button primary small" onClick={() => setCompleting(true)}><Check size={15} /> Complete</button>
+          <button className="more-danger" onClick={() => {
+            const note = window.prompt("Optional cancellation note. Select Cancel to keep the follow-up open.");
+            if (note !== null && window.confirm("Cancel this follow-up? The visit record will remain.")) onCancel(note);
+          }} aria-label="Cancel follow-up"><Trash2 size={15} /></button>
         </div>
       )}
+      {completing && <CompleteFollowUpModal followUp={followUp} teams={teams} noteLimit={noteLimit} onClose={() => setCompleting(false)} onSave={(input) => { onComplete(input); setCompleting(false); }} />}
     </article>
   );
+}
+
+function CompleteFollowUpModal({ followUp, teams, noteLimit, onClose, onSave }: {
+  followUp: FollowUp;
+  teams: NeighborWalkData["teams"];
+  noteLimit: number;
+  onClose: () => void;
+  onSave: (input: FollowUpCompletionInput) => void;
+}) {
+  const [completionNote, setCompletionNote] = useState("");
+  const [scheduleAnother, setScheduleAnother] = useState(false);
+  const [nextDate, setNextDate] = useState("");
+  const [nextNote, setNextNote] = useState("");
+  const [assignedTeamId, setAssignedTeamId] = useState(followUp.assignedTeamId ?? "");
+  const valid = completionNote.length <= noteLimit && nextNote.length <= noteLimit
+    && (!scheduleAnother || Boolean(nextDate) && nextDate >= new Date().toISOString().slice(0, 10));
+  return <Modal title="Complete follow-up" description="Record the result and, if invited, schedule the next conversation now." onClose={onClose}>
+    <div className="form-stack">
+      <label className="form-field"><span>Completion note <small>Optional</small></span><textarea rows={3} maxLength={noteLimit + 1} value={completionNote} onChange={(event) => setCompletionNote(event.target.value)} placeholder="Briefly record what happened or what was requested." /></label>
+      <label className="toggle-row"><input type="checkbox" checked={scheduleAnother} onChange={(event) => setScheduleAnother(event.target.checked)} /><span><strong>Schedule an additional follow-up</strong>Use only when the person invited another contact.</span></label>
+      {scheduleAnother && <div className="followup-form">
+        <div className="form-row">
+          <label className="form-field"><span>Next date</span><input type="date" min={new Date().toISOString().slice(0, 10)} value={nextDate} onChange={(event) => setNextDate(event.target.value)} /></label>
+          <label className="form-field"><span>Assign group</span><select value={assignedTeamId} onChange={(event) => setAssignedTeamId(event.target.value)}><option value="">Unassigned</option>{teams.map((team) => <option value={team.id} key={team.id}>{team.name}</option>)}</select></label>
+        </div>
+        <label className="form-field"><span>Next-step note <small>Optional</small></span><textarea rows={2} maxLength={noteLimit + 1} value={nextNote} onChange={(event) => setNextNote(event.target.value)} /></label>
+      </div>}
+    </div>
+    <div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={!valid} onClick={() => onSave({ completionNote: completionNote.trim() || undefined, nextFollowUp: scheduleAnother ? { dueAt: new Date(`${nextDate}T17:00:00`).toISOString(), note: nextNote.trim() || undefined, assignedTeamId: assignedTeamId || undefined } : undefined })}><Check size={15} /> Complete follow-up</button></div>
+  </Modal>;
 }
 
 export function GuideView({ data, canManage, onUpdate }: { data: NeighborWalkData; canManage: boolean; onUpdate: (stepId: string, patch: Partial<GuideStep>) => void }) {
@@ -209,13 +257,16 @@ function GuideEditor({ step, onClose, onSave }: { step: GuideStep; onClose: () =
   );
 }
 
-export function LeaderView({ data, membership, activeTerritory, onSelectTerritory, onEditTerritory, onStartDrawing }: {
+export function LeaderView({ data, membership, activeTerritory, onSelectTerritory, onEditTerritory, onStartDrawing, onAddTeam, onUpdateTeam, onDeleteTeam }: {
   data: NeighborWalkData;
   membership?: WorkspaceMembership | null;
   activeTerritory: Territory;
   onSelectTerritory: (id: string) => void;
   onEditTerritory: (id: string) => void;
   onStartDrawing: () => void;
+  onAddTeam: (update: TeamUpdate) => string;
+  onUpdateTeam: (teamId: string, update: TeamUpdate) => void;
+  onDeleteTeam: (teamId: string) => void;
 }) {
   const activeCoverage = coverageForTerritory(data, activeTerritory.id);
   const activeProperties = data.properties.filter((property) => property.territoryId === activeTerritory.id);
@@ -231,7 +282,7 @@ export function LeaderView({ data, membership, activeTerritory, onSelectTerritor
         <Metric icon={<Users size={19} />} label="Active teams" value={String(data.teams.filter((team) => team.status === "active").length)} detail={`${data.volunteers.filter((volunteer) => volunteer.active).length} volunteers available`} tone="blue" />
       </div>
 
-      {membership?.role === "leader" && <MembersPanel membership={membership} />}
+      {membership?.role === "leader" && <MembersPanel membership={membership} teams={data.teams} onAddTeam={onAddTeam} onUpdateTeam={onUpdateTeam} onDeleteTeam={onDeleteTeam} />}
 
       <section className="leader-section">
         <div className="section-heading"><div><p className="eyebrow">Assignments</p><h2>Territories</h2></div><span>{data.territories.length} total</span></div>
@@ -300,7 +351,7 @@ export function SettingsView({
   onExport,
   onImport,
   onPurge,
-  onReset,
+  onClearOutreach,
   onSync,
 }: {
   data: NeighborWalkData;
@@ -316,7 +367,7 @@ export function SettingsView({
   onExport: () => void;
   onImport: (file: File) => Promise<NeighborWalkData>;
   onPurge: () => void;
-  onReset: () => Promise<NeighborWalkData>;
+  onClearOutreach: () => void;
   onSync: () => Promise<boolean>;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -327,6 +378,8 @@ export function SettingsView({
   const [noteLimit, setNoteLimit] = useState(String(data.church.noteCharacterLimit));
   const [followUpDays, setFollowUpDays] = useState(String(data.church.defaultFollowUpDays));
   const [mapStyleUrl, setMapStyleUrl] = useState(data.preferences.mapStyleUrl);
+  const [clearing, setClearing] = useState(false);
+  const [clearConfirmation, setClearConfirmation] = useState("");
 
   useEffect(() => {
     const handleInstallPrompt = (event: Event) => {
@@ -448,7 +501,12 @@ export function SettingsView({
           <div className="data-note"><FileJson size={15} /><span>Backups contain ministry records in readable JSON. Store them securely and delete old copies.</span></div></>}
         </SettingsSection>
       </div>
-      {(canManage || data.sync.mode === "device_only") && <section className="danger-zone"><div><strong>Reset this device</strong><span>Remove local changes and restore the fictional Grace Harbor sample data.</span></div><button className="button danger" onClick={async () => { if (window.confirm("Reset all NeighborWalk data on this device? Export a backup first if you need these records.")) { const reset = await onReset(); applyDataDrafts(reset); setMessage("Demo data restored."); } }}><RotateCcw size={15} /> Reset demo</button></section>}
+      {(canManage || data.sync.mode === "device_only") && <section className="danger-zone"><div><strong>Clear sample and outreach records</strong><span>Delete mapped locations, visits, follow-ups, and permission-based person records. Church settings, groups, members, territories, and the guide remain.</span></div><button className="button danger" onClick={() => setClearing(true)}><Trash2 size={15} /> Clear records</button></section>}
+      {clearing && <Modal title="Clear outreach records?" description="This removes the shared records listed below. Export a backup first if you may need them later." onClose={() => { setClearing(false); setClearConfirmation(""); }}>
+        <div className="clear-data-summary"><div><strong>{data.properties.length}</strong><span>locations</span></div><div><strong>{data.visits.length}</strong><span>visits</span></div><div><strong>{data.followUps.length}</strong><span>follow-ups</span></div><div><strong>{data.residents.length}</strong><span>people</span></div></div>
+        <label className="form-field"><span>Type <strong>CLEAR</strong> to confirm</span><input autoComplete="off" value={clearConfirmation} onChange={(event) => setClearConfirmation(event.target.value)} /></label>
+        <div className="modal-actions"><button className="button quiet" onClick={() => { setClearing(false); setClearConfirmation(""); }}>Cancel</button><button className="button danger" disabled={clearConfirmation !== "CLEAR"} onClick={() => { onClearOutreach(); setClearing(false); setClearConfirmation(""); setMessage("Outreach records cleared. Automatic sync will update the shared workspace."); }}><Trash2 size={15} /> Permanently clear records</button></div>
+      </Modal>}
     </div>
   );
 }

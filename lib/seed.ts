@@ -139,6 +139,14 @@ export function createSeedData(): NeighborWalkData {
       dueAt: dayAt(index === 0 ? 2 : 7, 17),
       status: "scheduled" as const,
       note: visit.objectiveNote,
+      history: [{
+        id: `activity_demo_${index + 1}`,
+        action: "created" as const,
+        note: visit.objectiveNote,
+        dueAt: dayAt(index === 0 ? 2 : 7, 17),
+        actorId: visit.volunteerId,
+        createdAt: visit.recordedAt,
+      }],
       createdAt: visit.recordedAt,
     }));
 
@@ -179,6 +187,7 @@ export function createSeedData(): NeighborWalkData {
     properties,
     visits,
     followUps,
+    residents: [],
     guide: [
       {
         id: "guide_permission",
@@ -295,6 +304,7 @@ export function createWorkspaceData(churchName: string, user: { id: string; emai
     properties: [],
     visits: [],
     followUps: [],
+    residents: [],
     guide: demo.guide,
     audit: [],
     preferences: {

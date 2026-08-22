@@ -10,10 +10,13 @@ import {
   type AuditEntry,
   type Coordinates,
   type GuideStep,
+  type FollowUpCompletionInput,
   type NeighborWalkData,
   type Outcome,
   type ParcelReference,
   type Property,
+  type ResidentInput,
+  type TeamUpdate,
   type Territory,
   type TerritoryUpdate,
 } from "./domain";
@@ -22,7 +25,6 @@ import {
   importNeighborWalkFile,
   loadNeighborWalkData,
   migrateNeighborWalkData,
-  resetNeighborWalkData,
   saveNeighborWalkData,
 } from "./storage";
 import { getSupabaseBrowserClient, type Json, type NeighborWalkDatabase } from "./supabase";
@@ -485,7 +487,17 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       let nextFollowUps = current.followUps;
       if (input.outcome === "follow_up" && input.followUpConsent) {
         nextFollowUps = [...nextFollowUps.map((followUp) => followUp.propertyId === property.id && followUp.status === "scheduled"
-          ? { ...followUp, status: "cancelled" as const }
+          ? {
+            ...followUp,
+            status: "cancelled" as const,
+            history: [...followUp.history, {
+              id: createId("activity"),
+              action: "cancelled" as const,
+              note: "Replaced by a new follow-up request.",
+              actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
+              createdAt: now,
+            }],
+          }
           : followUp), {
           id: createId("followup"),
           churchId: current.church.id,
@@ -497,12 +509,32 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
             : dueDateFromNow(current.church.defaultFollowUpDays),
           status: "scheduled" as const,
           note: objectiveNote,
+          history: [{
+            id: createId("activity"),
+            action: "created" as const,
+            note: objectiveNote,
+            dueAt: input.followUpDate
+              ? new Date(`${input.followUpDate}T17:00:00`).toISOString()
+              : dueDateFromNow(current.church.defaultFollowUpDays),
+            actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
+            createdAt: now,
+          }],
           createdAt: now,
         }];
       }
       if (input.outcome === "do_not_visit") {
         nextFollowUps = nextFollowUps.map((followUp) => followUp.propertyId === property.id && followUp.status === "scheduled"
-          ? { ...followUp, status: "cancelled" as const }
+          ? {
+            ...followUp,
+            status: "cancelled" as const,
+            history: [...followUp.history, {
+              id: createId("activity"),
+              action: "cancelled" as const,
+              note: "Location marked do not revisit.",
+              actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
+              createdAt: now,
+            }],
+          }
           : followUp);
       }
       return addAudit({
@@ -514,40 +546,152 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     });
   }, [updateData]);
 
-  const completeFollowUp = useCallback((followUpId: string) => {
+  const completeFollowUp = useCallback((followUpId: string, input: FollowUpCompletionInput = {}) => {
     updateData((current) => {
-      if (!current.followUps.some((followUp) => followUp.id === followUpId && followUp.status === "scheduled")) return current;
-      return addAudit({
+      const existing = current.followUps.find((followUp) => followUp.id === followUpId && followUp.status === "scheduled");
+      if (!existing) return current;
+      const completionNote = input.completionNote?.trim() || undefined;
+      if (completionNote && completionNote.length > current.church.noteCharacterLimit) return current;
+      const now = new Date().toISOString();
+      let nextFollowUps = current.followUps.map((followUp) => followUp.id === followUpId
+        ? {
+          ...followUp,
+          status: "completed" as const,
+          completionNote,
+          completedAt: now,
+          history: [...followUp.history, {
+            id: createId("activity"),
+            action: "completed" as const,
+            note: completionNote,
+            actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
+            createdAt: now,
+          }],
+        }
+        : followUp);
+      let result = addAudit({
         ...current,
-        followUps: current.followUps.map((followUp) => followUp.id === followUpId
-          ? { ...followUp, status: "completed", completedAt: new Date().toISOString() }
-          : followUp),
+        followUps: nextFollowUps,
       }, "follow_up", followUpId, "follow_up.completed", "Follow-up marked complete");
+      if (!input.nextFollowUp) return result;
+      const nextDueAt = new Date(input.nextFollowUp.dueAt);
+      if (Number.isNaN(nextDueAt.getTime())) return result;
+      const nextId = createId("followup");
+      const note = input.nextFollowUp.note?.trim() || undefined;
+      nextFollowUps = [...result.followUps, {
+        id: nextId,
+        churchId: current.church.id,
+        propertyId: existing.propertyId,
+        sourceVisitId: existing.sourceVisitId,
+        assignedTeamId: input.nextFollowUp.assignedTeamId,
+        dueAt: nextDueAt.toISOString(),
+        status: "scheduled" as const,
+        note,
+        parentFollowUpId: existing.id,
+        history: [{
+          id: createId("activity"),
+          action: "created" as const,
+          note,
+          dueAt: nextDueAt.toISOString(),
+          actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
+          createdAt: now,
+        }],
+        createdAt: now,
+      }];
+      result = addAudit({ ...result, followUps: nextFollowUps }, "follow_up", nextId, "follow_up.created", "Additional follow-up scheduled");
+      return result;
     });
   }, [updateData]);
 
-  const rescheduleFollowUp = useCallback((followUpId: string, date: string) => {
+  const rescheduleFollowUp = useCallback((followUpId: string, date: string, note?: string) => {
     updateData((current) => {
       const dueAt = new Date(`${date}T17:00:00`);
       if (!date || Number.isNaN(dueAt.getTime()) || !current.followUps.some((followUp) => followUp.id === followUpId && followUp.status === "scheduled")) return current;
+      const activityNote = note?.trim() || undefined;
+      const now = new Date().toISOString();
       return addAudit({
         ...current,
         followUps: current.followUps.map((followUp) => followUp.id === followUpId && followUp.status === "scheduled"
-          ? { ...followUp, dueAt: dueAt.toISOString() }
+          ? {
+            ...followUp,
+            dueAt: dueAt.toISOString(),
+            history: [...followUp.history, {
+              id: createId("activity"),
+              action: "rescheduled" as const,
+              note: activityNote,
+              dueAt: dueAt.toISOString(),
+              actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
+              createdAt: now,
+            }],
+          }
           : followUp),
       }, "follow_up", followUpId, "follow_up.rescheduled", "Follow-up date changed");
     });
   }, [updateData]);
 
-  const cancelFollowUp = useCallback((followUpId: string) => {
+  const cancelFollowUp = useCallback((followUpId: string, note?: string) => {
     updateData((current) => {
       if (!current.followUps.some((followUp) => followUp.id === followUpId && followUp.status === "scheduled")) return current;
+      const now = new Date().toISOString();
       return addAudit({
         ...current,
         followUps: current.followUps.map((followUp) => followUp.id === followUpId
-          ? { ...followUp, status: "cancelled" }
+          ? {
+            ...followUp,
+            status: "cancelled",
+            history: [...followUp.history, {
+              id: createId("activity"),
+              action: "cancelled" as const,
+              note: note?.trim() || undefined,
+              actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
+              createdAt: now,
+            }],
+          }
           : followUp),
       }, "follow_up", followUpId, "follow_up.cancelled", "Follow-up cancelled");
+    });
+  }, [updateData]);
+
+  const upsertResident = useCallback((propertyId: string, input: ResidentInput, residentId?: string) => {
+    updateData((current) => {
+      const property = current.properties.find((item) => item.id === propertyId);
+      if (!property || !input.consentToStore) return current;
+      const hasContactDetails = Boolean(input.phone?.trim() || input.email?.trim() || input.preferredContact !== "none");
+      if (hasContactDetails && !input.consentToContact) return current;
+      const existing = residentId ? current.residents.find((resident) => resident.id === residentId) : undefined;
+      const now = new Date().toISOString();
+      const id = existing?.id ?? createId("resident");
+      const resident = {
+        id,
+        churchId: current.church.id,
+        propertyId,
+        name: input.name?.trim() || undefined,
+        faithStatus: input.faithStatus,
+        phone: input.consentToContact ? input.phone?.trim() || undefined : undefined,
+        email: input.consentToContact ? input.email?.trim() || undefined : undefined,
+        preferredContact: input.consentToContact ? input.preferredContact : "none" as const,
+        consentToStore: true as const,
+        consentToContact: input.consentToContact,
+        consentRecordedAt: input.consentRecordedAt,
+        notes: input.notes?.trim() || undefined,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      return addAudit({
+        ...current,
+        residents: existing
+          ? current.residents.map((item) => item.id === id ? resident : item)
+          : [...current.residents, resident],
+      }, "resident", id, existing ? "resident.updated" : "resident.created", `Permission-based person record ${existing ? "updated" : "added"} at ${property.address}`);
+    });
+  }, [updateData]);
+
+  const deleteResident = useCallback((residentId: string) => {
+    updateData((current) => {
+      if (!current.residents.some((resident) => resident.id === residentId)) return current;
+      return addAudit({
+        ...current,
+        residents: current.residents.filter((resident) => resident.id !== residentId),
+      }, "resident", residentId, "resident.deleted", "Person record deleted or permission withdrawn", "delete");
     });
   }, [updateData]);
 
@@ -610,6 +754,80 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     });
   }, [supabaseUser, updateData]);
 
+  const deleteTerritory = useCallback((territoryId: string) => {
+    if (supabaseUser && roleRef.current !== "leader") return;
+    updateData((current) => {
+      const territory = current.territories.find((item) => item.id === territoryId);
+      if (!territory || current.territories.length <= 1) return current;
+      const propertyIds = new Set(current.properties.filter((property) => property.territoryId === territoryId).map((property) => property.id));
+      const fallback = current.territories.find((item) => item.id !== territoryId)!;
+      const cleared = {
+        ...current,
+        territories: current.territories.filter((item) => item.id !== territoryId),
+        teams: current.teams.map((team) => ({ ...team, territoryIds: team.territoryIds.filter((id) => id !== territoryId) })),
+        properties: current.properties.filter((property) => !propertyIds.has(property.id)),
+        visits: current.visits.filter((visit) => !propertyIds.has(visit.propertyId)),
+        followUps: current.followUps.filter((followUp) => !propertyIds.has(followUp.propertyId)),
+        residents: current.residents.filter((resident) => !propertyIds.has(resident.propertyId)),
+        preferences: {
+          ...current.preferences,
+          activeTerritoryId: current.preferences.activeTerritoryId === territoryId ? fallback.id : current.preferences.activeTerritoryId,
+        },
+      };
+      const audited = addAudit(cleared, "territory", territoryId, "territory.deleted", `${territory.name} and its outreach records deleted`, "delete");
+      return {
+        ...audited,
+        sync: { ...audited.sync, pending: [...audited.sync.pending, mutation("data", current.church.id)].slice(-2000) },
+      };
+    });
+  }, [supabaseUser, updateData]);
+
+  const addTeam = useCallback((update: TeamUpdate) => {
+    const teamId = createId("team");
+    if (supabaseUser && roleRef.current !== "leader") return teamId;
+    updateData((current) => addAudit({
+      ...current,
+      teams: [...current.teams, {
+        id: teamId,
+        churchId: current.church.id,
+        eventId: current.preferences.activeEventId,
+        name: update.name.trim(),
+        memberIds: [...new Set(update.memberIds)],
+        territoryIds: [],
+        status: update.status,
+      }],
+    }, "team", teamId, "team.created", `${update.name.trim()} created`));
+    return teamId;
+  }, [supabaseUser, updateData]);
+
+  const updateTeam = useCallback((teamId: string, update: TeamUpdate) => {
+    if (supabaseUser && roleRef.current !== "leader") return;
+    updateData((current) => addAudit({
+      ...current,
+      teams: current.teams.map((team) => team.id === teamId
+        ? { ...team, name: update.name.trim(), memberIds: [...new Set(update.memberIds)], status: update.status }
+        : team),
+    }, "team", teamId, "team.updated", `${update.name.trim()} updated`));
+  }, [supabaseUser, updateData]);
+
+  const deleteTeam = useCallback((teamId: string) => {
+    if (supabaseUser && roleRef.current !== "leader") return;
+    updateData((current) => {
+      const team = current.teams.find((item) => item.id === teamId);
+      if (!team) return current;
+      return addAudit({
+        ...current,
+        teams: current.teams.filter((item) => item.id !== teamId),
+        territories: current.territories.map((territory) => territory.assignedTeamId === teamId
+          ? { ...territory, assignedTeamId: undefined }
+          : territory),
+        followUps: current.followUps.map((followUp) => followUp.assignedTeamId === teamId
+          ? { ...followUp, assignedTeamId: undefined }
+          : followUp),
+      }, "team", teamId, "team.deleted", `${team.name} deleted`, "delete");
+    });
+  }, [supabaseUser, updateData]);
+
   const downloadBackup = useCallback(() => {
     if (supabaseUser && roleRef.current !== "leader") return;
     if (!data) return;
@@ -638,17 +856,20 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     return next;
   }, [supabaseUser]);
 
-  const resetDemo = useCallback(async () => {
-    if (supabaseUser && roleRef.current !== "leader") throw new Error("Only a church leader can reset workspace data.");
-    const reset = await resetNeighborWalkData();
-    const connected = Boolean(supabaseUser && getSupabaseBrowserClient());
-    const next = connected ? {
-      ...reset,
-      sync: { ...reset.sync, mode: "connected" as const, pending: [mutation("data", reset.church.id)] },
-    } : reset;
-    setData(next);
-    return next;
-  }, [supabaseUser]);
+  const clearOutreachData = useCallback(() => {
+    if (supabaseUser && roleRef.current !== "leader") return;
+    updateData((current) => {
+      const removed = current.properties.length + current.visits.length + current.followUps.length + current.residents.length;
+      return addAudit({
+        ...current,
+        properties: [],
+        visits: [],
+        followUps: [],
+        residents: [],
+        audit: [],
+      }, "data", current.church.id, "data.outreach_cleared", `${removed} sample or outreach records cleared`);
+    });
+  }, [supabaseUser, updateData]);
 
   const purgeExpired = useCallback(() => {
     if (supabaseUser && roleRef.current !== "leader") return;
@@ -822,13 +1043,19 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       completeFollowUp,
       rescheduleFollowUp,
       cancelFollowUp,
+      upsertResident,
+      deleteResident,
       updateGuideStep,
       updateChurch,
       addTerritory,
       updateTerritory,
+      deleteTerritory,
+      addTeam,
+      updateTeam,
+      deleteTeam,
       downloadBackup,
       importBackup,
-      resetDemo,
+      clearOutreachData,
       purgeExpired,
       syncNow,
     },

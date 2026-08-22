@@ -19,7 +19,6 @@ import {
   Search,
   Settings2,
   ShieldCheck,
-  TimerReset,
   Undo2,
   Users,
   WifiOff,
@@ -85,17 +84,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const [editingTerritoryId, setEditingTerritoryId] = useState<string | null>(null);
   const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
   const [mapLayersOpen, setMapLayersOpen] = useState(false);
-  const [walkStartedAt, setWalkStartedAt] = useState<number | null>(null);
-  const [elapsed, setElapsed] = useState(0);
   const [toast, setToast] = useState("");
-
-  useEffect(() => {
-    if (!walkStartedAt) return;
-    const update = () => setElapsed(Math.floor((Date.now() - walkStartedAt) / 1000));
-    update();
-    const timer = window.setInterval(update, 1000);
-    return () => window.clearInterval(timer);
-  }, [walkStartedAt]);
 
   useEffect(() => {
     if (!toast) return;
@@ -185,8 +174,6 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
     }
     actions.setPreference("lastView", next);
   };
-
-  const formatElapsed = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 
   const handleAddProperty = (address: string, unit: string) => {
     if (!pendingAdd) return;
@@ -340,15 +327,14 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
                   {canManage && !drawMode && <button className="map-action-button secondary" aria-label="Draw a territory" onClick={startDrawing}><MapPinned size={18} /><span>Draw territory</span></button>}
                 </div>
                 {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => points.slice(0, -1))}><Undo2 size={15} /> Undo</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={draftBoundary.length < 3} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
-                {!selectedProperty && !drawMode && <div className="walk-dock"><div><span>{walkStartedAt ? "Walk in progress" : "Ready for the next block"}</span><strong>{walkStartedAt ? formatElapsed(elapsed) : `${coverage.remaining} locations remaining`}</strong></div><button className={walkStartedAt ? "button quiet" : "button primary"} onClick={() => { if (walkStartedAt) { setWalkStartedAt(null); setElapsed(0); setToast("Walk session finished"); } else { setWalkStartedAt(Date.now()); setToast("Walk session started"); } }}>{walkStartedAt ? <><TimerReset size={15} /> Finish</> : <><Navigation size={15} /> Start walk</>}</button></div>}
               </div>
-              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} canManage={canManage} onClose={() => setSelectedPropertyId(null)} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} />}
+              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} canManage={canManage} onClose={() => setSelectedPropertyId(null)} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
             </section>
           )}
-          {view === "followups" && <FollowUpsView data={data} onOpenProperty={(propertyId) => { navigate("map"); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onComplete={(id) => { actions.completeFollowUp(id); setToast("Follow-up completed"); }} onReschedule={(id, date) => { actions.rescheduleFollowUp(id, date); setToast("Follow-up rescheduled"); }} onCancel={(id) => { actions.cancelFollowUp(id); setToast("Follow-up cancelled"); }} />}
+          {view === "followups" && <FollowUpsView data={data} onOpenProperty={(propertyId) => { navigate("map"); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onComplete={(id, input) => { actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next visit scheduled" : "Follow-up completed"); }} onReschedule={(id, date, note) => { actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={(id, note) => { actions.cancelFollowUp(id, note); setToast("Follow-up cancelled"); }} />}
           {view === "guide" && <GuideView data={data} canManage={canManage} onUpdate={(id, patch) => { actions.updateGuideStep(id, patch); setToast("Guide step saved"); }} />}
-          {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} />}
-          {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onReset={actions.resetDemo} onSync={actions.syncNow} />}
+          {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} />}
+          {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onClearOutreach={actions.clearOutreachData} onSync={actions.syncNow} />}
         </section>
       </div>
 
@@ -362,7 +348,10 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
       {pendingAdd && <AddPropertyModal intent={pendingAdd} existingDwellingCount={pendingParcelDwellings.length} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
       {selectedParcel && <ParcelSummaryModal selection={selectedParcel} dwellings={selectedParcelDwellings} onClose={() => setSelectedParcel(null)} onOpenDwelling={(propertyId) => { setSelectedParcel(null); setSelectedPropertyId(propertyId); }} onAddDwelling={beginAddingDwelling} />}
       {territoryPickerOpen && <TerritoryPickerModal data={data} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onEdit={openTerritoryEditor} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
-      {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} teams={territoryEditorTeams} boundaryChanged={draftBoundary.length >= 3} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onSave={(name, color, assignedTeamId) => {
+      {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} teams={territoryEditorTeams} boundaryChanged={draftBoundary.length >= 3} canDelete={data.territories.length > 1} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onDelete={editingTerritory ? () => {
+        actions.deleteTerritory(editingTerritory.id);
+        setSelectedPropertyId(null); setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false); setToast("Territory deleted");
+      } : undefined} onSave={(name, color, assignedTeamId) => {
         if (editingTerritory) {
           const replacementBoundary = draftBoundary.length >= 3 ? draftBoundary : undefined;
           actions.updateTerritory(editingTerritory.id, {
@@ -455,17 +444,21 @@ function ParcelSummaryModal({ selection, dwellings, onClose, onOpenDwelling, onA
   );
 }
 
-function TerritoryModal({ territory, teams, boundaryChanged, onClose, onRedraw, onSave }: {
+function TerritoryModal({ territory, teams, boundaryChanged, canDelete, onClose, onRedraw, onDelete, onSave }: {
   territory?: Territory;
   teams: NeighborWalkData["teams"];
   boundaryChanged: boolean;
+  canDelete: boolean;
   onClose: () => void;
   onRedraw?: () => void;
+  onDelete?: () => void;
   onSave: (name: string, color: string, assignedTeamId: string) => void;
 }) {
   const [name, setName] = useState(territory?.name ?? "");
   const [color, setColor] = useState(territory?.color ?? "#286c59");
   const [assignedTeamId, setAssignedTeamId] = useState(territory?.assignedTeamId ?? "");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const editing = Boolean(territory);
   const boundaryPoints = boundaryChanged ? "Replacement boundary ready" : `${territory?.boundary.length ?? 0} boundary points`;
 
@@ -486,8 +479,10 @@ function TerritoryModal({ territory, teams, boundaryChanged, onClose, onRedraw, 
           <div><strong>{boundaryPoints}</strong><small>Existing locations and visit history stay attached to this territory.</small></div>
           {editing && onRedraw && <button className="button quiet small" onClick={onRedraw}><Edit3 size={14} /> Redraw</button>}
         </div>
+        {editing && deleting && <div className="territory-delete-confirm"><strong>Delete this territory and its records?</strong><p>Mapped locations, visits, follow-ups, and person records inside this territory will be deleted. Type the territory name to confirm.</p><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} aria-label="Territory name confirmation" /></div>}
       </div>
-      <div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => onSave(name, color, assignedTeamId)} disabled={name.trim().length < 3}><Check size={15} /> {editing ? "Save changes" : "Create territory"}</button></div>
+      <div className="modal-actions split">{editing && onDelete ? <button className="button danger" disabled={!canDelete || (deleting && deleteConfirmation !== territory?.name)} onClick={() => deleting ? onDelete() : setDeleting(true)}>{deleting ? "Confirm deletion" : "Delete territory"}</button> : <span />}<div><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => onSave(name, color, assignedTeamId)} disabled={name.trim().length < 3}><Check size={15} /> {editing ? "Save changes" : "Create territory"}</button></div></div>
+      {editing && !canDelete && <p className="modal-footnote">Create another territory before deleting the last one.</p>}
     </Modal>
   );
 }

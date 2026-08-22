@@ -13,6 +13,7 @@ import {
 import { createSeedData, createWorkspaceData } from "../lib/seed";
 import { withSecurityHeaders } from "../lib/security-headers";
 import { mapTilerStyleUrlForKey } from "../lib/map-config";
+import { migrateNeighborWalkData } from "../lib/storage";
 
 describe("NeighborWalk domain", () => {
   it("builds a MapTiler style URL only from a configured key", () => {
@@ -41,7 +42,54 @@ describe("NeighborWalk domain", () => {
     expect(data.territories[0].center).toEqual([-87.3347, 35.2423]);
     expect(data.properties).toHaveLength(0);
     expect(data.visits).toHaveLength(0);
+    expect(data.residents).toHaveLength(0);
     expect(data.volunteers[0]).toMatchObject({ email: "erica@example.org", role: "leader" });
+  });
+
+  it("migrates version 5 snapshots without losing existing follow-ups", () => {
+    const current = createSeedData();
+    const legacy = {
+      ...current,
+      schemaVersion: 5,
+      residents: undefined,
+      followUps: current.followUps.map((followUp) => {
+        const legacyFollowUp: Record<string, unknown> = { ...followUp };
+        delete legacyFollowUp.history;
+        return legacyFollowUp;
+      }),
+    };
+    const migrated = migrateNeighborWalkData(legacy);
+    const parsed = neighborWalkDataSchema.safeParse(migrated);
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.residents).toEqual([]);
+    expect(parsed.data.followUps).toHaveLength(current.followUps.length);
+    expect(parsed.data.followUps.every((followUp) => Array.isArray(followUp.history))).toBe(true);
+  });
+
+  it("requires separate contact permission for resident contact details", () => {
+    const data = createSeedData();
+    const resident = {
+      id: "resident_test",
+      churchId: data.church.id,
+      propertyId: data.properties[0].id,
+      name: "Shared voluntarily",
+      faithStatus: "exploring" as const,
+      phone: "555-0100",
+      preferredContact: "text" as const,
+      consentToStore: true as const,
+      consentToContact: false,
+      consentRecordedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    expect(neighborWalkDataSchema.safeParse({ ...data, residents: [resident] }).success).toBe(false);
+    expect(neighborWalkDataSchema.safeParse({
+      ...data,
+      residents: [{ ...resident, consentToContact: true }],
+    }).success).toBe(true);
   });
 
   it("calculates territory coverage from the current state", () => {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const APP_SCHEMA_VERSION = 5;
+export const APP_SCHEMA_VERSION = 6;
 
 export const outcomeValues = [
   "unvisited",
@@ -122,6 +122,8 @@ export type Team = {
   status: "ready" | "active" | "finished";
 };
 
+export type TeamUpdate = Pick<Team, "name" | "memberIds" | "status">;
+
 export type ParcelReference = {
   id?: number;
   countyFips: string;
@@ -159,6 +161,55 @@ export type Visit = {
   deviceId: string;
 };
 
+export const faithStatusValues = [
+  "not_discussed",
+  "christian",
+  "exploring",
+  "another_faith",
+  "no_faith",
+  "prefer_not_to_say",
+] as const;
+
+export type FaithStatus = (typeof faithStatusValues)[number];
+export type ContactPreference = "none" | "text" | "call" | "email";
+
+export const faithStatusLabels: Record<FaithStatus, string> = {
+  not_discussed: "Not discussed",
+  christian: "Christian",
+  exploring: "Exploring or curious",
+  another_faith: "Another faith",
+  no_faith: "No faith",
+  prefer_not_to_say: "Prefers not to say",
+};
+
+export type Resident = {
+  id: string;
+  churchId: string;
+  propertyId: string;
+  name?: string;
+  faithStatus: FaithStatus;
+  phone?: string;
+  email?: string;
+  preferredContact: ContactPreference;
+  consentToStore: true;
+  consentToContact: boolean;
+  consentRecordedAt: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ResidentInput = Omit<Resident, "id" | "churchId" | "propertyId" | "createdAt" | "updatedAt">;
+
+export type FollowUpActivity = {
+  id: string;
+  action: "created" | "rescheduled" | "note" | "completed" | "cancelled";
+  note?: string;
+  dueAt?: string;
+  actorId: string;
+  createdAt: string;
+};
+
 export type FollowUp = {
   id: string;
   churchId: string;
@@ -168,8 +219,20 @@ export type FollowUp = {
   dueAt: string;
   status: "scheduled" | "completed" | "cancelled";
   note?: string;
+  completionNote?: string;
+  parentFollowUpId?: string;
+  history: FollowUpActivity[];
   createdAt: string;
   completedAt?: string;
+};
+
+export type FollowUpCompletionInput = {
+  completionNote?: string;
+  nextFollowUp?: {
+    dueAt: string;
+    note?: string;
+    assignedTeamId?: string;
+  };
 };
 
 export type GuideStep = {
@@ -186,7 +249,7 @@ export type GuideStep = {
 export type AuditEntry = {
   id: string;
   action: string;
-  entityType: "property" | "visit" | "follow_up" | "territory" | "settings" | "guide" | "data";
+  entityType: "property" | "visit" | "follow_up" | "resident" | "team" | "territory" | "settings" | "guide" | "data";
   entityId: string;
   actorId: string;
   createdAt: string;
@@ -229,6 +292,7 @@ export type NeighborWalkData = {
   properties: Property[];
   visits: Visit[];
   followUps: FollowUp[];
+  residents: Resident[];
   guide: GuideStep[];
   audit: AuditEntry[];
   preferences: AppPreferences;
@@ -242,6 +306,46 @@ const coordinatesSchema = z.tuple([
 ]);
 
 const outcomeSchema = z.enum(outcomeValues);
+const followUpActivitySchema = z.object({
+  id: z.string().min(1),
+  action: z.enum(["created", "rescheduled", "note", "completed", "cancelled"]),
+  note: z.string().max(2000).optional(),
+  dueAt: z.string().datetime().optional(),
+  actorId: z.string().min(1),
+  createdAt: z.string().datetime(),
+});
+
+const residentSchema = z.object({
+  id: z.string().min(1),
+  churchId: z.string().min(1),
+  propertyId: z.string().min(1),
+  name: z.string().min(1).max(120).optional(),
+  faithStatus: z.enum(faithStatusValues),
+  phone: z.string().min(3).max(40).optional(),
+  email: z.string().email().max(254).optional(),
+  preferredContact: z.enum(["none", "text", "call", "email"]),
+  consentToStore: z.literal(true),
+  consentToContact: z.boolean(),
+  consentRecordedAt: z.string().datetime(),
+  notes: z.string().max(2000).optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).superRefine((resident, context) => {
+  const hasContactDetails = Boolean(resident.phone || resident.email || resident.preferredContact !== "none");
+  if (hasContactDetails && !resident.consentToContact) {
+    context.addIssue({
+      code: "custom",
+      path: ["consentToContact"],
+      message: "Contact details require permission to contact.",
+    });
+  }
+  if (resident.preferredContact === "email" && !resident.email) {
+    context.addIssue({ code: "custom", path: ["email"], message: "Email is required for email contact." });
+  }
+  if (["text", "call"].includes(resident.preferredContact) && !resident.phone) {
+    context.addIssue({ code: "custom", path: ["phone"], message: "A phone number is required for text or call contact." });
+  }
+});
 
 export function isSafeWebUrl(value: string): boolean {
   try {
@@ -342,9 +446,13 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
     dueAt: z.string().datetime(),
     status: z.enum(["scheduled", "completed", "cancelled"]),
     note: z.string().max(2000).optional(),
+    completionNote: z.string().max(2000).optional(),
+    parentFollowUpId: z.string().optional(),
+    history: z.array(followUpActivitySchema),
     createdAt: z.string().datetime(),
     completedAt: z.string().datetime().optional(),
   })),
+  residents: z.array(residentSchema),
   guide: z.array(z.object({
     id: z.string().min(1),
     order: z.number().int().min(1),
@@ -358,7 +466,7 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
   audit: z.array(z.object({
     id: z.string().min(1),
     action: z.string().min(1),
-    entityType: z.enum(["property", "visit", "follow_up", "territory", "settings", "guide", "data"]),
+    entityType: z.enum(["property", "visit", "follow_up", "resident", "team", "territory", "settings", "guide", "data"]),
     entityId: z.string().min(1),
     actorId: z.string().min(1),
     createdAt: z.string().datetime(),
@@ -379,7 +487,7 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
     lastSyncedAt: z.string().datetime().optional(),
     pending: z.array(z.object({
       id: z.string().min(1),
-      entityType: z.enum(["property", "visit", "follow_up", "territory", "settings", "guide", "data"]),
+      entityType: z.enum(["property", "visit", "follow_up", "resident", "team", "territory", "settings", "guide", "data"]),
       entityId: z.string().min(1),
       operation: z.enum(["upsert", "delete"]),
       changedAt: z.string().datetime(),
@@ -425,6 +533,12 @@ export function visitsForProperty(data: NeighborWalkData, propertyId: string): V
   return data.visits
     .filter((visit) => visit.propertyId === propertyId)
     .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
+}
+
+export function residentsForProperty(data: NeighborWalkData, propertyId: string): Resident[] {
+  return data.residents
+    .filter((resident) => resident.propertyId === propertyId)
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
 }
 
 export function coverageForTerritory(data: NeighborWalkData, territoryId: string) {
@@ -491,6 +605,12 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
     (followUp) => followUp.status === "scheduled" || keepVisitIds.has(followUp.sourceVisitId),
   );
   const keepAudit = data.audit.filter((entry) => new Date(entry.createdAt) >= cutoff);
+  const activeFollowUpPropertyIds = new Set(
+    keepFollowUps.filter((followUp) => followUp.status === "scheduled").map((followUp) => followUp.propertyId),
+  );
+  const keepResidents = data.residents.filter(
+    (resident) => activeFollowUpPropertyIds.has(resident.propertyId) || new Date(resident.updatedAt) >= cutoff,
+  );
   const properties = data.properties.map((property) => {
     const retainedVisits = keepVisits
       .filter((visit) => visit.propertyId === property.id)
@@ -504,5 +624,5 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
       visitCount: retainedVisits.length,
     };
   });
-  return { ...data, properties, visits: keepVisits, followUps: keepFollowUps, audit: keepAudit };
+  return { ...data, properties, visits: keepVisits, followUps: keepFollowUps, residents: keepResidents, audit: keepAudit };
 }
