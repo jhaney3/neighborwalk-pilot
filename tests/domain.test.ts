@@ -2,16 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   APP_SCHEMA_VERSION,
   centerForBoundary,
-  coverageForTerritory,
   deleteTeamRecord,
   deleteTerritoryRecord,
   enforceRetention,
+  formatPhoneNumber,
   isFollowUpOverdue,
   isSafeWebUrl,
   neighborWalkDataSchema,
   updateTerritoryRecord,
   visitsForProperty,
 } from "../lib/domain";
+import type { ParcelFeatureCollection } from "../lib/parcels";
+import { coverageForTerritory } from "../lib/territory-coverage";
 import { createSeedData, createWorkspaceData } from "../lib/seed";
 import { withSecurityHeaders } from "../lib/security-headers";
 import { mapTilerStyleUrlForKey } from "../lib/map-config";
@@ -94,16 +96,92 @@ describe("NeighborWalk domain", () => {
     }).success).toBe(true);
   });
 
+  it("formats stored phone numbers consistently for display", () => {
+    expect(formatPhoneNumber("5550100142")).toBe("(555) 010-0142");
+    expect(formatPhoneNumber("555.010.0142")).toBe("(555) 010-0142");
+    expect(formatPhoneNumber("1-555-010-0142")).toBe("+1 (555) 010-0142");
+    expect(formatPhoneNumber("5550100 x24")).toBe("555-0100 ext. 24");
+    expect(formatPhoneNumber("+44 20 7946 0958")).toBe("+44 20 7946 0958");
+  });
+
   it("calculates territory coverage from the current state", () => {
     const data = createSeedData();
     const territory = data.territories[0];
     const properties = data.properties.filter((property) => property.territoryId === territory.id);
-    const visited = properties.filter((property) => property.currentOutcome !== "unvisited").length;
+    const touched = properties.filter((property) => property.currentOutcome !== "unvisited").length;
     expect(coverageForTerritory(data, territory.id)).toEqual({
       total: properties.length,
-      visited,
-      remaining: properties.length - visited,
-      percent: properties.length ? Math.round((visited / properties.length) * 100) : 0,
+      touched,
+      remaining: properties.length - touched,
+      percent: properties.length ? Math.round((touched / properties.length) * 100) : 0,
+      basis: "mapped_locations",
+    });
+  });
+
+  it("measures coverage against residential parcels and counts no-answer visits as touched", () => {
+    const seed = createSeedData();
+    const territory = {
+      ...seed.territories[0],
+      id: "territory_parcel_coverage",
+      boundary: [[0, 0], [1, 0], [1, 1], [0, 1]] as [number, number][],
+      center: [0.5, 0.5] as [number, number],
+    };
+    const properties = [
+      {
+        ...seed.properties[0],
+        territoryId: territory.id,
+        coordinates: [0.25, 0.25] as [number, number],
+        currentOutcome: "no_answer" as const,
+        parcel: { countyFips: "47099", gislink: "RES-TOUCHED" },
+      },
+      {
+        ...seed.properties[1],
+        territoryId: territory.id,
+        coordinates: [0.75, 0.75] as [number, number],
+        currentOutcome: "unvisited" as const,
+        parcel: { countyFips: "47099", gislink: "RES-OPEN" },
+      },
+    ];
+    const parcel = (id: number, gislink: string, isResidential: boolean, offset: number) => ({
+      type: "Feature" as const,
+      id,
+      properties: {
+        id,
+        countyFips: "47099",
+        gislink,
+        situsAddress: null,
+        propertyClass: null,
+        landUse: null,
+        isResidential,
+      },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [[
+          [offset, offset],
+          [offset + 0.1, offset],
+          [offset + 0.1, offset + 0.1],
+          [offset, offset + 0.1],
+          [offset, offset],
+        ]],
+      },
+    });
+    const parcels: ParcelFeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        parcel(1, "RES-TOUCHED", true, 0.2),
+        parcel(2, "RES-OPEN", true, 0.7),
+        parcel(3, "COMMERCIAL", false, 0.4),
+        parcel(4, "OUTSIDE", true, 1.1),
+      ],
+    };
+    const data = { ...seed, territories: [territory], properties };
+
+    expect(coverageForTerritory(data, territory.id, parcels)).toEqual({
+      total: 2,
+      touched: 1,
+      remaining: 1,
+      percent: 50,
+      basis: "residential_parcels",
     });
   });
 

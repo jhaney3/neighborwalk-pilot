@@ -683,7 +683,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         residents: existing
           ? current.residents.map((item) => item.id === id ? resident : item)
           : [...current.residents, resident],
-      }, "resident", id, existing ? "resident.updated" : "resident.created", `Permission-based person record ${existing ? "updated" : "added"} at ${property.address}`);
+      }, "resident", id, existing ? "resident.updated" : "resident.created", `Person record ${existing ? "updated" : "added"} at ${property.address}`);
     });
   }, [updateData]);
 
@@ -693,7 +693,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       return addAudit({
         ...current,
         residents: current.residents.filter((resident) => resident.id !== residentId),
-      }, "resident", residentId, "resident.deleted", "Person record deleted or permission withdrawn", "delete");
+      }, "resident", residentId, "resident.deleted", "Person record deleted", "delete");
     });
   }, [updateData]);
 

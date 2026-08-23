@@ -42,7 +42,7 @@ export const outcomeMeta: Record<
     label: "Follow-up requested",
     short: "Follow-up",
     color: "#e9a84a",
-    description: "The resident gave permission for a return visit.",
+    description: "A return visit was requested.",
   },
   declined: {
     label: "Politely declined",
@@ -357,6 +357,27 @@ export function isSafeWebUrl(value: string): boolean {
   }
 }
 
+export function formatPhoneNumber(value: string): string {
+  const trimmed = value.trim();
+  const extensionMatch = trimmed.match(/\s*(?:ext\.?|x)\s*(\d+)$/i);
+  const extension = extensionMatch?.[1];
+  const base = extensionMatch ? trimmed.slice(0, extensionMatch.index).trim() : trimmed;
+  const digits = base.replace(/\D/g, "");
+  const suffix = extension ? ` ext. ${extension}` : "";
+
+  if (digits.length === 7) {
+    return `${digits.slice(0, 3)}-${digits.slice(3)}${suffix}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}${suffix}`;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}${suffix}`;
+  }
+
+  return trimmed;
+}
+
 export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
   schemaVersion: z.literal(APP_SCHEMA_VERSION),
   church: z.object({
@@ -539,17 +560,6 @@ export function residentsForProperty(data: NeighborWalkData, propertyId: string)
   return data.residents
     .filter((resident) => resident.propertyId === propertyId)
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-}
-
-export function coverageForTerritory(data: NeighborWalkData, territoryId: string) {
-  const properties = data.properties.filter((property) => property.territoryId === territoryId);
-  const visited = properties.filter((property) => property.currentOutcome !== "unvisited").length;
-  return {
-    total: properties.length,
-    visited,
-    remaining: properties.length - visited,
-    percent: properties.length ? Math.round((visited / properties.length) * 100) : 0,
-  };
 }
 
 export function centerForBoundary(boundary: Coordinates[]): Coordinates {

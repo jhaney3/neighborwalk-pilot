@@ -10,17 +10,8 @@ import { shouldNavigateToTerritory } from "../lib/map-camera";
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
 import { parcelKey, parcelProgress, propertyParcelKey } from "../lib/parcel-groups";
 import {
-  cacheTerritoryParcels,
-  getCachedTerritoryParcels,
-  isTerritoryParcelCacheFresh,
-} from "../lib/parcel-cache";
-import {
-  fetchParcelDatasetRevision,
-  fetchParcelsForTerritory,
-  territoryBoundarySignature,
   type ParcelDetails,
   type ParcelFeatureCollection,
-  type TerritoryParcelResult,
 } from "../lib/parcels";
 
 const BUILDING_OUTLINE_LAYER_ID = "neighborwalk-building-outlines";
@@ -62,6 +53,7 @@ type Props = {
   draftBoundary: Coordinates[];
   compactMarkers: boolean;
   mapStyleUrl: string;
+  parcels?: ParcelFeatureCollection;
   onSelectProperty: (id: string) => void;
   onAddIntent: (intent: AddIntent) => void;
   onAssociatePropertiesWithParcel: (propertyIds: string[], parcel: ParcelDetails) => void;
@@ -516,6 +508,7 @@ export function MapCanvas({
   draftBoundary,
   compactMarkers,
   mapStyleUrl,
+  parcels,
   onSelectProperty,
   onAddIntent,
   onAssociatePropertiesWithParcel,
@@ -537,9 +530,7 @@ export function MapCanvas({
     searchQuery,
     compactMarkers,
   ));
-  const parcelRequestRef = useRef(0);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
-  const boundarySignature = territoryBoundarySignature(territory.boundary);
   const territoryLongitude = territory.center[0];
   const territoryLatitude = territory.center[1];
 
@@ -553,68 +544,16 @@ export function MapCanvas({
   }, [addMode, drawMode, draftBoundary]);
 
   useEffect(() => {
-    const requestId = ++parcelRequestRef.current;
-    let cancelled = false;
-
-    const display = (result: TerritoryParcelResult) => {
-      if (cancelled || requestId !== parcelRequestRef.current) return;
-      parcelDataRef.current = result.parcels;
-      for (const association of legacyParcelAssociations(result.parcels, propertiesRef.current)) {
-        callbacksRef.current.onAssociatePropertiesWithParcel(association.propertyIds, association.parcel);
-      }
-      const map = mapRef.current;
-      if (map?.getSource(PARCEL_SOURCE_ID)) {
-        updateGeoJsonSource(map, PARCEL_SOURCE_ID, mappedParcelFeatureCollection(result.parcels, propertiesRef.current));
-      }
-    };
-
-    void (async () => {
-      await Promise.resolve();
-      if (cancelled || requestId !== parcelRequestRef.current) return;
-      parcelDataRef.current = EMPTY_PARCELS;
-      if (mapRef.current?.getSource(PARCEL_SOURCE_ID)) {
-        updateGeoJsonSource(mapRef.current, PARCEL_SOURCE_ID, EMPTY_PARCELS);
-      }
-
-      let cached = null;
-      try {
-        cached = await getCachedTerritoryParcels(territory.id, boundarySignature);
-      } catch {
-        // IndexedDB can be unavailable in restrictive browser modes; online loading still works.
-      }
-      if (cancelled || requestId !== parcelRequestRef.current) return;
-
-      if (cached) {
-        const cacheIsFresh = isTerritoryParcelCacheFresh(cached.cachedAt);
-        display(cached);
-        if (cacheIsFresh) return;
-        try {
-          const revision = await fetchParcelDatasetRevision();
-          if (revision && revision === cached.datasetRevision) {
-            await cacheTerritoryParcels(territory.id, boundarySignature, cached).catch(() => undefined);
-            display(cached);
-            return;
-          }
-        } catch {
-          display(cached);
-          return;
-        }
-      }
-
-      try {
-        const result = await fetchParcelsForTerritory(territory.boundary);
-        if (!result) return;
-        display(result);
-        await cacheTerritoryParcels(territory.id, boundarySignature, result).catch(() => undefined);
-      } catch {
-        // The parcel overlay is optional; mapped locations and visit records remain available.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [territory.id, territory.boundary, boundarySignature]);
+    const nextParcels = parcels ?? EMPTY_PARCELS;
+    parcelDataRef.current = nextParcels;
+    for (const association of legacyParcelAssociations(nextParcels, propertiesRef.current)) {
+      callbacksRef.current.onAssociatePropertiesWithParcel(association.propertyIds, association.parcel);
+    }
+    const map = mapRef.current;
+    if (map?.getSource(PARCEL_SOURCE_ID)) {
+      updateGeoJsonSource(map, PARCEL_SOURCE_ID, mappedParcelFeatureCollection(nextParcels, propertiesRef.current));
+    }
+  }, [parcels, territory.id]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -634,10 +573,11 @@ export function MapCanvas({
         zoom: initialTerritory.zoom,
         minZoom: 3,
         maxZoom: 20,
-        attributionControl: { compact: true },
+        attributionControl: false,
         cooperativeGestures: true,
       });
       mapRef.current = map;
+      map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left");
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       map.addControl(new maplibregl.GeolocateControl({
         positionOptions: { enableHighAccuracy: true, timeout: 10000 },

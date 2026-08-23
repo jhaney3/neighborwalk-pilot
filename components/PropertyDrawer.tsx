@@ -216,7 +216,7 @@ export function PropertyDrawer({
             <div className="followup-form">
               <label className="consent-check">
                 <input type="checkbox" checked={followUpConsent} onChange={(event) => setFollowUpConsent(event.target.checked)} />
-                <span><ShieldCheck size={16} /><strong>Permission received</strong>The person clearly agreed to another visit.</span>
+                <span><ShieldCheck size={16} /><strong>Return visit confirmed</strong></span>
               </label>
               <div className="form-row">
                 <label className="form-field">
@@ -232,7 +232,7 @@ export function PropertyDrawer({
           )}
 
           {outcome === "follow_up" && data.church.requireFollowUpConsent && !followUpConsent && (
-            <p className="form-warning">Confirm permission before scheduling a follow-up.</p>
+            <p className="form-warning">Check “Return visit confirmed” before saving.</p>
           )}
 
           <div className="drawer-actions">
@@ -259,10 +259,6 @@ export function PropertyDrawer({
         </div>
       ) : (
         <div className="people-panel" role="tabpanel">
-          <div className="people-permission-note">
-            <ShieldCheck size={18} />
-            <span><strong>Permission comes first</strong>Only record information the person offered and clearly allowed the church to keep. Do not create records for minors.</span>
-          </div>
           {editingResident ? (
             <ResidentForm
               resident={editingResident === "new" ? undefined : editingResident}
@@ -275,7 +271,7 @@ export function PropertyDrawer({
             />
           ) : (
             <>
-              <button className="button primary people-add" onClick={() => setEditingResident("new")}><UserRound size={16} /> Add person with permission</button>
+              <button className="button primary people-add" onClick={() => setEditingResident("new")}><UserRound size={16} /> Add person</button>
               <div className="resident-list">
                 {residents.map((resident) => (
                   <article className="resident-card" key={resident.id}>
@@ -283,15 +279,15 @@ export function PropertyDrawer({
                     <div>
                       <strong>{resident.name || "Name not provided"}</strong>
                       <small>{faithStatusLabels[resident.faithStatus]}</small>
-                      {resident.consentToContact && <p><Phone size={12} /> {resident.preferredContact === "none" ? "Contact permission recorded" : `Prefers ${resident.preferredContact}`}</p>}
+                      {resident.consentToContact && <p><Phone size={12} /> {resident.preferredContact === "none" ? "Contact details enabled" : `Prefers ${resident.preferredContact}`}</p>}
                     </div>
                     <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>
                     <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
-                      if (window.confirm("Delete this person record? Use this whenever permission is withdrawn.")) onDeleteResident(resident.id);
+                      if (window.confirm("Delete this person record? This cannot be undone.")) onDeleteResident(resident.id);
                     }}><Trash2 size={14} /></button>
                   </article>
                 ))}
-                {!residents.length && <div className="empty-mini"><Users size={21} /><strong>No person records</strong><span>That is normal. Add one only when someone gives permission.</span></div>}
+                {!residents.length && <div className="empty-mini"><Users size={21} /><strong>No people added</strong></div>}
               </div>
             </>
           )}
@@ -324,7 +320,7 @@ function ResidentForm({ resident, noteLimit, onCancel, onSave }: {
       <div className={`permission-card${consentToStore ? " granted" : ""}`}>
         <label>
           <input type="checkbox" checked={consentToStore} onChange={(event) => setConsentToStore(event.target.checked)} />
-          <span><ShieldCheck size={17} /><strong>Permission to store</strong>The person agreed that the church may keep the information below.</span>
+          <span><ShieldCheck size={17} /><strong>Store person details</strong></span>
         </label>
       </div>
       <div className="form-stack">
@@ -338,7 +334,7 @@ function ResidentForm({ resident, noteLimit, onCancel, onSave }: {
             setConsentToContact(event.target.checked);
             if (!event.target.checked) { setPhone(""); setEmail(""); setPreferredContact("none"); }
           }} />
-          <span><Phone size={17} /><strong>Separate permission to contact</strong>The person agreed that the church may use contact details for follow-up.</span>
+          <span><Phone size={17} /><strong>Use contact details</strong></span>
         </label>
         {consentToContact && <div className="contact-fields">
           <label className="form-field"><span>Phone <small>Optional</small></span><input inputMode="tel" autoComplete="off" maxLength={40} value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
@@ -346,7 +342,7 @@ function ResidentForm({ resident, noteLimit, onCancel, onSave }: {
           <label className="form-field"><span>Preferred contact</span><select value={preferredContact} onChange={(event) => setPreferredContact(event.target.value as Resident["preferredContact"])}><option value="none">No preference</option><option value="text">Text message</option><option value="call">Phone call</option><option value="email">Email</option></select></label>
         </div>}
       </div>
-      {!consentToStore && <p className="form-warning">Confirm permission to store before saving.</p>}
+      {!consentToStore && <p className="form-warning">Check “Store person details” before saving.</p>}
       {consentToContact && !contactMethodValid && <p className="form-warning">Enter the phone number or email needed for the selected contact method.</p>}
       <div className="modal-actions"><button className="button quiet" onClick={onCancel}>Cancel</button><button className="button primary" disabled={!canSave} onClick={() => onSave({
         name: name.trim() || undefined,
@@ -370,7 +366,7 @@ function VisitHistoryItem({ visit, volunteerName }: { visit: Visit; volunteerNam
       <div>
         <div><strong>{outcomeMeta[visit.outcome].label}</strong><span><Clock3 size={12} /> {formatDateTime(visit.recordedAt)}</span></div>
         {visit.objectiveNote && <p>{visit.objectiveNote}</p>}
-        <small>Recorded by {volunteerName}{visit.followUpConsent ? " · Follow-up permission confirmed" : ""}</small>
+        <small>Recorded by {volunteerName}{visit.followUpConsent ? " · Return visit confirmed" : ""}</small>
       </div>
     </article>
   );
