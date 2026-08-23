@@ -15,7 +15,6 @@ import {
   Phone,
   Plus,
   Save,
-  ShieldCheck,
   Trash2,
   UserRound,
   Users,
@@ -42,7 +41,6 @@ type VisitInput = {
   propertyId: string;
   outcome: Exclude<Outcome, "unvisited">;
   objectiveNote?: string;
-  followUpConsent: boolean;
   followUpDate?: string;
   assignedTeamId?: string;
 };
@@ -89,7 +87,6 @@ export function PropertyDrawer({
   const [tab, setTab] = useState<"record" | "people" | "history">("record");
   const [outcome, setOutcome] = useState<Exclude<Outcome, "unvisited">>("conversation");
   const [note, setNote] = useState("");
-  const [followUpConsent, setFollowUpConsent] = useState(false);
   const [followUpDate, setFollowUpDate] = useState(dateInputValue(dueDateFromNow(data.church.defaultFollowUpDays)));
   const [assignedTeamId, setAssignedTeamId] = useState(property.territoryId ? data.territories.find((territory) => territory.id === property.territoryId)?.assignedTeamId ?? "" : "");
   const [editingAddress, setEditingAddress] = useState(property.address === "Confirm this address");
@@ -101,7 +98,6 @@ export function PropertyDrawer({
   const noteRemaining = data.church.noteCharacterLimit - note.length;
   const canSave = address.trim().length > 2
     && noteRemaining >= 0
-    && (outcome !== "follow_up" || !data.church.requireFollowUpConsent || followUpConsent)
     && (outcome !== "follow_up" || Boolean(followUpDate));
 
   const volunteerNames = useMemo(() => new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer.name])), [data.volunteers]);
@@ -115,7 +111,6 @@ export function PropertyDrawer({
       propertyId: property.id,
       outcome,
       objectiveNote: note,
-      followUpConsent: outcome === "follow_up" ? followUpConsent : false,
       followUpDate: outcome === "follow_up" ? followUpDate : undefined,
       assignedTeamId: outcome === "follow_up" ? assignedTeamId || undefined : undefined,
     });
@@ -124,7 +119,7 @@ export function PropertyDrawer({
 
   const markDoNotVisit = () => {
     if (!window.confirm("Mark this location as do not revisit? This status stays visible even after ordinary visit records expire.")) return;
-    onRecordVisit({ propertyId: property.id, outcome: "do_not_visit", followUpConsent: false });
+    onRecordVisit({ propertyId: property.id, outcome: "do_not_visit" });
     onClose();
   };
 
@@ -187,10 +182,7 @@ export function PropertyDrawer({
                   key={value}
                   className={outcome === value ? "active" : ""}
                   data-outcome={value}
-                  onClick={() => {
-                    setOutcome(value);
-                    if (value !== "follow_up") setFollowUpConsent(false);
-                  }}
+                  onClick={() => setOutcome(value)}
                 >
                   <i />
                   <span>{outcomeMeta[value].short}</span>
@@ -214,10 +206,6 @@ export function PropertyDrawer({
 
           {outcome === "follow_up" && (
             <div className="followup-form">
-              <label className="consent-check">
-                <input type="checkbox" checked={followUpConsent} onChange={(event) => setFollowUpConsent(event.target.checked)} />
-                <span><ShieldCheck size={16} /><strong>Return visit confirmed</strong></span>
-              </label>
               <div className="form-row">
                 <label className="form-field">
                   <span>Return date</span>
@@ -229,10 +217,6 @@ export function PropertyDrawer({
                 </label>
               </div>
             </div>
-          )}
-
-          {outcome === "follow_up" && data.church.requireFollowUpConsent && !followUpConsent && (
-            <p className="form-warning">Check “Return visit confirmed” before saving.</p>
           )}
 
           <div className="drawer-actions">
@@ -279,7 +263,7 @@ export function PropertyDrawer({
                     <div>
                       <strong>{resident.name || "Name not provided"}</strong>
                       <small>{faithStatusLabels[resident.faithStatus]}</small>
-                      {resident.consentToContact && <p><Phone size={12} /> {resident.preferredContact === "none" ? "Contact details enabled" : `Prefers ${resident.preferredContact}`}</p>}
+                      {(resident.phone || resident.email) && <p><Phone size={12} /> {resident.preferredContact === "none" ? "Contact details saved" : `Prefers ${resident.preferredContact}`}</p>}
                     </div>
                     <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>
                     <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
@@ -303,57 +287,36 @@ function ResidentForm({ resident, noteLimit, onCancel, onSave }: {
   onCancel: () => void;
   onSave: (input: ResidentInput) => void;
 }) {
-  const [consentToStore, setConsentToStore] = useState(Boolean(resident?.consentToStore));
   const [name, setName] = useState(resident?.name ?? "");
   const [faithStatus, setFaithStatus] = useState(resident?.faithStatus ?? "not_discussed");
   const [notes, setNotes] = useState(resident?.notes ?? "");
-  const [consentToContact, setConsentToContact] = useState(Boolean(resident?.consentToContact));
   const [phone, setPhone] = useState(resident?.phone ?? "");
   const [email, setEmail] = useState(resident?.email ?? "");
   const [preferredContact, setPreferredContact] = useState(resident?.preferredContact ?? "none");
   const contactMethodValid = preferredContact === "email" ? Boolean(email.trim())
     : preferredContact === "text" || preferredContact === "call" ? Boolean(phone.trim()) : true;
-  const canSave = consentToStore && notes.length <= noteLimit && (!consentToContact || contactMethodValid);
+  const canSave = notes.length <= noteLimit && contactMethodValid;
 
   return (
     <div className="resident-form">
-      <div className={`permission-card${consentToStore ? " granted" : ""}`}>
-        <label>
-          <input type="checkbox" checked={consentToStore} onChange={(event) => setConsentToStore(event.target.checked)} />
-          <span><ShieldCheck size={17} /><strong>Store person details</strong></span>
-        </label>
-      </div>
       <div className="form-stack">
         <label className="form-field"><span>Name <small>Optional</small></span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Only if they choose to share it" /></label>
         <label className="form-field"><span>Faith status <small>Self-described only</small></span><select value={faithStatus} onChange={(event) => setFaithStatus(event.target.value as Resident["faithStatus"])}>{faithStatusValues.map((value) => <option value={value} key={value}>{faithStatusLabels[value]}</option>)}</select></label>
         <label className="form-field"><span>Objective note <small>Optional</small></span><textarea rows={2} maxLength={noteLimit + 1} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Record only what helps honor their request." /><em className={notes.length > noteLimit ? "over" : ""}>{noteLimit - notes.length} characters remaining</em></label>
       </div>
-      <div className={`permission-card contact${consentToContact ? " granted" : ""}`}>
-        <label>
-          <input type="checkbox" checked={consentToContact} onChange={(event) => {
-            setConsentToContact(event.target.checked);
-            if (!event.target.checked) { setPhone(""); setEmail(""); setPreferredContact("none"); }
-          }} />
-          <span><Phone size={17} /><strong>Use contact details</strong></span>
-        </label>
-        {consentToContact && <div className="contact-fields">
-          <label className="form-field"><span>Phone <small>Optional</small></span><input inputMode="tel" autoComplete="off" maxLength={40} value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
-          <label className="form-field"><span>Email <small>Optional</small></span><input type="email" inputMode="email" autoComplete="off" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-          <label className="form-field"><span>Preferred contact</span><select value={preferredContact} onChange={(event) => setPreferredContact(event.target.value as Resident["preferredContact"])}><option value="none">No preference</option><option value="text">Text message</option><option value="call">Phone call</option><option value="email">Email</option></select></label>
-        </div>}
+      <div className="contact-fields">
+        <label className="form-field"><span>Phone <small>Optional</small></span><input inputMode="tel" autoComplete="off" maxLength={40} value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
+        <label className="form-field"><span>Email <small>Optional</small></span><input type="email" inputMode="email" autoComplete="off" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+        <label className="form-field"><span>Preferred contact</span><select value={preferredContact} onChange={(event) => setPreferredContact(event.target.value as Resident["preferredContact"])}><option value="none">No preference</option><option value="text">Text message</option><option value="call">Phone call</option><option value="email">Email</option></select></label>
       </div>
-      {!consentToStore && <p className="form-warning">Check “Store person details” before saving.</p>}
-      {consentToContact && !contactMethodValid && <p className="form-warning">Enter the phone number or email needed for the selected contact method.</p>}
+      {!contactMethodValid && <p className="form-warning">Enter the phone number or email needed for the selected contact method.</p>}
       <div className="modal-actions"><button className="button quiet" onClick={onCancel}>Cancel</button><button className="button primary" disabled={!canSave} onClick={() => onSave({
         name: name.trim() || undefined,
         faithStatus,
         notes: notes.trim() || undefined,
-        phone: consentToContact ? phone.trim() || undefined : undefined,
-        email: consentToContact ? email.trim() || undefined : undefined,
-        preferredContact: consentToContact ? preferredContact : "none",
-        consentToStore: true,
-        consentToContact,
-        consentRecordedAt: resident?.consentRecordedAt ?? new Date().toISOString(),
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        preferredContact,
       })}><Save size={15} /> Save person</button></div>
     </div>
   );
@@ -366,7 +329,7 @@ function VisitHistoryItem({ visit, volunteerName }: { visit: Visit; volunteerNam
       <div>
         <div><strong>{outcomeMeta[visit.outcome].label}</strong><span><Clock3 size={12} /> {formatDateTime(visit.recordedAt)}</span></div>
         {visit.objectiveNote && <p>{visit.objectiveNote}</p>}
-        <small>Recorded by {volunteerName}{visit.followUpConsent ? " · Return visit confirmed" : ""}</small>
+        <small>Recorded by {volunteerName}</small>
       </div>
     </article>
   );

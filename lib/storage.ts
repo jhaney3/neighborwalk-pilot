@@ -19,6 +19,13 @@ const DATA_KEY = "primary";
 
 let databasePromise: Promise<IDBPDatabase> | null = null;
 
+function withoutLegacyFields(candidate: unknown, keys: string[]): unknown {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return candidate;
+  const next = { ...candidate as Record<string, unknown> };
+  for (const key of keys) delete next[key];
+  return next;
+}
+
 function getDatabase() {
   if (typeof window === "undefined") throw new Error("NeighborWalk storage is available in the browser only.");
   databasePromise ??= openDB(DB_NAME, DB_VERSION, {
@@ -53,7 +60,13 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   return {
     ...data,
     schemaVersion: APP_SCHEMA_VERSION,
-    residents: Array.isArray(data.residents) ? data.residents : [],
+    church: withoutLegacyFields(data.church, ["requireFollowUpConsent"]),
+    residents: Array.isArray(data.residents)
+      ? data.residents.map((resident) => withoutLegacyFields(resident, ["consentToStore", "consentToContact", "consentRecordedAt"]))
+      : [],
+    visits: Array.isArray(data.visits)
+      ? data.visits.map((visit) => withoutLegacyFields(visit, ["followUpConsent"]))
+      : [],
     followUps: Array.isArray(data.followUps)
       ? data.followUps.map((followUp) => followUp && typeof followUp === "object"
         ? { ...followUp as Record<string, unknown>, history: Array.isArray((followUp as Record<string, unknown>).history) ? (followUp as Record<string, unknown>).history : [] }

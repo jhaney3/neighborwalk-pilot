@@ -1,6 +1,6 @@
 # NeighborWalk
 
-NeighborWalk is a mobile-first progressive web app for respectful neighborhood outreach. Volunteers can work from a real interactive map, record one objective outcome per visit, schedule permission-based follow-ups, and use a church-approved conversation guide. Leaders can define territories and see operational coverage without ranking residents, conversations, or volunteers.
+NeighborWalk is a mobile-first progressive web app for respectful neighborhood outreach. Volunteers can work from a real interactive map, record one objective outcome per visit, schedule follow-ups, and use a church-approved conversation guide. Leaders can define territories and see operational coverage without ranking residents, conversations, or volunteers.
 
 The app remains offline-first with IndexedDB and an installable service worker. When Supabase is configured, members sign in by email and synchronize a church workspace protected by grants and row-level security.
 
@@ -8,7 +8,7 @@ The app remains offline-first with IndexedDB and an installable service worker. 
 
 - MapLibre neighborhood map with house/location markers, outcome filters, address search, geolocation, and tappable building detection
 - leader-drawn territory boundaries with assignment and coverage summaries
-- visit history, objective notes, do-not-revisit status, and consent-gated return visits
+- visit history, objective notes, do-not-revisit status, and scheduled return visits
 - follow-up queue with overdue/today/upcoming filters, rescheduling, completion, and cancellation
 - editable, church-approved conversation guide with sample words and Scripture references
 - leader dashboard for territories, teams, coverage, outcomes, and audit activity
@@ -80,9 +80,9 @@ The applied database source is stored in `supabase/migrations/`. It creates:
 
 `docs/database/postgres.sql` and `docs/api/openapi.yaml` preserve the more normalized future backend design. The connected pilot currently uses the smaller Supabase schema so the existing offline document can synchronize without discarding field functionality.
 
-## Data and privacy model
+## Data and records model
 
-NeighborWalk records addresses because the workflow is location-based, but it deliberately excludes resident names, phone numbers, emails, demographic labels, receptiveness scores, conversion tracking, and volunteer leaderboards. Notes are optional, character-limited, and described as objective operational context.
+NeighborWalk records addresses because the workflow is location-based and can store person details supplied for follow-up. It deliberately excludes receptiveness scores, conversion tracking, and volunteer leaderboards. Notes are optional, character-limited, and described as objective operational context. Approval and retention records are maintained outside the app.
 
 Ordinary visit history and audit entries expire according to the church retention setting. Active follow-up source records remain until resolved; do-not-revisit instructions persist so future volunteers can honor the resident's request. Leaders should establish a documented deletion process and legal basis appropriate to their jurisdiction before collecting live data.
 

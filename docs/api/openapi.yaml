@@ -200,7 +200,7 @@ components:
         source: { type: string, enum: [map, import, seed] }
     Visit:
       type: object
-      required: [id, eventId, territoryId, propertyId, volunteerId, outcome, followUpConsent, recordedAt, deviceId]
+      required: [id, eventId, territoryId, propertyId, volunteerId, outcome, recordedAt, deviceId]
       additionalProperties: false
       properties:
         id: { type: string }
@@ -210,7 +210,6 @@ components:
         volunteerId: { type: string }
         outcome: { type: string, enum: [no_answer, conversation, follow_up, declined, do_not_visit, inaccessible] }
         objectiveNote: { type: string, maxLength: 2000 }
-        followUpConsent: { type: boolean }
         recordedAt: { type: string, format: date-time }
         deviceId: { type: string, minLength: 8, maxLength: 120 }
     FollowUp:

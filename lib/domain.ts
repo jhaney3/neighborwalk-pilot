@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const APP_SCHEMA_VERSION = 6;
+export const APP_SCHEMA_VERSION = 7;
 
 export const outcomeValues = [
   "unvisited",
@@ -70,7 +70,6 @@ export type Church = {
   timezone: string;
   retentionDays: number;
   defaultFollowUpDays: number;
-  requireFollowUpConsent: boolean;
   noteCharacterLimit: number;
 };
 
@@ -156,7 +155,6 @@ export type Visit = {
   volunteerId: string;
   outcome: Exclude<Outcome, "unvisited">;
   objectiveNote?: string;
-  followUpConsent: boolean;
   recordedAt: string;
   deviceId: string;
 };
@@ -191,9 +189,6 @@ export type Resident = {
   phone?: string;
   email?: string;
   preferredContact: ContactPreference;
-  consentToStore: true;
-  consentToContact: boolean;
-  consentRecordedAt: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -324,21 +319,10 @@ const residentSchema = z.object({
   phone: z.string().min(3).max(40).optional(),
   email: z.string().email().max(254).optional(),
   preferredContact: z.enum(["none", "text", "call", "email"]),
-  consentToStore: z.literal(true),
-  consentToContact: z.boolean(),
-  consentRecordedAt: z.string().datetime(),
   notes: z.string().max(2000).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 }).superRefine((resident, context) => {
-  const hasContactDetails = Boolean(resident.phone || resident.email || resident.preferredContact !== "none");
-  if (hasContactDetails && !resident.consentToContact) {
-    context.addIssue({
-      code: "custom",
-      path: ["consentToContact"],
-      message: "Contact details require permission to contact.",
-    });
-  }
   if (resident.preferredContact === "email" && !resident.email) {
     context.addIssue({ code: "custom", path: ["email"], message: "Email is required for email contact." });
   }
@@ -386,7 +370,6 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
     timezone: z.string().min(1),
     retentionDays: z.number().int().min(30).max(3650),
     defaultFollowUpDays: z.number().int().min(1).max(90),
-    requireFollowUpConsent: z.boolean(),
     noteCharacterLimit: z.number().int().min(80).max(2000),
   }),
   volunteers: z.array(z.object({
@@ -454,7 +437,6 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
     volunteerId: z.string().min(1),
     outcome: outcomeSchema.exclude(["unvisited"]),
     objectiveNote: z.string().max(2000).optional(),
-    followUpConsent: z.boolean(),
     recordedAt: z.string().datetime(),
     deviceId: z.string().min(1),
   })),

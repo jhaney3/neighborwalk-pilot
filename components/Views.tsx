@@ -222,18 +222,14 @@ function FollowUpPeople({ residents }: { residents: Resident[] }) {
     {residents.length ? <div className="followup-person-list">{residents.map((resident) => {
       const smsNumber = resident.phone?.replace(/[^\d+]/g, "");
       const displayPhone = resident.phone ? formatPhoneNumber(resident.phone) : undefined;
-      const canText = resident.consentToContact && Boolean(smsNumber);
-      const canEmail = resident.consentToContact && Boolean(resident.email);
+      const canText = Boolean(smsNumber);
+      const canEmail = Boolean(resident.email);
       return <article className="followup-person" key={resident.id}>
         <span className="followup-person-avatar" aria-hidden="true">{resident.name?.trim().charAt(0).toUpperCase() || "?"}</span>
         <div className="followup-person-copy">
           <div><strong>{resident.name || "Name not provided"}</strong><span>{faithStatusLabels[resident.faithStatus]}</span></div>
           {resident.notes && <p>{resident.notes}</p>}
-          {!resident.consentToContact
-            ? <small><ShieldCheck size={12} /> Contact details unavailable</small>
-            : !canText && !canEmail
-              ? <small><ShieldCheck size={12} /> No phone number or email saved</small>
-              : null}
+          {!canText && !canEmail ? <small><Phone size={12} /> No phone number or email saved</small> : null}
         </div>
         {(canText || canEmail) && <div className="followup-contact-actions">
           {canText && <a className={resident.preferredContact === "text" ? "preferred" : undefined} href={`sms:${smsNumber}`} aria-label={`Text ${resident.name || "this person"} at ${displayPhone}`}><MessageCircle size={14} /><span><small>{resident.preferredContact === "text" ? "Preferred text" : "Text"}</small><strong>{displayPhone}</strong></span></a>}
@@ -487,7 +483,7 @@ export function SettingsView({
     if (!("Notification" in window)) return setMessage("Notifications are not available in this browser.");
     const permission = await Notification.requestPermission();
     onSetPreference("notificationsEnabled", permission === "granted");
-    setMessage(permission === "granted" ? "Follow-up notifications are enabled on this device." : "Notification permission was not granted.");
+    setMessage(permission === "granted" ? "Follow-up notifications are enabled on this device." : "Follow-up notifications remain off on this device.");
   };
 
   const installApp = async () => {
@@ -513,13 +509,13 @@ export function SettingsView({
     setMessage("Church profile saved.");
   };
 
-  const savePrivacyLimits = () => {
+  const saveRecordLimits = () => {
     const parsedNoteLimit = Number(noteLimit);
     const parsedFollowUpDays = Number(followUpDays);
     if (!Number.isInteger(parsedNoteLimit) || parsedNoteLimit < 80 || parsedNoteLimit > 2000) return setMessage("Note limit must be a whole number from 80 to 2,000.");
     if (!Number.isInteger(parsedFollowUpDays) || parsedFollowUpDays < 1 || parsedFollowUpDays > 90) return setMessage("Follow-up timing must be a whole number from 1 to 90 days.");
     onUpdateChurch({ noteCharacterLimit: parsedNoteLimit, defaultFollowUpDays: parsedFollowUpDays });
-    setMessage("Privacy and follow-up limits saved.");
+    setMessage("Record and follow-up limits saved.");
   };
 
   const saveMapStyle = () => {
@@ -558,14 +554,13 @@ export function SettingsView({
           </>}
         </SettingsSection>}
 
-        {(canManage || data.sync.mode === "device_only") && <SettingsSection icon={<ShieldCheck size={18} />} title="Privacy guardrails" description="Applied to every field record on this device.">
+        {(canManage || data.sync.mode === "device_only") && <SettingsSection icon={<Database size={18} />} title="Records and retention" description="Set how long records remain and keep notes concise.">
           <div className="form-row">
             <label className="form-field"><span>Retention period</span><select value={data.church.retentionDays} onChange={(event) => onUpdateChurch({ retentionDays: Number(event.target.value) })}><option value={90}>90 days</option><option value={180}>180 days</option><option value={365}>1 year</option><option value={730}>2 years</option></select></label>
             <label className="form-field"><span>Note limit</span><input type="number" min={80} max={2000} value={noteLimit} onChange={(event) => setNoteLimit(event.target.value)} /></label>
           </div>
           <label className="form-field"><span>Default follow-up timing <small>Days</small></span><input type="number" min={1} max={90} value={followUpDays} onChange={(event) => setFollowUpDays(event.target.value)} /></label>
-          <label className="toggle-row"><input type="checkbox" checked={data.church.requireFollowUpConsent} onChange={(event) => onUpdateChurch({ requireFollowUpConsent: event.target.checked })} /><span className="compact-toggle-label">Confirm return visits before scheduling</span></label>
-          <div className="button-row"><button className="button quiet" onClick={savePrivacyLimits}><Save size={15} /> Save limits</button><button className="button quiet" onClick={() => { onPurge(); setMessage("The retention policy was applied."); }}><Trash2 size={15} /> Apply retention now</button></div>
+          <div className="button-row"><button className="button quiet" onClick={saveRecordLimits}><Save size={15} /> Save limits</button><button className="button quiet" onClick={() => { onPurge(); setMessage("The retention policy was applied."); }}><Trash2 size={15} /> Apply retention now</button></div>
         </SettingsSection>}
 
         <SettingsSection icon={<MapPinned size={18} />} title="Map and field use" description="Map tiles need a connection; saved records do not.">

@@ -97,7 +97,7 @@ describe("workspace synchronization", () => {
     expect(merged.properties.some((property) => property.id === removed.id)).toBe(false);
   });
 
-  it("merges permission-based resident records and leader-managed groups independently", () => {
+  it("merges resident records and leader-managed groups independently", () => {
     const seed = connected(createSeedData());
     const createdAt = "2030-08-13T12:05:00.000Z";
     const resident = {
@@ -107,9 +107,6 @@ describe("workspace synchronization", () => {
       name: "Neighbor",
       faithStatus: "not_discussed" as const,
       preferredContact: "none" as const,
-      consentToStore: true as const,
-      consentToContact: false,
-      consentRecordedAt: createdAt,
       createdAt,
       updatedAt: createdAt,
     };

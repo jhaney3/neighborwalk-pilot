@@ -11,7 +11,6 @@ import {
   CircleUserRound,
   CloudOff,
   Edit3,
-  Layers3,
   Map as MapIcon,
   MapPinned,
   Navigation,
@@ -40,7 +39,6 @@ import {
 } from "../lib/domain";
 import { useNeighborWalk, type SupabaseUser } from "../lib/use-neighborwalk";
 import { reverseGeocode } from "../lib/geocoding";
-import { MAP_STYLE_OPTIONS } from "../lib/map-config";
 import { dwellingsForParcel, parcelProgress } from "../lib/parcel-groups";
 import type { ParcelDetails } from "../lib/parcels";
 import { coverageForTerritory, type TerritoryCoverageById } from "../lib/territory-coverage";
@@ -85,7 +83,6 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const [territoryEditorOpen, setTerritoryEditorOpen] = useState(false);
   const [editingTerritoryId, setEditingTerritoryId] = useState<string | null>(null);
   const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
-  const [mapLayersOpen, setMapLayersOpen] = useState(false);
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -180,7 +177,6 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
     setSelectedPropertyId(null);
     setSelectedParcel(null);
     setAddMode(false);
-    setMapLayersOpen(false);
     if (next !== "map") {
       setDrawMode(false);
       setDraftBoundary([]);
@@ -288,14 +284,6 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
               <div className="map-toolbar">
                 <div className="map-filter-scroll" aria-label="Filter locations">{mapFilterOptions.map((option) => <button key={option.value} className={filter === option.value ? "active" : ""} onClick={() => setFilter(option.value)}>{option.label}{option.value !== "all" && <i style={{ background: outcomeMeta[option.value].color }} />}</button>)}</div>
                 <label className="map-search"><Search size={15} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find an address" aria-label="Find an address" />{query && <button onClick={() => setQuery("")} aria-label="Clear search"><X size={14} /></button>}</label>
-                <div className="map-layer-picker">
-                  <button className="toolbar-icon" aria-label="Map layers" aria-expanded={mapLayersOpen} onClick={() => setMapLayersOpen((open) => !open)}><Layers3 size={18} /></button>
-                  {mapLayersOpen && <div className="map-layer-menu" role="menu" aria-label="Choose map style">
-                    <p>Map appearance</p>
-                    {MAP_STYLE_OPTIONS.map((style) => <button key={style.url} role="menuitemradio" aria-checked={data.preferences.mapStyleUrl === style.url} onClick={() => { actions.setPreference("mapStyleUrl", style.url); setMapLayersOpen(false); setToast(`${style.label} map selected`); }}><span><strong>{style.label}</strong><small>{style.description}</small></span>{data.preferences.mapStyleUrl === style.url && <Check size={15} />}</button>)}
-                    {!MAP_STYLE_OPTIONS.some((style) => style.url === data.preferences.mapStyleUrl) && <div className="custom-map-style"><Layers3 size={14} /><span><strong>Custom style</strong><small>Configured in Settings</small></span></div>}
-                  </div>}
-                </div>
               </div>
               <div className="map-stage">
                 <MapCanvas territory={activeTerritory} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchQuery={query} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} parcels={territoryParcelResults[activeTerritory.id]?.parcels} onSelectProperty={(id) => { setSelectedPropertyId(id); setSelectedParcel(null); setAddMode(false); }} onAddIntent={async (intent) => {

@@ -12,7 +12,6 @@ export type NeighborWalkDatabase = {
           timezone: string;
           retention_days: number;
           default_follow_up_days: number;
-          require_follow_up_consent: boolean;
           note_character_limit: number;
           created_by: string;
           created_at: string;
@@ -24,7 +23,6 @@ export type NeighborWalkDatabase = {
           timezone?: string;
           retention_days?: number;
           default_follow_up_days?: number;
-          require_follow_up_consent?: boolean;
           note_character_limit?: number;
           created_by: string;
           created_at?: string;

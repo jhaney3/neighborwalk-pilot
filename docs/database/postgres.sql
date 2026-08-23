@@ -24,7 +24,6 @@ create table if not exists public.churches (
   timezone text not null default 'UTC',
   retention_days integer not null default 365 check (retention_days between 30 and 3650),
   default_follow_up_days integer not null default 3 check (default_follow_up_days between 1 and 90),
-  require_follow_up_consent boolean not null default true,
   note_character_limit integer not null default 500 check (note_character_limit between 80 and 2000),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -156,13 +155,11 @@ create table if not exists public.visits (
   volunteer_id bigint not null references public.users(id) on delete restrict,
   outcome text not null check (outcome in ('no_answer', 'conversation', 'follow_up', 'declined', 'do_not_visit', 'inaccessible')),
   objective_note text,
-  follow_up_consent boolean not null default false,
   device_id text not null,
   recorded_at timestamptz not null,
   received_at timestamptz not null default now(),
   deleted_at timestamptz,
   check (objective_note is null or length(objective_note) <= 2000),
-  check (outcome <> 'follow_up' or follow_up_consent),
   check (length(device_id) between 8 and 120)
 );
 

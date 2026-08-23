@@ -72,7 +72,46 @@ describe("NeighborWalk domain", () => {
     expect(parsed.data.followUps.every((followUp) => Array.isArray(followUp.history))).toBe(true);
   });
 
-  it("requires separate contact permission for resident contact details", () => {
+  it("removes legacy approval fields without losing version 6 records", () => {
+    const current = createSeedData();
+    const timestamp = "2026-08-22T12:00:00.000Z";
+    const legacyResident = {
+      id: "resident_legacy",
+      churchId: current.church.id,
+      propertyId: current.properties[0].id,
+      name: "Neighbor",
+      faithStatus: "not_discussed" as const,
+      phone: "5550100142",
+      preferredContact: "text" as const,
+      consentToStore: true,
+      consentToContact: true,
+      consentRecordedAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    const legacy = {
+      ...current,
+      schemaVersion: 6,
+      church: { ...current.church, requireFollowUpConsent: true },
+      visits: current.visits.map((visit) => ({ ...visit, followUpConsent: visit.outcome === "follow_up" })),
+      residents: [legacyResident],
+    };
+
+    const migrated = neighborWalkDataSchema.parse(migrateNeighborWalkData(legacy));
+
+    expect(migrated.schemaVersion).toBe(APP_SCHEMA_VERSION);
+    expect(migrated.visits).toHaveLength(current.visits.length);
+    expect(migrated.followUps).toHaveLength(current.followUps.length);
+    expect(migrated.residents).toHaveLength(1);
+    expect(migrated.residents[0]).toMatchObject({ name: "Neighbor", phone: "5550100142" });
+    expect(migrated.church).not.toHaveProperty("requireFollowUpConsent");
+    expect(migrated.visits[0]).not.toHaveProperty("followUpConsent");
+    expect(migrated.residents[0]).not.toHaveProperty("consentToStore");
+    expect(migrated.residents[0]).not.toHaveProperty("consentToContact");
+    expect(migrated.residents[0]).not.toHaveProperty("consentRecordedAt");
+  });
+
+  it("stores contact details without in-app approval fields", () => {
     const data = createSeedData();
     const resident = {
       id: "resident_test",
@@ -82,18 +121,11 @@ describe("NeighborWalk domain", () => {
       faithStatus: "exploring" as const,
       phone: "555-0100",
       preferredContact: "text" as const,
-      consentToStore: true as const,
-      consentToContact: false,
-      consentRecordedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    expect(neighborWalkDataSchema.safeParse({ ...data, residents: [resident] }).success).toBe(false);
-    expect(neighborWalkDataSchema.safeParse({
-      ...data,
-      residents: [{ ...resident, consentToContact: true }],
-    }).success).toBe(true);
+    expect(neighborWalkDataSchema.safeParse({ ...data, residents: [resident] }).success).toBe(true);
   });
 
   it("formats stored phone numbers consistently for display", () => {
@@ -228,9 +260,6 @@ describe("NeighborWalk domain", () => {
       name: "Shared voluntarily",
       faithStatus: "exploring" as const,
       preferredContact: "none" as const,
-      consentToStore: true as const,
-      consentToContact: false,
-      consentRecordedAt: timestamp,
       notes: "Requested information about service times.",
       createdAt: timestamp,
       updatedAt: timestamp,

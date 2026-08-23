@@ -89,7 +89,6 @@ type VisitInput = {
   propertyId: string;
   outcome: Exclude<Outcome, "unvisited">;
   objectiveNote?: string;
-  followUpConsent: boolean;
   followUpDate?: string;
   assignedTeamId?: string;
 };
@@ -459,7 +458,6 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       if (!property) return current;
       const objectiveNote = input.objectiveNote?.trim() || undefined;
       if (objectiveNote && objectiveNote.length > current.church.noteCharacterLimit) return current;
-      if (input.outcome === "follow_up" && current.church.requireFollowUpConsent && !input.followUpConsent) return current;
       if (input.outcome === "follow_up" && input.followUpDate) {
         const dueAt = new Date(`${input.followUpDate}T17:00:00`);
         if (Number.isNaN(dueAt.getTime()) || dueAt < new Date(new Date().toISOString().slice(0, 10))) return current;
@@ -475,7 +473,6 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         volunteerId: actorIdRef.current ?? current.preferences.activeVolunteerId,
         outcome: input.outcome,
         objectiveNote,
-        followUpConsent: input.followUpConsent,
         recordedAt: now,
         deviceId: deviceId(),
       };
@@ -487,7 +484,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         updatedAt: now,
       } : item);
       let nextFollowUps = current.followUps;
-      if (input.outcome === "follow_up" && input.followUpConsent) {
+      if (input.outcome === "follow_up") {
         nextFollowUps = [...nextFollowUps.map((followUp) => followUp.propertyId === property.id && followUp.status === "scheduled"
           ? {
             ...followUp,
@@ -656,9 +653,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const upsertResident = useCallback((propertyId: string, input: ResidentInput, residentId?: string) => {
     updateData((current) => {
       const property = current.properties.find((item) => item.id === propertyId);
-      if (!property || !input.consentToStore) return current;
-      const hasContactDetails = Boolean(input.phone?.trim() || input.email?.trim() || input.preferredContact !== "none");
-      if (hasContactDetails && !input.consentToContact) return current;
+      if (!property) return current;
       const existing = residentId ? current.residents.find((resident) => resident.id === residentId) : undefined;
       const now = new Date().toISOString();
       const id = existing?.id ?? createId("resident");
@@ -668,12 +663,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         propertyId,
         name: input.name?.trim() || undefined,
         faithStatus: input.faithStatus,
-        phone: input.consentToContact ? input.phone?.trim() || undefined : undefined,
-        email: input.consentToContact ? input.email?.trim() || undefined : undefined,
-        preferredContact: input.consentToContact ? input.preferredContact : "none" as const,
-        consentToStore: true as const,
-        consentToContact: input.consentToContact,
-        consentRecordedAt: input.consentRecordedAt,
+        phone: input.phone?.trim() || undefined,
+        email: input.email?.trim() || undefined,
+        preferredContact: input.preferredContact,
         notes: input.notes?.trim() || undefined,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
