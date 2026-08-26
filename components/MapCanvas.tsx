@@ -10,6 +10,7 @@ import { shouldNavigateToTerritory } from "../lib/map-camera";
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
 import { parcelKey, parcelProgress, propertyParcelKey } from "../lib/parcel-groups";
 import {
+  type MapViewport,
   type ParcelDetails,
   type ParcelFeatureCollection,
 } from "../lib/parcels";
@@ -28,6 +29,9 @@ const LOCATION_OUTLINE_LAYER_ID = "mapped-location-outline";
 const LOCATION_POINT_HIT_LAYER_ID = "mapped-location-point-hit";
 const LOCATION_HALO_LAYER_ID = "mapped-location-selected-halo";
 const LOCATION_DOT_LAYER_ID = "mapped-location-dot";
+const SEARCH_SOURCE_ID = "address-search-target";
+const SEARCH_HALO_LAYER_ID = "address-search-target-halo";
+const SEARCH_DOT_LAYER_ID = "address-search-target-dot";
 const EMPTY_PARCELS: ParcelFeatureCollection = { type: "FeatureCollection", features: [] };
 type MapStyleLayer = ReturnType<MapLibreMap["getStyle"]>["layers"][number];
 type BuildingFootprintLayer = Extract<MapStyleLayer, { type: "fill" }> | Extract<MapStyleLayer, { type: "fill-extrusion" }>;
@@ -41,12 +45,18 @@ type AddIntent = {
   legacyPropertyIds?: string[];
 };
 
+export type MapSearchTarget = {
+  id: string;
+  coordinates: Coordinates;
+  zoom: number;
+};
+
 type Props = {
   territory: Territory;
   properties: Property[];
   selectedPropertyId: string | null;
   visibleOutcomes: Set<Outcome>;
-  searchQuery: string;
+  searchTarget: MapSearchTarget | null;
   addMode: boolean;
   drawMode: boolean;
   drawModeLabel?: string;
@@ -58,6 +68,7 @@ type Props = {
   onAddIntent: (intent: AddIntent) => void;
   onAssociatePropertiesWithParcel: (propertyIds: string[], parcel: ParcelDetails) => void;
   onDraftBoundaryChange: (points: Coordinates[]) => void;
+  onViewportChange: (viewport: MapViewport) => void;
 };
 
 function polygonFeature(points: Coordinates[]): Feature<Polygon> | null {
@@ -95,20 +106,16 @@ function mappedLocationFeatureCollection(
   properties: Property[],
   selectedPropertyId: string | null,
   visibleOutcomes: Set<Outcome>,
-  searchQuery: string,
   compact: boolean,
 ): FeatureCollection {
   const features: Feature<Geometry>[] = [];
-  const normalizedQuery = searchQuery.trim().toLowerCase();
   const parcelDwellingCounts = new Map<string, number>();
   for (const property of properties) {
     const key = propertyParcelKey(property);
     if (key) parcelDwellingCounts.set(key, (parcelDwellingCounts.get(key) ?? 0) + 1);
   }
   for (const property of properties) {
-    const matchesSearch = !normalizedQuery
-      || `${property.address} ${property.unit ?? ""}`.toLowerCase().includes(normalizedQuery);
-    const visible = visibleOutcomes.has(property.currentOutcome) && matchesSearch;
+    const visible = visibleOutcomes.has(property.currentOutcome);
     const selected = selectedPropertyId === property.id;
     const visited = property.currentOutcome !== "unvisited";
     const statusColor = outcomeMeta[property.currentOutcome].color;
@@ -134,6 +141,17 @@ function mappedLocationFeatureCollection(
     });
   }
   return { type: "FeatureCollection", features };
+}
+
+function searchTargetFeatureCollection(target: MapSearchTarget | null): FeatureCollection<Point> {
+  return {
+    type: "FeatureCollection",
+    features: target ? [{
+      type: "Feature",
+      properties: { id: target.id },
+      geometry: { type: "Point", coordinates: target.coordinates },
+    }] : [],
+  };
 }
 
 function mappedParcelFeatureCollection(parcels: ParcelFeatureCollection, properties: Property[]): ParcelFeatureCollection {
@@ -286,6 +304,7 @@ function configureNeighborWalkLayers(
   draftBoundary: Coordinates[],
   parcels: ParcelFeatureCollection,
   mappedLocations: FeatureCollection,
+  searchTarget: MapSearchTarget | null,
 ) {
   configureBuildingDetails(map);
   if (!map.getSource(PARCEL_SOURCE_ID)) {
@@ -454,6 +473,35 @@ function configureNeighborWalkLayers(
       },
     });
   }
+  if (!map.getSource(SEARCH_SOURCE_ID)) {
+    map.addSource(SEARCH_SOURCE_ID, { type: "geojson", data: searchTargetFeatureCollection(searchTarget) });
+  }
+  if (!map.getLayer(SEARCH_HALO_LAYER_ID)) {
+    map.addLayer({
+      id: SEARCH_HALO_LAYER_ID,
+      type: "circle",
+      source: SEARCH_SOURCE_ID,
+      paint: {
+        "circle-radius": 15,
+        "circle-color": "rgba(255,255,255,.86)",
+        "circle-stroke-color": "rgba(22,59,49,.18)",
+        "circle-stroke-width": 1,
+      },
+    });
+  }
+  if (!map.getLayer(SEARCH_DOT_LAYER_ID)) {
+    map.addLayer({
+      id: SEARCH_DOT_LAYER_ID,
+      type: "circle",
+      source: SEARCH_SOURCE_ID,
+      paint: {
+        "circle-radius": 7,
+        "circle-color": "#e9a84a",
+        "circle-stroke-color": "#163b31",
+        "circle-stroke-width": 2.5,
+      },
+    });
+  }
   if (!map.getSource("draft-territory")) {
     map.addSource("draft-territory", {
       type: "geojson",
@@ -494,6 +542,7 @@ function configureNeighborWalkLayers(
   updateGeoJsonSource(map, "draft-territory", draftFeatureCollection(draftBoundary));
   updateGeoJsonSource(map, PARCEL_SOURCE_ID, parcels);
   updateGeoJsonSource(map, LOCATION_SOURCE_ID, mappedLocations);
+  updateGeoJsonSource(map, SEARCH_SOURCE_ID, searchTargetFeatureCollection(searchTarget));
 }
 
 export function MapCanvas({
@@ -501,7 +550,7 @@ export function MapCanvas({
   properties,
   selectedPropertyId,
   visibleOutcomes,
-  searchQuery,
+  searchTarget,
   addMode,
   drawMode,
   drawModeLabel,
@@ -513,13 +562,16 @@ export function MapCanvas({
   onAddIntent,
   onAssociatePropertiesWithParcel,
   onDraftBoundaryChange,
+  onViewportChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const callbacksRef = useRef({ onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange });
+  const callbacksRef = useRef({ onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange, onViewportChange });
   const modesRef = useRef({ addMode, drawMode, draftBoundary });
   const territoryRef = useRef(territory);
+  const searchTargetRef = useRef(searchTarget);
   const displayedTerritoryIdRef = useRef(territory.id);
+  const displayedSearchTargetIdRef = useRef<string | null>(null);
   const currentMapStyleUrlRef = useRef(mapStyleUrl);
   const parcelDataRef = useRef<ParcelFeatureCollection>(EMPTY_PARCELS);
   const propertiesRef = useRef(properties);
@@ -527,7 +579,6 @@ export function MapCanvas({
     properties,
     selectedPropertyId,
     visibleOutcomes,
-    searchQuery,
     compactMarkers,
   ));
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -535,8 +586,12 @@ export function MapCanvas({
   const territoryLatitude = territory.center[1];
 
   useEffect(() => {
-    callbacksRef.current = { onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange };
-  }, [onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange]);
+    callbacksRef.current = { onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange, onViewportChange };
+  }, [onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange, onViewportChange]);
+
+  useEffect(() => {
+    searchTargetRef.current = searchTarget;
+  }, [searchTarget]);
 
   useEffect(() => {
     modesRef.current = { addMode, drawMode, draftBoundary };
@@ -584,6 +639,17 @@ export function MapCanvas({
         trackUserLocation: true,
         showAccuracyCircle: true,
       }), "bottom-right");
+      const publishViewport = () => {
+        if (!map) return;
+        const bounds = map.getBounds();
+        callbacksRef.current.onViewportChange({
+          minLatitude: bounds.getSouth(),
+          minLongitude: bounds.getWest(),
+          maxLatitude: bounds.getNorth(),
+          maxLongitude: bounds.getEast(),
+          zoom: map.getZoom(),
+        });
+      };
       loadTimeout = window.setTimeout(() => {
         if (!mapLoaded) setMapStatus("error");
       }, 15000);
@@ -596,6 +662,7 @@ export function MapCanvas({
           modesRef.current.draftBoundary,
           mappedParcelFeatureCollection(parcelDataRef.current, propertiesRef.current),
           mappedLocationsRef.current,
+          searchTargetRef.current,
         );
       });
 
@@ -603,7 +670,9 @@ export function MapCanvas({
         mapLoaded = true;
         if (loadTimeout !== undefined) window.clearTimeout(loadTimeout);
         setMapStatus("ready");
+        publishViewport();
       });
+      map.on("moveend", publishViewport);
 
       map.on("mousemove", (event: MapMouseEvent) => {
         if (!map || modesRef.current.addMode || modesRef.current.drawMode) return;
@@ -734,6 +803,20 @@ export function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || mapStatus !== "ready") return;
+    updateGeoJsonSource(map, SEARCH_SOURCE_ID, searchTargetFeatureCollection(searchTarget));
+    if (!searchTarget || displayedSearchTargetIdRef.current === searchTarget.id) return;
+    displayedSearchTargetIdRef.current = searchTarget.id;
+    map.flyTo({
+      center: searchTarget.coordinates,
+      zoom: searchTarget.zoom,
+      duration: 700,
+      essential: true,
+    });
+  }, [mapStatus, searchTarget]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mapStatus !== "ready") return;
     updateGeoJsonSource(map, "draft-territory", draftFeatureCollection(draftBoundary));
   }, [draftBoundary, mapStatus]);
 
@@ -750,13 +833,12 @@ export function MapCanvas({
       properties,
       selectedPropertyId,
       visibleOutcomes,
-      searchQuery,
       compactMarkers,
     );
     mappedLocationsRef.current = mappedLocations;
     if (!map || mapStatus !== "ready") return;
     updateGeoJsonSource(map, LOCATION_SOURCE_ID, mappedLocations);
-  }, [properties, selectedPropertyId, visibleOutcomes, searchQuery, compactMarkers, mapStatus]);
+  }, [properties, selectedPropertyId, visibleOutcomes, compactMarkers, mapStatus]);
 
   return (
     <div className="map-engine-shell">

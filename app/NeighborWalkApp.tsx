@@ -11,7 +11,9 @@ import {
   CircleUserRound,
   CloudOff,
   Edit3,
+  LoaderCircle,
   Map as MapIcon,
+  MapPin,
   MapPinned,
   Navigation,
   Plus,
@@ -23,8 +25,8 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { MapCanvas } from "../components/MapCanvas";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MapCanvas, type MapSearchTarget } from "../components/MapCanvas";
 import { PropertyDrawer } from "../components/PropertyDrawer";
 import { FollowUpsView, GuideView, LeaderView, Modal, SettingsView } from "../components/Views";
 import {
@@ -38,15 +40,17 @@ import {
   type Territory,
 } from "../lib/domain";
 import { useNeighborWalk, type SupabaseUser } from "../lib/use-neighborwalk";
-import { reverseGeocode } from "../lib/geocoding";
+import { forwardGeocode, reverseGeocode, type AddressSearchResult } from "../lib/geocoding";
 import { dwellingsForParcel, parcelProgress } from "../lib/parcel-groups";
-import type { ParcelDetails } from "../lib/parcels";
+import { mergeParcelFeatureCollections, type MapViewport, type ParcelDetails } from "../lib/parcels";
 import { coverageForTerritory, type TerritoryCoverageById } from "../lib/territory-coverage";
 import { useTerritoryParcels } from "../lib/use-territory-parcels";
+import { useVisibleParcels } from "../lib/use-visible-parcels";
 
 type View = "map" | "followups" | "guide" | "leader" | "settings";
 type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[]; parcel?: ParcelDetails; legacyPropertyIds?: string[] };
 type ParcelSelection = { parcel: ParcelReference; situsAddress?: string | null; propertyIds: string[] };
+type SavedAddressResult = { propertyId: string; territoryId: string; label: string; detail: string; coordinates: Coordinates; color: string };
 const EMPTY_TERRITORIES: Territory[] = [];
 
 const PARCEL_COUNTY_NAMES: Record<string, string> = {
@@ -73,8 +77,15 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const { data, loading, storageError, online, saving, syncing, workspaceStatus, workspaceMembership, activeTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
   const [viewOverride, setViewOverride] = useState<View | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+  const [guidedPropertyId, setGuidedPropertyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | Outcome>("all");
   const [query, setQuery] = useState("");
+  const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
+  const [addressSearchStatus, setAddressSearchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTarget, setSearchTarget] = useState<MapSearchTarget | null>(null);
+  const [mapViewport, setMapViewport] = useState<MapViewport | null>(null);
+  const searchTargetSequence = useRef(0);
   const [addMode, setAddMode] = useState(false);
   const [pendingAdd, setPendingAdd] = useState<AddIntent | null>(null);
   const [selectedParcel, setSelectedParcel] = useState<ParcelSelection | null>(null);
@@ -111,6 +122,11 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
       : []
   ), [data, activeTerritory]);
   const territoryParcelResults = useTerritoryParcels(data?.territories ?? EMPTY_TERRITORIES);
+  const visibleParcelState = useVisibleParcels(mapViewport);
+  const mapParcels = useMemo(() => mergeParcelFeatureCollections(
+    activeTerritory ? territoryParcelResults[activeTerritory.id]?.parcels : undefined,
+    visibleParcelState.parcels,
+  ), [activeTerritory, territoryParcelResults, visibleParcelState.parcels]);
   const coverageByTerritory = useMemo<TerritoryCoverageById>(() => {
     if (!data) return {};
     return Object.fromEntries(data.territories.map((territory) => [
@@ -118,11 +134,48 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
       coverageForTerritory(data, territory.id, territoryParcelResults[territory.id]?.parcels),
     ]));
   }, [data, territoryParcelResults]);
-  const filteredProperties = useMemo(() => territoryProperties.filter((property) => {
-    const matchesOutcome = visibleOutcomes.has(property.currentOutcome);
-    const matchesSearch = !query || `${property.address} ${property.unit ?? ""}`.toLowerCase().includes(query.toLowerCase());
-    return matchesOutcome && matchesSearch;
-  }), [query, territoryProperties, visibleOutcomes]);
+  const savedAddressResults = useMemo<SavedAddressResult[]>(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!data || normalizedQuery.length < 2) return [];
+    return data.properties
+      .filter((property) => `${property.address} ${property.unit ?? ""}`.toLowerCase().includes(normalizedQuery))
+      .slice(0, 4)
+      .map((property) => ({
+        propertyId: property.id,
+        territoryId: property.territoryId,
+        label: `${property.address}${property.unit ? ` · ${property.unit}` : ""}`,
+        detail: `${data.territories.find((territory) => territory.id === property.territoryId)?.name ?? "Saved location"} · ${outcomeMeta[property.currentOutcome].label}`,
+        coordinates: property.coordinates,
+        color: outcomeMeta[property.currentOutcome].color,
+      }));
+  }, [data, query]);
+  const searchProximityLongitude = activeTerritory?.center[0];
+  const searchProximityLatitude = activeTerritory?.center[1];
+
+  useEffect(() => {
+    const normalizedQuery = query.trim();
+    if (normalizedQuery.length < 3) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void forwardGeocode(normalizedQuery, {
+        proximity: searchProximityLongitude !== undefined && searchProximityLatitude !== undefined
+          ? [searchProximityLongitude, searchProximityLatitude]
+          : undefined,
+        signal: controller.signal,
+      }).then((results) => {
+        setAddressResults(results);
+        setAddressSearchStatus("ready");
+      }).catch((error: unknown) => {
+        if ((error as { name?: string })?.name === "AbortError") return;
+        setAddressResults([]);
+        setAddressSearchStatus("error");
+      });
+    }, 260);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [query, searchProximityLatitude, searchProximityLongitude]);
 
   if (loading || workspaceStatus === "connecting") return <AppLoading />;
   if (data && supabaseUser && workspaceStatus === "invitation_required") {
@@ -172,9 +225,43 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const territoryEditorTeams = data.teams.filter((team) => team.eventId === territoryEditorEventId);
   const territoryEditorTerritories = data.territories.filter((territory) => territory.eventId === territoryEditorEventId);
 
+  const focusSearchTarget = (coordinates: Coordinates, zoom: number) => {
+    searchTargetSequence.current += 1;
+    setSearchTarget({ id: `search-${searchTargetSequence.current}`, coordinates, zoom });
+    setSelectedParcel(null);
+    setAddMode(false);
+    setSearchOpen(false);
+  };
+
+  const selectSavedAddress = (result: SavedAddressResult) => {
+    if (result.territoryId !== activeTerritory.id) actions.selectTerritory(result.territoryId);
+    setGuidedPropertyId(null);
+    setSelectedPropertyId(result.propertyId);
+    setQuery(result.label);
+    focusSearchTarget(result.coordinates, 18);
+  };
+
+  const selectGeocodedAddress = (result: AddressSearchResult) => {
+    setSelectedPropertyId(null);
+    setQuery(result.label);
+    focusSearchTarget(result.coordinates, result.zoom);
+    setToast(result.type === "address"
+      ? data.sync.mode === "connected" ? "Address found — loading nearby parcels" : "Address found"
+      : "Map moved to this result");
+  };
+
+  const clearAddressSearch = () => {
+    setQuery("");
+    setAddressResults([]);
+    setAddressSearchStatus("idle");
+    setSearchOpen(false);
+    setSearchTarget(null);
+  };
+
   const navigate = (next: View) => {
     setViewOverride(next);
     setSelectedPropertyId(null);
+    setGuidedPropertyId(null);
     setSelectedParcel(null);
     setAddMode(false);
     if (next !== "map") {
@@ -184,18 +271,20 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
     actions.setPreference("lastView", next);
   };
 
-  const handleAddProperty = (address: string, unit: string) => {
+  const handleAddProperty = (address: string, unit: string, startGuided: boolean) => {
     if (!pendingAdd) return;
     const propertyId = actions.addProperty({ ...pendingAdd, address, unit });
     setPendingAdd(null);
     setAddMode(false);
+    setGuidedPropertyId(startGuided ? propertyId : null);
     setSelectedPropertyId(propertyId);
-    setToast(pendingAdd.parcel ? "Dwelling added to this parcel" : "Location added to this territory");
+    setToast(startGuided ? "Location added — conversation guide ready" : pendingAdd.parcel ? "Dwelling added to this parcel" : "Location added to this territory");
   };
 
   const beginAddingDwelling = () => {
     setSelectedParcel(null);
     setSelectedPropertyId(null);
+    setGuidedPropertyId(null);
     setPendingAdd(null);
     setAddMode(true);
     setToast("Tap the next dwelling or entrance on the parcel");
@@ -283,10 +372,64 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
               </div>
               <div className="map-toolbar">
                 <div className="map-filter-scroll" aria-label="Filter locations">{mapFilterOptions.map((option) => <button key={option.value} className={filter === option.value ? "active" : ""} onClick={() => setFilter(option.value)}>{option.label}{option.value !== "all" && <i style={{ background: outcomeMeta[option.value].color }} />}</button>)}</div>
-                <label className="map-search"><Search size={15} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find an address" aria-label="Find an address" />{query && <button onClick={() => setQuery("")} aria-label="Clear search"><X size={14} /></button>}</label>
+                <div className="map-search-wrap" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false); }}>
+                  <div className={`map-search${searchOpen ? " active" : ""}`}>
+                    <Search size={16} />
+                    <input
+                      type="search"
+                      role="combobox"
+                      value={query}
+                      onChange={(event) => {
+                        const nextQuery = event.target.value;
+                        setQuery(nextQuery);
+                        setAddressResults([]);
+                        setAddressSearchStatus(nextQuery.trim().length >= 3 ? "loading" : "idle");
+                        setSearchOpen(true);
+                      }}
+                      onFocus={() => setSearchOpen(true)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") setSearchOpen(false);
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          if (savedAddressResults[0]) selectSavedAddress(savedAddressResults[0]);
+                          else if (addressResults[0]) selectGeocodedAddress(addressResults[0]);
+                        }
+                      }}
+                      placeholder="Search any address"
+                      aria-label="Search any address"
+                      aria-expanded={searchOpen && Boolean(query.trim())}
+                      aria-controls="address-search-results"
+                      aria-autocomplete="list"
+                    />
+                    {addressSearchStatus === "loading" && <LoaderCircle className="spin" size={14} aria-label="Searching addresses" />}
+                    {query && <button onClick={clearAddressSearch} aria-label="Clear address search"><X size={14} /></button>}
+                  </div>
+                  {searchOpen && query.trim() && <div id="address-search-results" className="map-search-results" aria-label="Address search results">
+                    {savedAddressResults.length > 0 && <div className="map-search-group">
+                      <span className="map-search-group-label">Saved locations</span>
+                      {savedAddressResults.map((result) => <button key={result.propertyId} onClick={() => selectSavedAddress(result)}>
+                        <span className="map-search-result-icon saved"><i style={{ background: result.color }} /></span>
+                        <span className="map-search-result-copy"><strong>{result.label}</strong><small>{result.detail}</small></span>
+                        <ChevronRight size={14} />
+                      </button>)}
+                    </div>}
+                    {addressResults.length > 0 && <div className="map-search-group">
+                      <span className="map-search-group-label">Address results</span>
+                      {addressResults.map((result) => <button key={result.id} onClick={() => selectGeocodedAddress(result)}>
+                        <span className="map-search-result-icon"><MapPin size={15} /></span>
+                        <span className="map-search-result-copy"><strong>{result.label}</strong><small>{result.type === "address" ? "Address" : result.type === "road" ? "Street" : "Place"} · View on map</small></span>
+                        <ChevronRight size={14} />
+                      </button>)}
+                    </div>}
+                    {query.trim().length < 3 && <p>Type at least 3 characters to search addresses.</p>}
+                    {query.trim().length >= 3 && addressSearchStatus === "loading" && !savedAddressResults.length && <p className="map-search-loading"><LoaderCircle className="spin" size={14} /> Searching addresses…</p>}
+                    {query.trim().length >= 3 && addressSearchStatus === "ready" && !savedAddressResults.length && !addressResults.length && <p>No address found. Try the street number, street, city, and state.</p>}
+                    {addressSearchStatus === "error" && <p>Address search is unavailable. Check the connection and try again.</p>}
+                  </div>}
+                </div>
               </div>
               <div className="map-stage">
-                <MapCanvas territory={activeTerritory} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchQuery={query} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} parcels={territoryParcelResults[activeTerritory.id]?.parcels} onSelectProperty={(id) => { setSelectedPropertyId(id); setSelectedParcel(null); setAddMode(false); }} onAddIntent={async (intent) => {
+                <MapCanvas territory={activeTerritory} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchTarget={searchTarget} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} parcels={mapParcels} onViewportChange={setMapViewport} onSelectProperty={(id) => { setSelectedPropertyId(id); setGuidedPropertyId(null); setSelectedParcel(null); setAddMode(false); }} onAddIntent={async (intent) => {
                   if (intent.parcel) {
                     const linkedDwellings = dwellingsForParcel(territoryProperties, intent.parcel);
                     const legacyPropertyIds = intent.legacyPropertyIds ?? [];
@@ -321,18 +464,17 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
                     setPendingAdd(intent);
                   }
                 }} onAssociatePropertiesWithParcel={(propertyIds, parcel) => actions.associatePropertiesWithParcel(propertyIds, parcelReference(parcel))} onDraftBoundaryChange={setDraftBoundary} />
-                {query && <div className="map-search-results" aria-label="Address search results">{filteredProperties.slice(0, 5).map((property) => <button key={property.id} onClick={() => { setSelectedPropertyId(property.id); setSelectedParcel(null); }}><span><strong>{property.address}{property.unit ? ` · ${property.unit}` : ""}</strong><small>{outcomeMeta[property.currentOutcome].label}</small></span><i style={{ background: outcomeMeta[property.currentOutcome].color }} /></button>)}{!filteredProperties.length && <p>No locations match “{query}”.</p>}</div>}
                 <div className="map-floating-actions">
-                  {!drawMode && <button className={`map-action-button ${addMode ? "active" : ""}`} aria-label={addMode ? "Cancel adding a location" : "Add a location"} onClick={() => { setAddMode((current) => !current); setSelectedPropertyId(null); setSelectedParcel(null); }}><Plus size={18} /><span>{addMode ? "Cancel adding" : "Add location"}</span></button>}
+                  {!drawMode && <button className={`map-action-button ${addMode ? "active" : ""}`} aria-label={addMode ? "Cancel adding a location" : "Add a location"} onClick={() => { setAddMode((current) => !current); setSelectedPropertyId(null); setGuidedPropertyId(null); setSelectedParcel(null); }}><Plus size={18} /><span>{addMode ? "Cancel adding" : "Add location"}</span></button>}
                   {canManage && !drawMode && <button className="map-action-button secondary" aria-label={`Edit ${activeTerritory.name}`} onClick={() => openTerritoryEditor(activeTerritory.id)}><Edit3 size={18} /><span>Edit territory</span></button>}
                   {canManage && !drawMode && <button className="map-action-button secondary" aria-label="Draw a territory" onClick={startDrawing}><MapPinned size={18} /><span>Draw territory</span></button>}
                 </div>
                 {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => points.slice(0, -1))}><Undo2 size={15} /> Undo</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={draftBoundary.length < 3} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
               </div>
-              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} canManage={canManage} onClose={() => setSelectedPropertyId(null)} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
+              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} canManage={canManage} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
             </section>
           )}
-          {view === "followups" && <FollowUpsView data={data} onOpenProperty={(propertyId) => { navigate("map"); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onComplete={(id, input) => { actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next visit scheduled" : "Follow-up completed"); }} onReschedule={(id, date, note) => { actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={(id, note) => { actions.cancelFollowUp(id, note); setToast("Follow-up cancelled"); }} />}
+          {view === "followups" && <FollowUpsView data={data} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onComplete={(id, input) => { actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next visit scheduled" : "Follow-up completed"); }} onReschedule={(id, date, note) => { actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={(id, note) => { actions.cancelFollowUp(id, note); setToast("Follow-up cancelled"); }} />}
           {view === "guide" && <GuideView data={data} canManage={canManage} onUpdate={(id, patch) => { actions.updateGuideStep(id, patch); setToast("Guide step saved"); }} />}
           {view === "leader" && canManage && <LeaderView data={data} coverageByTerritory={coverageByTerritory} membership={workspaceMembership} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} />}
           {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onClearOutreach={actions.clearOutreachData} onSync={actions.syncNow} />}
@@ -346,8 +488,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
         {canManage ? <MobileNav active={view === "leader"} icon={<Users size={20} />} label="Leader" onClick={() => navigate("leader")} /> : <MobileNav active={view === "settings"} icon={<Settings2 size={20} />} label="Settings" onClick={() => navigate("settings")} />}
       </nav>
 
-      {pendingAdd && <AddPropertyModal intent={pendingAdd} existingDwellingCount={pendingParcelDwellings.length} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
-      {selectedParcel && <ParcelSummaryModal selection={selectedParcel} dwellings={selectedParcelDwellings} onClose={() => setSelectedParcel(null)} onOpenDwelling={(propertyId) => { setSelectedParcel(null); setSelectedPropertyId(propertyId); }} onAddDwelling={beginAddingDwelling} />}
+      {pendingAdd && <AddPropertyModal intent={pendingAdd} existingDwellingCount={pendingParcelDwellings.length} guideAvailable={data.guide.length > 0} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
+      {selectedParcel && <ParcelSummaryModal selection={selectedParcel} dwellings={selectedParcelDwellings} onClose={() => setSelectedParcel(null)} onOpenDwelling={(propertyId) => { setSelectedParcel(null); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); }} onAddDwelling={beginAddingDwelling} />}
       {territoryPickerOpen && <TerritoryPickerModal data={data} coverageByTerritory={coverageByTerritory} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onEdit={openTerritoryEditor} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
       {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} territories={territoryEditorTerritories} teams={territoryEditorTeams} boundaryChanged={draftBoundary.length >= 3} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onDelete={editingTerritory ? (destinationTerritoryId) => {
         const destination = data.territories.find((territory) => territory.id === destinationTerritoryId);
@@ -392,7 +534,13 @@ function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; er
   );
 }
 
-function AddPropertyModal({ intent, existingDwellingCount, onClose, onSave }: { intent: AddIntent; existingDwellingCount: number; onClose: () => void; onSave: (address: string, unit: string) => void }) {
+function AddPropertyModal({ intent, existingDwellingCount, guideAvailable, onClose, onSave }: {
+  intent: AddIntent;
+  existingDwellingCount: number;
+  guideAvailable: boolean;
+  onClose: () => void;
+  onSave: (address: string, unit: string, startGuided: boolean) => void;
+}) {
   const [address, setAddress] = useState(intent.suggestedAddress);
   const [unit, setUnit] = useState("");
   const countyName = intent.parcel ? PARCEL_COUNTY_NAMES[intent.parcel.countyFips] ?? "Tennessee" : null;
@@ -401,7 +549,7 @@ function AddPropertyModal({ intent, existingDwellingCount, onClose, onSave }: { 
   return (
     <Modal
       title={needsLabel ? "Add another dwelling" : "Add this location"}
-      description={intent.parcel ? "Each dwelling keeps its own visits, outcome, and follow-ups." : "Confirm the address before recording a visit."}
+      description={intent.parcel ? "Each dwelling keeps its own visits, outcome, and follow-ups." : "Confirm the address, then start the visit your way."}
       onClose={onClose}
     >
       <div className="location-preview"><MapPinned size={20} /><span><strong>{intent.parcel ? `Official ${countyName} parcel` : "Map location selected"}</strong>{intent.coordinates[1].toFixed(6)}, {intent.coordinates[0].toFixed(6)}{intent.buildingGeometry ? " · Building found" : ""}</span></div>
@@ -411,7 +559,14 @@ function AddPropertyModal({ intent, existingDwellingCount, onClose, onSave }: { 
         <label className="form-field"><span>Street address</span><input value={address} onChange={(event) => setAddress(event.target.value)} /></label>
         <label className="form-field"><span>Dwelling label or unit <small>{needsLabel ? "Required" : "Optional"}</small></span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Rear house, Unit B, Apartment 2" /></label>
       </div>
-      <div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={!canSave} onClick={() => onSave(address, unit)}><Plus size={15} /> Add dwelling</button></div>
+      {guideAvailable && <div className="guided-start-note"><BookOpenText size={17} /><span><strong>Want a little help at the door?</strong>The guided path opens with your church’s first conversation prompt. You can leave it at any time.</span></div>}
+      <div className="modal-actions split add-location-actions">
+        <button className="button quiet" onClick={onClose}>Cancel</button>
+        <div>
+          <button className="button quiet" disabled={!canSave} onClick={() => onSave(address, unit, false)}><Plus size={15} /> {guideAvailable ? "Add without guide" : "Add dwelling"}</button>
+          {guideAvailable && <button className="button primary" disabled={!canSave} onClick={() => onSave(address, unit, true)}><BookOpenText size={15} /> Add &amp; use guide</button>}
+        </div>
+      </div>
     </Modal>
   );
 }

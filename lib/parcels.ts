@@ -4,6 +4,16 @@ import { getSupabaseBrowserClient, type Json } from "./supabase";
 
 export const TERRITORY_PARCEL_RESULT_LIMIT = 12000;
 export const TERRITORY_PARCEL_BUFFER_METERS = 35;
+export const VISIBLE_PARCEL_MIN_ZOOM = 14.5;
+export const VISIBLE_PARCEL_RESULT_LIMIT = 5000;
+
+export type MapViewport = {
+  minLatitude: number;
+  minLongitude: number;
+  maxLatitude: number;
+  maxLongitude: number;
+  zoom: number;
+};
 
 export type ParcelDetails = {
   id: number;
@@ -63,6 +73,50 @@ function parseParcelFeature(value: unknown): ParcelFeature | null {
   };
 }
 
+export function parseVisibleParcelRows(value: unknown): ParcelFeatureCollection {
+  if (!Array.isArray(value)) throw new Error("The parcel service did not return a list.");
+  const features = value.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const candidate = row as Record<string, unknown>;
+    const parsed = parseParcelFeature({
+      type: "Feature",
+      id: candidate.id,
+      properties: {
+        id: candidate.id,
+        countyFips: candidate.county_fips,
+        gislink: candidate.gislink,
+        situsAddress: candidate.situs_address,
+        propertyClass: candidate.property_class,
+        landUse: candidate.land_use,
+        isResidential: candidate.is_residential,
+      },
+      geometry: candidate.geometry,
+    });
+    return parsed ? [parsed] : [];
+  });
+  return { type: "FeatureCollection", features };
+}
+
+export function mergeParcelFeatureCollections(...collections: Array<ParcelFeatureCollection | undefined>): ParcelFeatureCollection {
+  const features = new Map<string, ParcelFeature>();
+  for (const collection of collections) {
+    for (const feature of collection?.features ?? []) {
+      const identity = feature.properties.countyFips && feature.properties.gislink
+        ? `${feature.properties.countyFips}:${feature.properties.gislink}`
+        : String(feature.properties.id);
+      features.set(identity, feature);
+    }
+  }
+  return { type: "FeatureCollection", features: [...features.values()] };
+}
+
+export function viewportKey(viewport: MapViewport | null) {
+  if (!viewport || viewport.zoom < VISIBLE_PARCEL_MIN_ZOOM) return null;
+  return [viewport.minLongitude, viewport.minLatitude, viewport.maxLongitude, viewport.maxLatitude]
+    .map((value) => value.toFixed(5))
+    .join(":");
+}
+
 export function parseTerritoryParcelResponse(value: unknown): TerritoryParcelResult {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("The parcel service returned an invalid response.");
@@ -116,4 +170,19 @@ export async function fetchParcelDatasetRevision(): Promise<string | null> {
   const { data, error } = await client.rpc("parcel_dataset_revision_v1");
   if (error) throw error;
   return typeof data === "string" ? data : null;
+}
+
+export async function fetchParcelsInView(viewport: MapViewport): Promise<ParcelFeatureCollection | null> {
+  if (viewport.zoom < VISIBLE_PARCEL_MIN_ZOOM) return { type: "FeatureCollection", features: [] };
+  const client = getSupabaseBrowserClient();
+  if (!client) return null;
+  const { data, error } = await client.rpc("parcels_in_view_v2", {
+    min_lat: viewport.minLatitude,
+    min_long: viewport.minLongitude,
+    max_lat: viewport.maxLatitude,
+    max_long: viewport.maxLongitude,
+    result_limit: VISIBLE_PARCEL_RESULT_LIMIT,
+  });
+  if (error) throw error;
+  return parseVisibleParcelRows(data);
 }

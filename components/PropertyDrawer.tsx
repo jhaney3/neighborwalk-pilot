@@ -2,6 +2,8 @@
 
 import {
   AlertOctagon,
+  ArrowRight,
+  BookOpenText,
   Building2,
   CalendarClock,
   Check,
@@ -11,6 +13,7 @@ import {
   Clock3,
   History,
   MapPin,
+  MessageCircle,
   PencilLine,
   Phone,
   Plus,
@@ -20,7 +23,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   dateInputValue,
   dueDateFromNow,
@@ -60,6 +63,7 @@ export function PropertyDrawer({
   visits,
   openFollowUp,
   canManage,
+  startGuided = false,
   onClose,
   onViewParcel,
   onAddDwelling,
@@ -75,6 +79,7 @@ export function PropertyDrawer({
   visits: Visit[];
   openFollowUp?: FollowUp;
   canManage: boolean;
+  startGuided?: boolean;
   onClose: () => void;
   onViewParcel?: () => void;
   onAddDwelling?: () => void;
@@ -85,6 +90,13 @@ export function PropertyDrawer({
   onDeleteResident: (residentId: string) => void;
 }) {
   const [tab, setTab] = useState<"record" | "people" | "history">("record");
+  const guideSteps = useMemo(() => [...data.guide].sort((first, second) => first.order - second.order), [data.guide]);
+  const [workflowStage, setWorkflowStage] = useState<"record" | "guide" | "name">(
+    startGuided && guideSteps.length ? "guide" : "record",
+  );
+  const [guideIndex, setGuideIndex] = useState(0);
+  const [guidedPersonEntry, setGuidedPersonEntry] = useState(false);
+  const [workflowNotice, setWorkflowNotice] = useState("");
   const [outcome, setOutcome] = useState<Exclude<Outcome, "unvisited">>("conversation");
   const [note, setNote] = useState("");
   const [followUpDate, setFollowUpDate] = useState(dateInputValue(dueDateFromNow(data.church.defaultFollowUpDays)));
@@ -101,6 +113,27 @@ export function PropertyDrawer({
     && (outcome !== "follow_up" || Boolean(followUpDate));
 
   const volunteerNames = useMemo(() => new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer.name])), [data.volunteers]);
+
+  const beginGuide = () => {
+    setGuideIndex(0);
+    setWorkflowNotice("");
+    setWorkflowStage("guide");
+    setTab("record");
+  };
+
+  const continueToPerson = () => {
+    setGuidedPersonEntry(true);
+    setEditingResident("new");
+    setTab("people");
+  };
+
+  const finishGuidedPersonEntry = (message: string) => {
+    setEditingResident(null);
+    setGuidedPersonEntry(false);
+    setWorkflowStage("record");
+    setWorkflowNotice(message);
+    setTab("record");
+  };
 
   const saveVisit = () => {
     if (!canSave) return;
@@ -173,6 +206,33 @@ export function PropertyDrawer({
 
       {tab === "record" ? (
         <div className="drawer-record" role="tabpanel">
+          {workflowStage === "guide" && guideSteps.length ? (
+            <GuidedConversation
+              steps={guideSteps}
+              index={guideIndex}
+              onChangeIndex={setGuideIndex}
+              onFinish={() => setWorkflowStage("name")}
+              onRecordWithoutGuide={() => setWorkflowStage("record")}
+            />
+          ) : workflowStage === "name" ? (
+            <NamePrompt
+              onBack={() => setWorkflowStage("guide")}
+              onAddPerson={continueToPerson}
+              onSkip={() => {
+                setWorkflowStage("record");
+                setWorkflowNotice("Name skipped — record what happened at this door.");
+              }}
+            />
+          ) : (
+            <>
+          {workflowNotice && <div className="workflow-notice" role="status"><Check size={15} /><span>{workflowNotice}</span></div>}
+          {guideSteps.length > 0 && (
+            <button className="guided-entry-card" type="button" onClick={beginGuide}>
+              <span><BookOpenText size={17} /></span>
+              <span><strong>Need a prompt?</strong><small>Open the conversation guide at step one.</small></span>
+              <ChevronRight size={16} />
+            </button>
+          )}
           <fieldset className="outcome-fieldset">
             <legend>What happened?</legend>
             <div className="outcome-options">
@@ -232,6 +292,8 @@ export function PropertyDrawer({
               }
             }}><Trash2 size={14} /> Remove unvisited location</button>
           )}
+            </>
+          )}
         </div>
       ) : tab === "history" ? (
         <div className="history-list" role="tabpanel">
@@ -247,10 +309,15 @@ export function PropertyDrawer({
             <ResidentForm
               resident={editingResident === "new" ? undefined : editingResident}
               noteLimit={data.church.noteCharacterLimit}
-              onCancel={() => setEditingResident(null)}
+              autoFocusName={guidedPersonEntry}
+              onCancel={() => {
+                if (guidedPersonEntry) finishGuidedPersonEntry("Name skipped — record what happened at this door.");
+                else setEditingResident(null);
+              }}
               onSave={(input) => {
                 onUpsertResident(property.id, input, editingResident === "new" ? undefined : editingResident.id);
-                setEditingResident(null);
+                if (guidedPersonEntry) finishGuidedPersonEntry("Person saved — now record what happened at this door.");
+                else setEditingResident(null);
               }}
             />
           ) : (
@@ -281,12 +348,77 @@ export function PropertyDrawer({
   );
 }
 
-function ResidentForm({ resident, noteLimit, onCancel, onSave }: {
+function GuidedConversation({ steps, index, onChangeIndex, onFinish, onRecordWithoutGuide }: {
+  steps: NeighborWalkData["guide"];
+  index: number;
+  onChangeIndex: (index: number) => void;
+  onFinish: () => void;
+  onRecordWithoutGuide: () => void;
+}) {
+  const step = steps[index];
+  if (!step) return null;
+  const finalStep = index === steps.length - 1;
+
+  return (
+    <section className="doorstep-guide" aria-labelledby="doorstep-guide-title">
+      <div className="doorstep-guide-heading">
+        <div><p>Guided conversation</p><h2 id="doorstep-guide-title">{step.title}</h2></div>
+        <button type="button" onClick={onRecordWithoutGuide}>Record without guide</button>
+      </div>
+      <div className="doorstep-progress" aria-label={`Step ${index + 1} of ${steps.length}`}>
+        {steps.map((item, itemIndex) => (
+          <button
+            type="button"
+            key={item.id}
+            className={itemIndex === index ? "active" : itemIndex < index ? "complete" : ""}
+            onClick={() => onChangeIndex(itemIndex)}
+            aria-label={`Open step ${itemIndex + 1}: ${item.title}`}
+            aria-current={itemIndex === index ? "step" : undefined}
+          ><span>{itemIndex + 1}</span></button>
+        ))}
+      </div>
+      <div className="doorstep-script-card">
+        <span><MessageCircle size={18} /> Words you can use</span>
+        <blockquote>“{step.sampleWords}”</blockquote>
+      </div>
+      <p className="doorstep-coaching">{step.coaching}</p>
+      <div className="doorstep-reminder"><strong>Keep in mind</strong><span>{step.reminder}</span></div>
+      <button className="skip-to-wrap" type="button" onClick={onFinish}>Conversation is wrapping up</button>
+      <div className="doorstep-guide-actions">
+        <button className="button quiet" type="button" disabled={index === 0} onClick={() => onChangeIndex(Math.max(0, index - 1))}>Previous</button>
+        <button className="button primary" type="button" onClick={() => finalStep ? onFinish() : onChangeIndex(index + 1)}>
+          {finalStep ? "Wrap up" : "Next prompt"} <ArrowRight size={15} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function NamePrompt({ onBack, onAddPerson, onSkip }: { onBack: () => void; onAddPerson: () => void; onSkip: () => void }) {
+  return (
+    <section className="name-prompt" aria-labelledby="name-prompt-title">
+      <div className="name-prompt-mark"><UserRound size={21} /></div>
+      <p>Before you leave</p>
+      <h2 id="name-prompt-title">Ask their name, if it feels natural.</h2>
+      <blockquote>“Before I go, may I ask your first name?”</blockquote>
+      <span>Only save what they choose to share. You can skip this and record the visit immediately.</span>
+      <div className="name-prompt-actions">
+        <button className="button primary" type="button" onClick={onAddPerson}><UserRound size={15} /> Add person details</button>
+        <button className="button quiet" type="button" onClick={onSkip}>Skip for now</button>
+      </div>
+      <button className="name-prompt-back" type="button" onClick={onBack}>Back to the guide</button>
+    </section>
+  );
+}
+
+function ResidentForm({ resident, noteLimit, autoFocusName = false, onCancel, onSave }: {
   resident?: Resident;
   noteLimit: number;
+  autoFocusName?: boolean;
   onCancel: () => void;
   onSave: (input: ResidentInput) => void;
 }) {
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(resident?.name ?? "");
   const [faithStatus, setFaithStatus] = useState(resident?.faithStatus ?? "not_discussed");
   const [notes, setNotes] = useState(resident?.notes ?? "");
@@ -297,10 +429,14 @@ function ResidentForm({ resident, noteLimit, onCancel, onSave }: {
     : preferredContact === "text" || preferredContact === "call" ? Boolean(phone.trim()) : true;
   const canSave = notes.length <= noteLimit && contactMethodValid;
 
+  useEffect(() => {
+    if (autoFocusName) nameInputRef.current?.focus();
+  }, [autoFocusName]);
+
   return (
     <div className="resident-form">
       <div className="form-stack">
-        <label className="form-field"><span>Name <small>Optional</small></span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Only if they choose to share it" /></label>
+        <label className="form-field"><span>Name <small>Optional</small></span><input ref={nameInputRef} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Only if they choose to share it" /></label>
         <label className="form-field"><span>Faith status <small>Self-described only</small></span><select value={faithStatus} onChange={(event) => setFaithStatus(event.target.value as Resident["faithStatus"])}>{faithStatusValues.map((value) => <option value={value} key={value}>{faithStatusLabels[value]}</option>)}</select></label>
         <label className="form-field"><span>Objective note <small>Optional</small></span><textarea rows={2} maxLength={noteLimit + 1} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Record only what helps honor their request." /><em className={notes.length > noteLimit ? "over" : ""}>{noteLimit - notes.length} characters remaining</em></label>
       </div>
