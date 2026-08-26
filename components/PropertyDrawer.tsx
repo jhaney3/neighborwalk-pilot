@@ -32,6 +32,7 @@ import {
   formatDateTime,
   outcomeMeta,
   type FollowUp,
+  type ConversationGuide,
   type NeighborWalkData,
   type Outcome,
   type Property,
@@ -63,6 +64,7 @@ export function PropertyDrawer({
   data,
   visits,
   openFollowUp,
+  conversationGuide,
   canManage,
   startGuided = false,
   onClose,
@@ -79,6 +81,7 @@ export function PropertyDrawer({
   data: NeighborWalkData;
   visits: Visit[];
   openFollowUp?: FollowUp;
+  conversationGuide?: ConversationGuide;
   canManage: boolean;
   startGuided?: boolean;
   onClose: () => void;
@@ -91,7 +94,7 @@ export function PropertyDrawer({
   onDeleteResident: (residentId: string) => void;
 }) {
   const [tab, setTab] = useState<"record" | "people" | "history">("record");
-  const guideSteps = useMemo(() => [...data.guide].sort((first, second) => first.order - second.order), [data.guide]);
+  const guideSteps = useMemo(() => [...(conversationGuide?.steps ?? [])].sort((first, second) => first.order - second.order), [conversationGuide]);
   const [workflowStage, setWorkflowStage] = useState<"record" | "guide" | "name">(
     startGuided && guideSteps.length ? "guide" : "record",
   );
@@ -209,6 +212,7 @@ export function PropertyDrawer({
         <div className="drawer-record" role="tabpanel">
           {workflowStage === "guide" && guideSteps.length ? (
             <GuidedConversation
+              guideTitle={conversationGuide?.title ?? "Conversation guide"}
               steps={guideSteps}
               index={guideIndex}
               onChangeIndex={setGuideIndex}
@@ -230,7 +234,7 @@ export function PropertyDrawer({
           {guideSteps.length > 0 && (
             <button className="guided-entry-card" type="button" onClick={beginGuide}>
               <span><BookOpenText size={17} /></span>
-              <span><strong>Need a prompt?</strong><small>Open the conversation guide at step one.</small></span>
+              <span><strong>Need a prompt?</strong><small>Open {conversationGuide?.title ?? "your favorite guide"} at step one.</small></span>
               <ChevronRight size={16} />
             </button>
           )}
@@ -349,7 +353,8 @@ export function PropertyDrawer({
   );
 }
 
-function GuidedConversation({ steps, index, onChangeIndex, onFinish, onRecordWithoutGuide }: {
+function GuidedConversation({ guideTitle, steps, index, onChangeIndex, onFinish, onRecordWithoutGuide }: {
+  guideTitle: string;
   steps: NeighborWalkData["guide"];
   index: number;
   onChangeIndex: (index: number) => void;
@@ -363,7 +368,7 @@ function GuidedConversation({ steps, index, onChangeIndex, onFinish, onRecordWit
   return (
     <section className="doorstep-guide" aria-labelledby="doorstep-guide-title">
       <div className="doorstep-guide-heading">
-        <div><p>Guided conversation</p><h2 id="doorstep-guide-title">{step.title}</h2></div>
+        <div><p>{guideTitle}</p><h2 id="doorstep-guide-title">{step.title}</h2></div>
         <button type="button" onClick={onRecordWithoutGuide}>Record without guide</button>
       </div>
       <div className="doorstep-progress" aria-label={`Step ${index + 1} of ${steps.length}`}>
@@ -378,10 +383,10 @@ function GuidedConversation({ steps, index, onChangeIndex, onFinish, onRecordWit
           ><span>{itemIndex + 1}</span></button>
         ))}
       </div>
-      <div className="doorstep-script-card">
+      {step.sampleWords && <div className="doorstep-script-card">
         <span><MessageCircle size={18} /> Words you can use</span>
         <blockquote>“{step.sampleWords}”</blockquote>
-      </div>
+      </div>}
       <ScriptureReader references={step.scriptureReferences} theme="light" />
       <button className="skip-to-wrap" type="button" onClick={onFinish}>Conversation is wrapping up</button>
       <div className="doorstep-guide-actions">

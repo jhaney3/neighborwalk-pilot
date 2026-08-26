@@ -10,6 +10,8 @@ import {
   neighborWalkDataSchema,
   updateTerritoryRecord,
   type AuditEntry,
+  type ConversationGuide,
+  type ConversationGuideInput,
   type Coordinates,
   type GuideStep,
   type FollowUpCompletionInput,
@@ -22,6 +24,18 @@ import {
   type Territory,
   type TerritoryUpdate,
 } from "./domain";
+import {
+  deleteConnectedGuide,
+  legacyConversationGuide,
+  loadConnectedGuideLibrary,
+  normalizeGuideSteps,
+  readLocalGuideLibrary,
+  saveConnectedFavorite,
+  saveConnectedGuide,
+  validGuideInput,
+  writeLocalGuideLibrary,
+  type GuideLibraryState,
+} from "./conversation-guides";
 import {
   exportNeighborWalkData,
   importNeighborWalkFile,
@@ -150,6 +164,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const [autoRetryTick, setAutoRetryTick] = useState(0);
   const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus>(supabaseUser ? "connecting" : "device_only");
   const [workspaceMembership, setWorkspaceMembership] = useState<WorkspaceMembership | null>(null);
+  const [guideLibrary, setGuideLibrary] = useState<GuideLibraryState>({ guides: [] });
+  const [guideLibraryError, setGuideLibraryError] = useState<string | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveVersion = useRef(0);
   const workspaceRef = useRef<WorkspaceConnection | null>(null);
@@ -171,6 +187,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           setWorkspaceStatus("device_only");
           setWorkspaceMembership(null);
           roleRef.current = null;
+          setGuideLibrary(readLocalGuideLibrary(loaded.church.id, loaded.guide));
+          setGuideLibraryError(null);
           setData({ ...loaded, sync: { ...loaded.sync, mode: "device_only" } });
           return;
         }
@@ -238,6 +256,16 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           const selected = hasLocalChanges
             ? mergePendingWorkspaceChanges(parsedRemote.data, loaded)
             : parsedRemote.data;
+          try {
+            const connectedGuideLibrary = await loadConnectedGuideLibrary(client, membership.church_id, supabaseUser.id);
+            if (!active) return;
+            setGuideLibrary(connectedGuideLibrary);
+            setGuideLibraryError(null);
+          } catch (guideError) {
+            if (!active) return;
+            setGuideLibrary({ guides: [legacyConversationGuide(selected.church.id, selected.guide)] });
+            setGuideLibraryError(guideError instanceof Error ? guideError.message : "Conversation guides could not be loaded.");
+          }
           setData({
             ...selected,
             sync: {
@@ -271,6 +299,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
               lastError: error instanceof Error ? error.message : "The church workspace could not be reached.",
             },
           });
+          setGuideLibrary(readLocalGuideLibrary(loaded.church.id, loaded.guide));
+          setGuideLibraryError("Conversation guides are using this device until the church workspace reconnects.");
           setWorkspaceStatus(cached ? "ready" : "invitation_required");
         }
       } catch (error) {
@@ -809,6 +839,79 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     });
   }, [supabaseUser, updateData]);
 
+  const saveConversationGuide = useCallback(async (input: ConversationGuideInput) => {
+    if (!validGuideInput(input)) throw new Error("Finish each guide step before saving.");
+    if (input.scope === "church" && supabaseUser && roleRef.current !== "leader") {
+      throw new Error("Only a church leader can publish a church guide.");
+    }
+    const client = getSupabaseBrowserClient();
+    const workspace = workspaceRef.current;
+    let saved: ConversationGuide;
+    if (supabaseUser && client && workspace) {
+      const existing = input.id ? guideLibrary.guides.find((guide) => guide.id === input.id) : undefined;
+      if (existing && existing.scope !== input.scope) throw new Error("A guide’s privacy level cannot be changed after it is created.");
+      const nextSortOrder = Math.min(10000, Math.max(0, ...guideLibrary.guides
+        .filter((guide) => guide.scope === input.scope)
+        .map((guide) => guide.sortOrder)) + 10);
+      saved = await saveConnectedGuide(client, input, workspace.churchId, supabaseUser.id, nextSortOrder);
+    } else {
+      const existing = input.id ? guideLibrary.guides.find((guide) => guide.id === input.id) : undefined;
+      const now = new Date().toISOString();
+      saved = {
+        id: existing?.id ?? createId("guide"),
+        churchId: dataRef.current?.church.id ?? "device_church",
+        scope: existing?.scope ?? input.scope,
+        ownerUserId: (existing?.scope ?? input.scope) === "personal"
+          ? actorIdRef.current ?? dataRef.current?.preferences.activeVolunteerId ?? "device_user"
+          : undefined,
+        title: input.title.trim(),
+        description: input.description.trim(),
+        steps: normalizeGuideSteps(input.steps),
+        sortOrder: existing?.sortOrder ?? Math.min(10000, Math.max(0, ...guideLibrary.guides.map((guide) => guide.sortOrder)) + 10),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+    }
+    const nextGuides = [...guideLibrary.guides.filter((guide) => guide.id !== saved.id), saved]
+      .sort((first, second) => first.sortOrder - second.sortOrder || first.title.localeCompare(second.title));
+    const next = { ...guideLibrary, guides: nextGuides };
+    setGuideLibrary(next);
+    setGuideLibraryError(null);
+    if (!supabaseUser || !client || !workspace) writeLocalGuideLibrary(next);
+    return saved;
+  }, [guideLibrary, supabaseUser]);
+
+  const deleteConversationGuide = useCallback(async (guideId: string) => {
+    const guide = guideLibrary.guides.find((item) => item.id === guideId);
+    if (!guide) return;
+    if (guide.scope === "church" && supabaseUser && roleRef.current !== "leader") {
+      throw new Error("Only a church leader can delete a church guide.");
+    }
+    const client = getSupabaseBrowserClient();
+    const workspace = workspaceRef.current;
+    if (supabaseUser && client && workspace) await deleteConnectedGuide(client, guideId);
+    const next: GuideLibraryState = {
+      guides: guideLibrary.guides.filter((item) => item.id !== guideId),
+      favoriteGuideId: guideLibrary.favoriteGuideId === guideId ? undefined : guideLibrary.favoriteGuideId,
+    };
+    setGuideLibrary(next);
+    setGuideLibraryError(null);
+    if (!supabaseUser || !client || !workspace) writeLocalGuideLibrary(next);
+  }, [guideLibrary, supabaseUser]);
+
+  const setFavoriteConversationGuide = useCallback(async (guideId: string) => {
+    if (!guideLibrary.guides.some((guide) => guide.id === guideId)) throw new Error("Choose a guide you can access.");
+    const client = getSupabaseBrowserClient();
+    const workspace = workspaceRef.current;
+    if (supabaseUser && client && workspace) {
+      await saveConnectedFavorite(client, workspace.churchId, supabaseUser.id, guideId);
+    }
+    const next = { ...guideLibrary, favoriteGuideId: guideId };
+    setGuideLibrary(next);
+    setGuideLibraryError(null);
+    if (!supabaseUser || !client || !workspace) writeLocalGuideLibrary(next);
+  }, [guideLibrary, supabaseUser]);
+
   const downloadBackup = useCallback(() => {
     if (supabaseUser && roleRef.current !== "leader") return;
     if (!data) return;
@@ -1010,6 +1113,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     syncing,
     workspaceStatus,
     workspaceMembership,
+    guideLibrary,
+    guideLibraryError,
     activeTerritory,
     activeVolunteer,
     actions: {
@@ -1027,6 +1132,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       upsertResident,
       deleteResident,
       updateGuideStep,
+      saveConversationGuide,
+      deleteConversationGuide,
+      setFavoriteConversationGuide,
       updateChurch,
       addTerritory,
       updateTerritory,

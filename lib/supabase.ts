@@ -61,6 +61,60 @@ export type NeighborWalkDatabase = {
         Update: { schema_version?: number; data?: Json };
         Relationships: [];
       };
+      conversation_guides: {
+        Row: {
+          id: string;
+          church_id: string;
+          scope: "church" | "personal";
+          owner_user_id: string | null;
+          title: string;
+          description: string;
+          steps: Json;
+          sort_order: number;
+          created_by: string;
+          updated_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          church_id: string;
+          scope: "church" | "personal";
+          owner_user_id?: string | null;
+          title: string;
+          description?: string;
+          steps: Json;
+          sort_order?: number;
+          created_by: string;
+          updated_by: string;
+        };
+        Update: {
+          title?: string;
+          description?: string;
+          steps?: Json;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
+      conversation_guide_preferences: {
+        Row: {
+          church_id: string;
+          user_id: string;
+          favorite_guide_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          church_id: string;
+          user_id: string;
+          favorite_guide_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          church_id?: string;
+          user_id?: string;
+          favorite_guide_id?: string;
+        };
+        Relationships: [];
+      };
       parcels: {
         Row: {
           id: number;

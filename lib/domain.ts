@@ -241,6 +241,26 @@ export type GuideStep = {
   scriptureReferences: string[];
 };
 
+export type ConversationGuideScope = "church" | "personal";
+
+export type ConversationGuide = {
+  id: string;
+  churchId: string;
+  scope: ConversationGuideScope;
+  ownerUserId?: string;
+  title: string;
+  description: string;
+  steps: GuideStep[];
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ConversationGuideInput = Pick<
+  ConversationGuide,
+  "scope" | "title" | "description" | "steps"
+> & { id?: string };
+
 export type AuditEntry = {
   id: string;
   action: string;
