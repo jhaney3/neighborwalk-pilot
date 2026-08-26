@@ -39,6 +39,7 @@ import {
   type ResidentInput,
   type Visit,
 } from "../lib/domain";
+import { ScriptureReader } from "./ScriptureReader";
 
 type VisitInput = {
   propertyId: string;
@@ -381,8 +382,7 @@ function GuidedConversation({ steps, index, onChangeIndex, onFinish, onRecordWit
         <span><MessageCircle size={18} /> Words you can use</span>
         <blockquote>“{step.sampleWords}”</blockquote>
       </div>
-      <p className="doorstep-coaching">{step.coaching}</p>
-      <div className="doorstep-reminder"><strong>Keep in mind</strong><span>{step.reminder}</span></div>
+      <ScriptureReader references={step.scriptureReferences} theme="light" />
       <button className="skip-to-wrap" type="button" onClick={onFinish}>Conversation is wrapping up</button>
       <div className="doorstep-guide-actions">
         <button className="button quiet" type="button" disabled={index === 0} onClick={() => onChangeIndex(Math.max(0, index - 1))}>Previous</button>

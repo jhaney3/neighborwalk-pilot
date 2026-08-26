@@ -56,6 +56,7 @@ import {
 import { coverageForTerritory, type TerritoryCoverageById } from "../lib/territory-coverage";
 import type { WorkspaceMembership } from "../lib/use-neighborwalk";
 import { MembersPanel } from "./MembersPanel";
+import { ScriptureReader } from "./ScriptureReader";
 
 export function FollowUpsView({
   data,
@@ -304,10 +305,8 @@ export function GuideView({ data, canManage, onUpdate }: { data: NeighborWalkDat
           <div className="guide-progress"><span style={{ width: `${((index + 1) / data.guide.length) * 100}%` }} /></div>
           <p className="eyebrow">Step {index + 1} of {data.guide.length} · {step.eyebrow}</p>
           <h2>{step.title}</h2>
-          <p className="guide-coaching">{step.coaching}</p>
           <blockquote><MessageCircle size={20} /><p>“{step.sampleWords}”</p></blockquote>
-          {step.scriptureReferences.length > 0 && <div className="scripture-list"><BookOpenText size={15} /><span>{step.scriptureReferences.join(" · ")}</span></div>}
-          <div className="guide-reminder"><Church size={17} /><p><strong>Remember</strong>{step.reminder}</p></div>
+          <ScriptureReader references={step.scriptureReferences} />
           <div className="guide-actions"><button className="button inverted" disabled={index === 0} onClick={() => setIndex((current) => Math.max(0, current - 1))}>Previous</button><button className="button amber" disabled={index === data.guide.length - 1} onClick={() => setIndex((current) => Math.min(data.guide.length - 1, current + 1))}>Next step <ArrowRight size={15} /></button></div>
         </article>
       </div>
@@ -320,9 +319,7 @@ function GuideEditor({ step, onClose, onSave }: { step: GuideStep; onClose: () =
   const [draft, setDraft] = useState(step);
   const valid = draft.eyebrow.trim().length > 0 && draft.eyebrow.length <= 80
     && draft.title.trim().length > 0 && draft.title.length <= 120
-    && draft.coaching.trim().length > 0 && draft.coaching.length <= 800
     && draft.sampleWords.trim().length > 0 && draft.sampleWords.length <= 1600
-    && draft.reminder.trim().length > 0 && draft.reminder.length <= 800
     && draft.scriptureReferences.length <= 12
     && draft.scriptureReferences.every((reference) => reference.length <= 100);
   return (
@@ -330,9 +327,7 @@ function GuideEditor({ step, onClose, onSave }: { step: GuideStep; onClose: () =
       <div className="form-stack">
         <label className="form-field"><span>Stage label</span><input maxLength={80} value={draft.eyebrow} onChange={(event) => setDraft({ ...draft, eyebrow: event.target.value })} /></label>
         <label className="form-field"><span>Title</span><input maxLength={120} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
-        <label className="form-field"><span>Coaching</span><textarea maxLength={800} rows={3} value={draft.coaching} onChange={(event) => setDraft({ ...draft, coaching: event.target.value })} /></label>
         <label className="form-field"><span>Sample words</span><textarea maxLength={1600} rows={5} value={draft.sampleWords} onChange={(event) => setDraft({ ...draft, sampleWords: event.target.value })} /></label>
-        <label className="form-field"><span>Reminder</span><textarea maxLength={800} rows={3} value={draft.reminder} onChange={(event) => setDraft({ ...draft, reminder: event.target.value })} /></label>
         <label className="form-field"><span>Scripture references <small>Up to 12, separated with commas</small></span><input maxLength={1200} value={draft.scriptureReferences.join(", ")} onChange={(event) => setDraft({ ...draft, scriptureReferences: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} /></label>
       </div>
       <div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => onSave(draft)} disabled={!valid}><Save size={15} /> Save step</button></div>

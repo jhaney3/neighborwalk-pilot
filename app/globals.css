@@ -210,9 +210,6 @@ input, textarea, select { color: var(--ink); }
 .doorstep-script-card::after { position: absolute; right: -24px; bottom: -38px; width: 104px; height: 104px; border: 15px solid rgba(233,168,74,.17); border-radius: 50%; content: ""; }
 .doorstep-script-card > span { position: relative; z-index: 1; display: flex; align-items: center; gap: 7px; color: #bcd0c8; font: 600 8px/1 var(--font-plex-mono),monospace; letter-spacing: .08em; text-transform: uppercase; }
 .doorstep-script-card blockquote { position: relative; z-index: 1; margin: 12px 0 0; font-size: 15px; font-weight: 580; line-height: 1.48; letter-spacing: -.015em; }
-.doorstep-coaching { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
-.doorstep-reminder { display: grid; gap: 3px; padding: 10px 11px; border-left: 3px solid var(--amber); color: var(--muted); background: var(--amber-soft); font-size: 9px; line-height: 1.45; }
-.doorstep-reminder strong { color: var(--amber-deep); font: 600 8px/1 var(--font-plex-mono),monospace; letter-spacing: .06em; text-transform: uppercase; }
 .skip-to-wrap, .name-prompt-back { justify-self: center; padding: 3px 0; border: 0; color: var(--pine-700); background: transparent; cursor: pointer; font-size: 9px; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
 .doorstep-guide-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .doorstep-guide-actions .button { width: 100%; }
@@ -368,16 +365,43 @@ input, textarea, select { color: var(--ink); }
 .guide-progress span { display: block; height: 100%; background: var(--amber); transition: width .2s ease; }
 .guide-card .eyebrow { color: #9bd0bd; }
 .guide-card h2 { margin: 0; font-size: clamp(27px,4vw,41px); letter-spacing: -.05em; }
-.guide-coaching { margin: 10px 0 21px; color: #bdd0c8; font-size: 11px; line-height: 1.6; }
-.guide-card blockquote { position: relative; z-index: 1; margin: 0; padding: 23px 23px 23px 48px; border-left: 3px solid var(--amber); border-radius: 0 12px 12px 0; background: rgba(255,255,255,.075); }
+.guide-card blockquote { position: relative; z-index: 1; margin: 21px 0 0; padding: 23px 23px 23px 48px; border-left: 3px solid var(--amber); border-radius: 0 12px 12px 0; background: rgba(255,255,255,.075); }
 .guide-card blockquote svg { position: absolute; left: 17px; top: 24px; color: var(--amber); }
 .guide-card blockquote p { margin: 0; font-size: clamp(15px,2vw,20px); line-height: 1.55; letter-spacing: -.015em; }
-.scripture-list { display: flex; align-items: center; gap: 7px; margin-top: 13px; color: #9bd0bd; font: 500 8px/1 var(--font-plex-mono),monospace; }
-.guide-reminder { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 9px; margin-top: 16px; padding: 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; color: #bdd0c8; }
-.guide-reminder svg { flex: none; color: #9bd0bd; }
-.guide-reminder p, .guide-reminder strong { display: block; margin: 0; }
-.guide-reminder p { font-size: 9px; line-height: 1.5; }
-.guide-reminder strong { color: white; }
+.scripture-reader { position: relative; z-index: 1; margin-top: 13px; }
+.scripture-reference-list { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.scripture-reference-list > svg { flex: none; margin-right: 1px; }
+.scripture-reference-list button { min-height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; border: 1px solid transparent; border-radius: 999px; cursor: pointer; font: 600 8px/1 var(--font-plex-mono),monospace; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.scripture-reader.dark .scripture-reference-list { color: #9bd0bd; }
+.scripture-reader.dark .scripture-reference-list button { color: #b7e0d1; border-color: rgba(155,208,189,.24); background: rgba(155,208,189,.08); }
+.scripture-reader.dark .scripture-reference-list button:hover { border-color: rgba(155,208,189,.5); background: rgba(155,208,189,.14); }
+.scripture-reader.dark .scripture-reference-list button.active { color: var(--pine-975); border-color: var(--amber); background: var(--amber); }
+.scripture-reader.light { margin-top: -1px; }
+.scripture-reader.light .scripture-reference-list { color: var(--pine-700); }
+.scripture-reader.light .scripture-reference-list button { color: var(--pine-700); border-color: #bfd8ce; background: var(--mint-50); }
+.scripture-reader.light .scripture-reference-list button:hover { border-color: var(--pine-500); background: var(--mint-100); }
+.scripture-reader.light .scripture-reference-list button.active { color: white; border-color: var(--pine-900); background: var(--pine-900); }
+.scripture-passage { margin-top: 10px; overflow: hidden; border-radius: 12px; }
+.scripture-reader.dark .scripture-passage { border: 1px solid rgba(155,208,189,.24); background: rgba(255,255,255,.065); }
+.scripture-reader.light .scripture-passage { border: 1px solid #c7dbd3; background: var(--mint-50); }
+.scripture-passage-heading { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-bottom: 1px solid rgba(155,208,189,.18); }
+.scripture-passage-heading span { padding: 4px 6px; border-radius: 5px; color: var(--pine-975); background: var(--amber); font: 700 7px/1 var(--font-plex-mono),monospace; letter-spacing: .06em; }
+.scripture-passage-heading strong { font-size: 10px; }
+.scripture-reader.light .scripture-passage-heading { border-bottom-color: #c7dbd3; }
+.scripture-reader.light .scripture-passage-heading strong { color: var(--pine-950); }
+.scripture-passage > p { max-height: min(360px,45vh); margin: 0; overflow-y: auto; padding: 14px 15px; font-size: 12px; line-height: 1.72; white-space: pre-wrap; }
+.scripture-reader.dark .scripture-passage > p { color: #edf8f4; }
+.scripture-reader.light .scripture-passage > p { color: var(--ink); }
+.scripture-passage-status { min-height: 76px; display: grid; align-content: center; gap: 4px; padding: 14px; }
+.scripture-passage-status.loading { display: flex; align-items: center; gap: 8px; }
+.scripture-passage-status strong, .scripture-passage-status span { display: block; }
+.scripture-passage-status strong { font-size: 10px; }
+.scripture-passage-status span { color: inherit; opacity: .76; font-size: 9px; line-height: 1.45; }
+.scripture-attribution { display: grid; gap: 7px; padding: 10px 13px 12px; border-top: 1px solid rgba(155,208,189,.18); }
+.scripture-reader.light .scripture-attribution { border-top-color: #c7dbd3; }
+.scripture-attribution a { width: fit-content; display: inline-flex; align-items: center; gap: 4px; color: var(--amber); font-size: 9px; font-weight: 700; }
+.scripture-reader.light .scripture-attribution a { color: var(--pine-700); }
+.scripture-attribution small { max-width: 620px; color: inherit; opacity: .56; font-size: 7px; line-height: 1.45; }
 .guide-actions { position: relative; z-index: 1; display: flex; justify-content: space-between; margin-top: 21px; }
 
 .leader-metrics { display: grid; grid-template-columns: 1.35fr .8fr .8fr; gap: 12px; }
@@ -698,7 +722,6 @@ input, textarea, select { color: var(--ink); }
   .doorstep-guide { gap: 9px; }
   .doorstep-script-card { padding: 13px 14px 14px; }
   .doorstep-script-card blockquote { margin-top: 9px; font-size: 14px; line-height: 1.42; }
-  .doorstep-reminder { padding: 8px 10px; }
   @keyframes sheet-up { from { opacity: 0; transform: translateY(28px); } }
   .mobile-nav { position: fixed; z-index: 70; left: 0; right: 0; bottom: 0; height: calc(64px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(4,1fr); padding: 4px 4px env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: rgba(255,255,255,.97); backdrop-filter: blur(14px); }
   .mobile-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 0; border-radius: 9px; color: #89958f; background: transparent; cursor: pointer; }
@@ -731,6 +754,8 @@ input, textarea, select { color: var(--ink); }
   .guide-card { width: 100%; padding: 25px 19px 21px; border-radius: 16px; }
   .guide-card blockquote { padding: 19px 17px 19px 43px; }
   .guide-card blockquote svg { left: 15px; top: 20px; }
+  .scripture-reference-list button { min-height: 38px; padding-inline: 11px; }
+  .scripture-passage > p { max-height: min(300px,38vh); padding: 13px; font-size: 11px; }
   .leader-metrics { grid-template-columns: 1fr 1fr; }
   .metric-card:first-child { grid-column: 1 / -1; }
   .territory-grid, .leader-panels, .settings-grid, .member-management-grid, .group-list { grid-template-columns: 1fr; }
