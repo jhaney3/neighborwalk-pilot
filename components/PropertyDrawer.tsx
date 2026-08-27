@@ -65,6 +65,7 @@ export function PropertyDrawer({
   visits,
   openFollowUp,
   conversationGuide,
+  conversationGuideContext,
   canManage,
   startGuided = false,
   onClose,
@@ -82,6 +83,7 @@ export function PropertyDrawer({
   visits: Visit[];
   openFollowUp?: FollowUp;
   conversationGuide?: ConversationGuide;
+  conversationGuideContext?: string;
   canManage: boolean;
   startGuided?: boolean;
   onClose: () => void;
@@ -213,6 +215,7 @@ export function PropertyDrawer({
           {workflowStage === "guide" && guideSteps.length ? (
             <GuidedConversation
               guideTitle={conversationGuide?.title ?? "Conversation guide"}
+              guideContext={conversationGuideContext}
               steps={guideSteps}
               index={guideIndex}
               onChangeIndex={setGuideIndex}
@@ -234,7 +237,7 @@ export function PropertyDrawer({
           {guideSteps.length > 0 && (
             <button className="guided-entry-card" type="button" onClick={beginGuide}>
               <span><BookOpenText size={17} /></span>
-              <span><strong>Need a prompt?</strong><small>Open {conversationGuide?.title ?? "your favorite guide"} at step one.</small></span>
+              <span><strong>Need a prompt?</strong><small>{conversationGuideContext ? `${conversationGuideContext} · ` : ""}Open {conversationGuide?.title ?? "your favorite guide"} at step one.</small></span>
               <ChevronRight size={16} />
             </button>
           )}
@@ -353,8 +356,9 @@ export function PropertyDrawer({
   );
 }
 
-function GuidedConversation({ guideTitle, steps, index, onChangeIndex, onFinish, onRecordWithoutGuide }: {
+function GuidedConversation({ guideTitle, guideContext, steps, index, onChangeIndex, onFinish, onRecordWithoutGuide }: {
   guideTitle: string;
+  guideContext?: string;
   steps: NeighborWalkData["guide"];
   index: number;
   onChangeIndex: (index: number) => void;
@@ -368,7 +372,7 @@ function GuidedConversation({ guideTitle, steps, index, onChangeIndex, onFinish,
   return (
     <section className="doorstep-guide" aria-labelledby="doorstep-guide-title">
       <div className="doorstep-guide-heading">
-        <div><p>{guideTitle}</p><h2 id="doorstep-guide-title">{step.title}</h2></div>
+        <div><p>{guideContext ? `${guideContext} · ` : ""}{guideTitle}</p><h2 id="doorstep-guide-title">{step.title}</h2></div>
         <button type="button" onClick={onRecordWithoutGuide}>Record without guide</button>
       </div>
       <div className="doorstep-progress" aria-label={`Step ${index + 1} of ${steps.length}`}>

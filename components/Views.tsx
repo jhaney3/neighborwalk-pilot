@@ -296,35 +296,51 @@ function CompleteFollowUpModal({ followUp, teams, noteLimit, onClose, onSave }: 
 export function GuideView({
   guides,
   favoriteGuideId,
+  effectiveGuideId,
+  activeTeamId,
+  activeTeamName,
+  teams,
+  teamGuideDefaults,
   canManage,
   libraryError,
   onSave,
   onDelete,
   onSetFavorite,
+  onSetTeamDefault,
 }: {
   guides: ConversationGuide[];
   favoriteGuideId?: string;
+  effectiveGuideId?: string;
+  activeTeamId?: string;
+  activeTeamName?: string;
+  teams: NeighborWalkData["teams"];
+  teamGuideDefaults: Record<string, string>;
   canManage: boolean;
   libraryError?: string | null;
   onSave: (input: ConversationGuideInput) => Promise<ConversationGuide>;
   onDelete: (guideId: string) => Promise<void>;
   onSetFavorite: (guideId: string) => Promise<void>;
+  onSetTeamDefault: (teamId: string, guideId?: string) => Promise<void>;
 }) {
-  const [selectedGuideId, setSelectedGuideId] = useState(favoriteGuideId ?? guides[0]?.id ?? "");
+  const [selectedGuideId, setSelectedGuideId] = useState(effectiveGuideId ?? favoriteGuideId ?? guides[0]?.id ?? "");
   const [index, setIndex] = useState(0);
   const [editor, setEditor] = useState<{ guide?: ConversationGuide; scope: ConversationGuide["scope"]; copy?: boolean } | null>(null);
   const [message, setMessage] = useState("");
+  const [messageError, setMessageError] = useState(false);
+  const [savingTeamId, setSavingTeamId] = useState<string>();
   const selectedGuide = guides.find((guide) => guide.id === selectedGuideId)
     ?? guides.find((guide) => guide.id === favoriteGuideId)
     ?? guides[0];
   const steps = selectedGuide?.steps ?? [];
   const step = steps[index] ?? steps[0];
   const canEditSelected = Boolean(selectedGuide && (selectedGuide.scope === "personal" || canManage));
+  const churchGuides = guides.filter((guide) => guide.scope === "church");
 
   const chooseGuide = (guideId: string) => {
     setSelectedGuideId(guideId);
     setIndex(0);
     setMessage("");
+    setMessageError(false);
   };
 
   const makeFavorite = async (guideId: string) => {
@@ -332,9 +348,32 @@ export function GuideView({
       await onSetFavorite(guideId);
       setSelectedGuideId(guideId);
       setIndex(0);
-      setMessage("Favorite guide saved. New doorstep conversations will open with it.");
+      setMessage("Favorite guide saved. A group default can still take priority while you are working with that group.");
+      setMessageError(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The favorite guide could not be saved.");
+      setMessageError(true);
+    }
+  };
+
+  const setTeamDefault = async (teamId: string, guideId?: string) => {
+    setSavingTeamId(teamId);
+    setMessage("");
+    setMessageError(false);
+    try {
+      await onSetTeamDefault(teamId, guideId);
+      if (teamId === activeTeamId) {
+        setSelectedGuideId(guideId ?? favoriteGuideId ?? churchGuides[0]?.id ?? guides[0]?.id ?? "");
+        setIndex(0);
+      }
+      const team = teams.find((item) => item.id === teamId);
+      setMessage(guideId ? `${team?.name ?? "Group"} will open with this church guide.` : `${team?.name ?? "Group"} will use each volunteer’s favorite guide.`);
+      setMessageError(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The group default could not be saved.");
+      setMessageError(true);
+    } finally {
+      setSavingTeamId(undefined);
     }
   };
 
@@ -364,7 +403,23 @@ export function GuideView({
         </div> : <div className="guide-library-empty"><BookOpenText size={22} /><div><strong>No conversation guides yet</strong><span>Create a private guide for yourself, or ask a leader to publish a church guide.</span></div></div>}
       </section>
 
-      {(message || libraryError) && <div className={`guide-library-message${libraryError ? " error" : ""}`} role={libraryError ? "alert" : "status"}>{libraryError ? <AlertTriangle size={15} /> : <Check size={15} />}<span>{libraryError || message}</span></div>}
+      {canManage && <section className="guide-group-defaults" aria-labelledby="guide-group-defaults-title">
+        <div className="guide-library-heading"><div><p className="eyebrow">Leader controls</p><h2 id="guide-group-defaults-title">Group defaults</h2></div><span>Optional</span></div>
+        <div className="guide-group-warning"><AlertTriangle size={17} /><span><strong>A group default overrides personal favorites.</strong> Members of that group will open the selected church guide at the doorstep, even if they chose another favorite. Choose “Use each volunteer’s favorite” to remove the override.</span></div>
+        {teams.length ? <div className="guide-group-default-list">
+          {teams.map((team) => <label className="guide-group-default-row" key={team.id}>
+            <span><strong>{team.name}</strong><small>{team.memberIds.length} {team.memberIds.length === 1 ? "volunteer" : "volunteers"} · {team.status}</small></span>
+            <select value={teamGuideDefaults[team.id] ?? ""} disabled={savingTeamId === team.id || churchGuides.length === 0} onChange={(event) => void setTeamDefault(team.id, event.target.value || undefined)} aria-label={`Default conversation guide for ${team.name}`}>
+              <option value="">Use each volunteer’s favorite</option>
+              {churchGuides.map((guide) => <option value={guide.id} key={guide.id}>{guide.title}</option>)}
+            </select>
+          </label>)}
+        </div> : <div className="guide-library-empty"><Users size={22} /><div><strong>No groups yet</strong><span>Create a group in Leader view before assigning a default guide.</span></div></div>}
+      </section>}
+
+      {activeTeamName && effectiveGuideId && teamGuideDefaults[activeTeamId ?? ""] === effectiveGuideId && <div className="guide-library-message group-default" role="status"><Users size={15} /><span><strong>{activeTeamName} default:</strong> {guides.find((guide) => guide.id === effectiveGuideId)?.title}. This takes priority over your personal favorite while you work with this group.</span></div>}
+
+      {(message || libraryError) && <div className={`guide-library-message${libraryError || messageError ? " error" : ""}`} role={libraryError || messageError ? "alert" : "status"}>{libraryError || messageError ? <AlertTriangle size={15} /> : <Check size={15} />}<span>{libraryError || message}</span></div>}
 
       {selectedGuide && step ? <>
         <section className="guide-active-heading">
@@ -405,12 +460,14 @@ export function GuideView({
           setIndex(0);
           setEditor(null);
           setMessage(saved.scope === "church" ? "Church guide published." : "Private guide saved.");
+          setMessageError(false);
         }}
         onDelete={editor.guide && !editor.copy ? async () => {
           await onDelete(editor.guide!.id);
           setEditor(null);
           setIndex(0);
           setMessage("Guide deleted.");
+          setMessageError(false);
         } : undefined}
       />}
     </div>
@@ -724,7 +781,7 @@ export function SettingsView({
           {onSignOut && <button className="button quiet" onClick={() => void onSignOut()}><LogOut size={15} /> Sign out</button>}
         </SettingsSection>}
 
-        <SettingsSection icon={<Star size={18} />} title="Favorite conversation guide" description="This guide opens first when you choose guided help at a doorstep.">
+        <SettingsSection icon={<Star size={18} />} title="Favorite conversation guide" description="This guide opens first at a doorstep unless a leader has chosen a guide for your active group.">
           {guides.length ? <label className="form-field"><span>Default guide</span><select value={favoriteGuideId ?? ""} onChange={async (event) => { if (!event.target.value) return; try { await onSetFavoriteGuide(event.target.value); setMessage("Favorite conversation guide saved."); } catch (error) { setMessage(error instanceof Error ? error.message : "The favorite guide could not be saved."); } }}><option value="" disabled>Choose a favorite guide</option>{guides.map((guide) => <option value={guide.id} key={guide.id}>{guide.title} · {guide.scope === "church" ? "church" : "only me"}</option>)}</select></label> : <div className="data-note"><BookOpenText size={15} /><span>Create a personal guide or ask a leader to publish a church guide first.</span></div>}
           <div className="data-note"><LockKeyhole size={15} /><span>Personal guides stay private to your account. Church guides are shared with this church workspace.</span></div>
         </SettingsSection>

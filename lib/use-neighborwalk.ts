@@ -32,6 +32,7 @@ import {
   readLocalGuideLibrary,
   saveConnectedFavorite,
   saveConnectedGuide,
+  saveConnectedTeamGuideDefault,
   validGuideInput,
   writeLocalGuideLibrary,
   type GuideLibraryState,
@@ -164,7 +165,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const [autoRetryTick, setAutoRetryTick] = useState(0);
   const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus>(supabaseUser ? "connecting" : "device_only");
   const [workspaceMembership, setWorkspaceMembership] = useState<WorkspaceMembership | null>(null);
-  const [guideLibrary, setGuideLibrary] = useState<GuideLibraryState>({ guides: [] });
+  const [guideLibrary, setGuideLibrary] = useState<GuideLibraryState>({ guides: [], teamGuideDefaults: {} });
   const [guideLibraryError, setGuideLibraryError] = useState<string | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveVersion = useRef(0);
@@ -263,7 +264,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
             setGuideLibraryError(null);
           } catch (guideError) {
             if (!active) return;
-            setGuideLibrary({ guides: [legacyConversationGuide(selected.church.id, selected.guide)] });
+            setGuideLibrary({ guides: [legacyConversationGuide(selected.church.id, selected.guide)], teamGuideDefaults: {} });
             setGuideLibraryError(guideError instanceof Error ? guideError.message : "Conversation guides could not be loaded.");
           }
           setData({
@@ -893,7 +894,34 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     const next: GuideLibraryState = {
       guides: guideLibrary.guides.filter((item) => item.id !== guideId),
       favoriteGuideId: guideLibrary.favoriteGuideId === guideId ? undefined : guideLibrary.favoriteGuideId,
+      teamGuideDefaults: Object.fromEntries(
+        Object.entries(guideLibrary.teamGuideDefaults).filter(([, defaultGuideId]) => defaultGuideId !== guideId),
+      ),
     };
+    setGuideLibrary(next);
+    setGuideLibraryError(null);
+    if (!supabaseUser || !client || !workspace) writeLocalGuideLibrary(next);
+  }, [guideLibrary, supabaseUser]);
+
+  const setTeamConversationGuide = useCallback(async (teamId: string, guideId?: string) => {
+    if (supabaseUser && roleRef.current !== "leader") {
+      throw new Error("Only a church leader can set a group guide.");
+    }
+    if (!dataRef.current?.teams.some((team) => team.id === teamId)) {
+      throw new Error("Choose a group in this church workspace.");
+    }
+    if (guideId && !guideLibrary.guides.some((guide) => guide.id === guideId && guide.scope === "church")) {
+      throw new Error("Group defaults must use a church guide.");
+    }
+    const client = getSupabaseBrowserClient();
+    const workspace = workspaceRef.current;
+    if (supabaseUser && client && workspace) {
+      await saveConnectedTeamGuideDefault(client, workspace.churchId, supabaseUser.id, teamId, guideId);
+    }
+    const teamGuideDefaults = { ...guideLibrary.teamGuideDefaults };
+    if (guideId) teamGuideDefaults[teamId] = guideId;
+    else delete teamGuideDefaults[teamId];
+    const next = { ...guideLibrary, teamGuideDefaults };
     setGuideLibrary(next);
     setGuideLibraryError(null);
     if (!supabaseUser || !client || !workspace) writeLocalGuideLibrary(next);
@@ -1135,6 +1163,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       saveConversationGuide,
       deleteConversationGuide,
       setFavoriteConversationGuide,
+      setTeamConversationGuide,
       updateChurch,
       addTerritory,
       updateTerritory,

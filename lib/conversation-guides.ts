@@ -5,6 +5,7 @@ import {
   type ConversationGuide,
   type ConversationGuideInput,
   type GuideStep,
+  type Team,
 } from "./domain";
 import type { Json, NeighborWalkDatabase } from "./supabase";
 
@@ -13,6 +14,7 @@ type GuideRow = NeighborWalkDatabase["public"]["Tables"]["conversation_guides"][
 export type GuideLibraryState = {
   guides: ConversationGuide[];
   favoriteGuideId?: string;
+  teamGuideDefaults: Record<string, string>;
 };
 
 const LOCAL_GUIDE_LIBRARY_KEY = "neighborwalk-conversation-guides-v1";
@@ -51,6 +53,7 @@ const conversationGuideSchema: z.ZodType<ConversationGuide> = z.object({
 const localGuideLibrarySchema = z.object({
   guides: z.array(conversationGuideSchema),
   favoriteGuideId: z.string().min(1).optional(),
+  teamGuideDefaults: z.record(z.string(), z.string()).default({}),
 });
 
 export function makeBlankGuideStep(order: number): GuideStep {
@@ -105,10 +108,27 @@ export function legacyConversationGuide(churchId: string, steps: GuideStep[]): C
   };
 }
 
-export function preferredConversationGuide(guides: ConversationGuide[], favoriteGuideId?: string) {
-  return guides.find((guide) => guide.id === favoriteGuideId)
+export function preferredConversationGuide(
+  guides: ConversationGuide[],
+  favoriteGuideId?: string,
+  teamDefaultGuideId?: string,
+) {
+  return guides.find((guide) => guide.id === teamDefaultGuideId && guide.scope === "church")
+    ?? guides.find((guide) => guide.id === favoriteGuideId)
     ?? guides.find((guide) => guide.scope === "church")
     ?? guides[0];
+}
+
+export function conversationGuideTeam(
+  teams: Team[],
+  volunteerId: string,
+  territoryTeamId?: string,
+) {
+  const memberships = teams.filter((team) => team.memberIds.includes(volunteerId));
+  return memberships.find((team) => team.id === territoryTeamId)
+    ?? memberships.find((team) => team.status === "active")
+    ?? memberships.find((team) => team.status === "ready")
+    ?? memberships[0];
 }
 
 export function readLocalGuideLibrary(churchId: string, legacySteps: GuideStep[]): GuideLibraryState {
@@ -121,13 +141,17 @@ export function readLocalGuideLibrary(churchId: string, legacySteps: GuideStep[]
         favoriteGuideId: guides.some((guide) => guide.id === parsed.data.favoriteGuideId)
           ? parsed.data.favoriteGuideId
           : undefined,
+        teamGuideDefaults: Object.fromEntries(
+          Object.entries(parsed.data.teamGuideDefaults)
+            .filter(([, guideId]) => guides.some((guide) => guide.id === guideId && guide.scope === "church")),
+        ),
       };
     }
   } catch {
     // A malformed device cache should not prevent the field app from opening.
   }
   const fallback = legacyConversationGuide(churchId, legacySteps);
-  return { guides: [fallback], favoriteGuideId: fallback.id };
+  return { guides: [fallback], favoriteGuideId: fallback.id, teamGuideDefaults: {} };
 }
 
 export function writeLocalGuideLibrary(state: GuideLibraryState) {
@@ -157,7 +181,7 @@ export async function loadConnectedGuideLibrary(
   churchId: string,
   userId: string,
 ): Promise<GuideLibraryState> {
-  const [guideResult, preferenceResult] = await Promise.all([
+  const [guideResult, preferenceResult, teamDefaultsResult] = await Promise.all([
     client
       .from("conversation_guides")
       .select("id, church_id, scope, owner_user_id, title, description, steps, sort_order, created_by, updated_by, created_at, updated_at")
@@ -170,9 +194,14 @@ export async function loadConnectedGuideLibrary(
       .eq("church_id", churchId)
       .eq("user_id", userId)
       .maybeSingle(),
+    client
+      .from("conversation_guide_team_defaults")
+      .select("team_id, guide_id")
+      .eq("church_id", churchId),
   ]);
   if (guideResult.error) throw guideResult.error;
   if (preferenceResult.error) throw preferenceResult.error;
+  if (teamDefaultsResult.error) throw teamDefaultsResult.error;
   const guides = (guideResult.data ?? []).flatMap((row) => {
     const guide = guideFromRow(row);
     return guide ? [guide] : [];
@@ -181,6 +210,11 @@ export async function loadConnectedGuideLibrary(
   return {
     guides,
     favoriteGuideId: guides.some((guide) => guide.id === favoriteGuideId) ? favoriteGuideId : undefined,
+    teamGuideDefaults: Object.fromEntries(
+      (teamDefaultsResult.data ?? [])
+        .filter((item) => guides.some((guide) => guide.id === item.guide_id && guide.scope === "church"))
+        .map((item) => [item.team_id, item.guide_id]),
+    ),
   };
 }
 
@@ -242,5 +276,30 @@ export async function saveConnectedFavorite(
     user_id: userId,
     favorite_guide_id: guideId,
   }, { onConflict: "church_id,user_id" });
+  if (error) throw error;
+}
+
+export async function saveConnectedTeamGuideDefault(
+  client: SupabaseClient<NeighborWalkDatabase>,
+  churchId: string,
+  userId: string,
+  teamId: string,
+  guideId?: string,
+) {
+  if (!guideId) {
+    const { error } = await client
+      .from("conversation_guide_team_defaults")
+      .delete()
+      .eq("church_id", churchId)
+      .eq("team_id", teamId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await client.from("conversation_guide_team_defaults").upsert({
+    church_id: churchId,
+    team_id: teamId,
+    guide_id: guideId,
+    updated_by: userId,
+  }, { onConflict: "church_id,team_id" });
   if (error) throw error;
 }

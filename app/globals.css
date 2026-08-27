@@ -6,7 +6,9 @@
   --pine-900: #163b31;
   --pine-800: #1f5546;
   --pine-700: #286c59;
+  --pine-600: #397f6b;
   --pine-500: #4d977e;
+  --pine-300: #8bc0ad;
   --mint-100: #dceee7;
   --mint-50: #edf7f3;
   --mist-50: #f5f8f7;
@@ -374,8 +376,19 @@ input, textarea, select { color: var(--ink); }
 .guide-library-empty div { display: grid; gap: 3px; }
 .guide-library-empty strong { color: var(--ink); font-size: 11px; }
 .guide-library-empty span { color: var(--muted); font-size: 9px; line-height: 1.4; }
+.guide-group-defaults { display: grid; gap: 12px; margin-bottom: 22px; padding: 17px; border: 1px solid #ead8b6; border-radius: 17px; background: linear-gradient(135deg,#fffaf0 0%,#fff 72%); box-shadow: var(--shadow-sm); }
+.guide-group-warning { display: flex; align-items: flex-start; gap: 9px; padding: 10px 11px; border-left: 3px solid var(--amber); color: #69491b; background: #fff4dc; font-size: 9px; line-height: 1.45; }
+.guide-group-warning svg { flex: none; margin-top: 1px; }
+.guide-group-warning span { display: grid; gap: 2px; }
+.guide-group-default-list { display: grid; gap: 7px; }
+.guide-group-default-row { display: grid; grid-template-columns: minmax(150px,1fr) minmax(220px,280px); align-items: center; gap: 14px; padding: 10px 11px; border: 1px solid #e8deca; border-radius: 11px; background: rgba(255,255,255,.82); }
+.guide-group-default-row > span { min-width: 0; display: grid; gap: 3px; }
+.guide-group-default-row strong { overflow: hidden; color: var(--ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.guide-group-default-row small { color: var(--muted); font-size: 8px; text-transform: capitalize; }
+.guide-group-default-row select { width: 100%; min-height: 38px; padding: 0 30px 0 10px; border: 1px solid #d8cdb7; border-radius: 9px; color: var(--ink); background: white; font: inherit; font-size: 9px; }
 .guide-library-message { display: flex; align-items: center; gap: 8px; margin: -10px 0 16px; padding: 10px 12px; border-left: 3px solid var(--pine-500); color: var(--pine-800); background: var(--mint-50); font-size: 9px; line-height: 1.45; }
 .guide-library-message.error { border-left-color: #b44b3d; color: #7c3027; background: #fff3f1; }
+.guide-library-message.group-default { border-left-color: var(--amber); color: #69491b; background: #fff7e8; }
 .guide-active-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin: 0 0 13px; }
 .guide-active-heading > div:first-child { min-width: 0; }
 .guide-active-heading h2 { margin: 6px 0 2px; font-size: 21px; letter-spacing: -.04em; }
@@ -812,6 +825,9 @@ input, textarea, select { color: var(--ink); }
   .guide-library-list { display: flex; margin-inline: -14px; padding: 1px 14px 7px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
   .guide-library-list::-webkit-scrollbar { display: none; }
   .guide-library-item { width: min(82vw,300px); min-width: min(82vw,300px); scroll-snap-align: start; }
+  .guide-group-defaults { margin-bottom: 18px; padding: 14px; }
+  .guide-group-default-row { grid-template-columns: 1fr; gap: 8px; }
+  .guide-group-default-row select { min-height: 44px; }
   .guide-favorite-button { width: 44px; }
   .guide-active-heading { align-items: stretch; flex-direction: column; }
   .guide-active-actions { justify-content: flex-start; }

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  conversationGuideTeam,
   legacyConversationGuide,
   makeBlankGuideStep,
   normalizeGuideSteps,
   preferredConversationGuide,
   validGuideInput,
 } from "../lib/conversation-guides";
-import type { ConversationGuide, GuideStep } from "../lib/domain";
+import type { ConversationGuide, GuideStep, Team } from "../lib/domain";
 
 function step(patch: Partial<GuideStep> = {}): GuideStep {
   return {
@@ -72,6 +73,25 @@ describe("conversation guides", () => {
 
     expect(preferredConversationGuide([personal, church], personal.id)?.id).toBe(personal.id);
     expect(preferredConversationGuide([personal, church])?.id).toBe(church.id);
+  });
+
+  it("lets a church guide selected for the group override a personal favorite", () => {
+    const personal = guide("personal", "personal");
+    const church = guide("church", "church");
+
+    expect(preferredConversationGuide([personal, church], personal.id, church.id)?.id).toBe(church.id);
+    expect(preferredConversationGuide([personal, church], personal.id, personal.id)?.id).toBe(personal.id);
+  });
+
+  it("prefers the volunteer's territory group, then their active group", () => {
+    const teams: Team[] = [
+      { id: "team_active", churchId: "church_one", eventId: "event_one", name: "Active", memberIds: ["volunteer_one"], territoryIds: [], status: "active" },
+      { id: "team_territory", churchId: "church_one", eventId: "event_one", name: "Territory", memberIds: ["volunteer_one"], territoryIds: [], status: "ready" },
+    ];
+
+    expect(conversationGuideTeam(teams, "volunteer_one", "team_territory")?.id).toBe("team_territory");
+    expect(conversationGuideTeam(teams, "volunteer_one")?.id).toBe("team_active");
+    expect(conversationGuideTeam(teams, "someone_else")).toBeUndefined();
   });
 
   it("wraps the legacy shared steps as a church guide", () => {

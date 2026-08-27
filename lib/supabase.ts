@@ -115,6 +115,26 @@ export type NeighborWalkDatabase = {
         };
         Relationships: [];
       };
+      conversation_guide_team_defaults: {
+        Row: {
+          church_id: string;
+          team_id: string;
+          guide_id: string;
+          updated_by: string;
+          updated_at: string;
+        };
+        Insert: {
+          church_id: string;
+          team_id: string;
+          guide_id: string;
+          updated_by: string;
+          updated_at?: string;
+        };
+        Update: {
+          guide_id?: string;
+        };
+        Relationships: [];
+      };
       parcels: {
         Row: {
           id: number;
