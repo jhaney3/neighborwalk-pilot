@@ -26,6 +26,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   dateInputValue,
+  discipleshipStageLabels,
+  discipleshipStageValues,
   dueDateFromNow,
   faithStatusLabels,
   faithStatusValues,
@@ -48,6 +50,7 @@ type VisitInput = {
   objectiveNote?: string;
   followUpDate?: string;
   assignedTeamId?: string;
+  residentId?: string;
 };
 
 const recordableOutcomes: Exclude<Outcome, "unvisited">[] = [
@@ -67,6 +70,7 @@ export function PropertyDrawer({
   conversationGuide,
   conversationGuideContext,
   canManage,
+  activeVolunteerId,
   startGuided = false,
   onClose,
   onViewParcel,
@@ -85,6 +89,7 @@ export function PropertyDrawer({
   conversationGuide?: ConversationGuide;
   conversationGuideContext?: string;
   canManage: boolean;
+  activeVolunteerId: string;
   startGuided?: boolean;
   onClose: () => void;
   onViewParcel?: () => void;
@@ -92,7 +97,7 @@ export function PropertyDrawer({
   onRecordVisit: (input: VisitInput) => void;
   onUpdateProperty: (propertyId: string, patch: Pick<Property, "address" | "unit">) => void;
   onDeleteProperty: (propertyId: string) => void;
-  onUpsertResident: (propertyId: string, input: ResidentInput, residentId?: string) => void;
+  onUpsertResident: (propertyId: string, input: ResidentInput, residentId?: string) => string;
   onDeleteResident: (residentId: string) => void;
 }) {
   const [tab, setTab] = useState<"record" | "people" | "history">("record");
@@ -107,6 +112,7 @@ export function PropertyDrawer({
   const [note, setNote] = useState("");
   const [followUpDate, setFollowUpDate] = useState(dateInputValue(dueDateFromNow(data.church.defaultFollowUpDays)));
   const [assignedTeamId, setAssignedTeamId] = useState(property.territoryId ? data.territories.find((territory) => territory.id === property.territoryId)?.assignedTeamId ?? "" : "");
+  const [linkedResidentId, setLinkedResidentId] = useState("");
   const [editingAddress, setEditingAddress] = useState(property.address === "Confirm this address");
   const [address, setAddress] = useState(property.address);
   const [unit, setUnit] = useState(property.unit ?? "");
@@ -151,7 +157,8 @@ export function PropertyDrawer({
       outcome,
       objectiveNote: note,
       followUpDate: outcome === "follow_up" ? followUpDate : undefined,
-      assignedTeamId: outcome === "follow_up" ? assignedTeamId || undefined : undefined,
+      assignedTeamId: outcome === "follow_up" && !linkedResidentId ? assignedTeamId || undefined : undefined,
+      residentId: outcome === "follow_up" ? linkedResidentId || undefined : undefined,
     });
     onClose();
   };
@@ -261,13 +268,13 @@ export function PropertyDrawer({
           </fieldset>
 
           <label className="form-field">
-            <span>Brief, objective note <small>Optional</small></span>
+            <span>Visit note <small>Optional · saved only in visit history</small></span>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
               rows={3}
               maxLength={data.church.noteCharacterLimit + 1}
-              placeholder="Only record what the next volunteer needs to know."
+              placeholder="A brief fact about this visit—not a person care note."
             />
             <em className={noteRemaining < 0 ? "over" : ""}>{noteRemaining} characters remaining</em>
           </label>
@@ -280,10 +287,15 @@ export function PropertyDrawer({
                   <input type="date" min={new Date().toISOString().slice(0, 10)} value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} />
                 </label>
                 <label className="form-field">
+                  <span>Who is this for? <small>Optional</small></span>
+                  <div className="select-wrap"><select value={linkedResidentId} onChange={(event) => setLinkedResidentId(event.target.value)}><option value="">Location follow-up</option>{residents.map((resident) => <option value={resident.id} key={resident.id}>{resident.name || "Name not provided"}</option>)}</select><ChevronDown size={15} /></div>
+                </label>
+                {!linkedResidentId && <label className="form-field">
                   <span>Assign team</span>
                   <div className="select-wrap"><select value={assignedTeamId} onChange={(event) => setAssignedTeamId(event.target.value)}><option value="">Unassigned</option>{data.teams.map((team) => <option value={team.id} key={team.id}>{team.name}</option>)}</select><ChevronDown size={15} /></div>
-                </label>
+                </label>}
               </div>
+              <small className="followup-link-help">{linkedResidentId ? "This task will stay private with the person and follow their discipleship owner." : "Location follow-ups remain visible to the assigned outreach team."}</small>
             </div>
           )}
 
@@ -292,7 +304,7 @@ export function PropertyDrawer({
             <button className="button primary" onClick={saveVisit} disabled={!canSave}><Save size={16} /> Save visit</button>
           </div>
 
-          {canManage && property.visitCount === 0 && property.source !== "seed" && (
+          {canManage && property.visitCount === 0 && property.source !== "seed" && residents.length === 0 && (
             <button className="delete-location" onClick={() => {
               if (window.confirm("Remove this unvisited location from the territory?")) {
                 onDeleteProperty(property.id);
@@ -316,14 +328,16 @@ export function PropertyDrawer({
           {editingResident ? (
             <ResidentForm
               resident={editingResident === "new" ? undefined : editingResident}
-              noteLimit={data.church.noteCharacterLimit}
+              volunteers={data.volunteers.filter((volunteer) => volunteer.active)}
+              activeVolunteerId={activeVolunteerId}
               autoFocusName={guidedPersonEntry}
               onCancel={() => {
                 if (guidedPersonEntry) finishGuidedPersonEntry("Name skipped — record what happened at this door.");
                 else setEditingResident(null);
               }}
               onSave={(input) => {
-                onUpsertResident(property.id, input, editingResident === "new" ? undefined : editingResident.id);
+                const residentId = onUpsertResident(property.id, input, editingResident === "new" ? undefined : editingResident.id);
+                if (editingResident === "new") setLinkedResidentId(residentId);
                 if (guidedPersonEntry) finishGuidedPersonEntry("Person saved — now record what happened at this door.");
                 else setEditingResident(null);
               }}
@@ -340,10 +354,10 @@ export function PropertyDrawer({
                       <small>{faithStatusLabels[resident.faithStatus]}</small>
                       {(resident.phone || resident.email) && <p><Phone size={12} /> {resident.preferredContact === "none" ? "Contact details saved" : `Prefers ${resident.preferredContact}`}</p>}
                     </div>
-                    <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>
-                    <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
+                    {(canManage || resident.createdByVolunteerId === activeVolunteerId || resident.assignedVolunteerId === activeVolunteerId) && <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>}
+                    {(canManage || resident.createdByVolunteerId === activeVolunteerId) && <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
                       if (window.confirm("Delete this person record? This cannot be undone.")) onDeleteResident(resident.id);
-                    }}><Trash2 size={14} /></button>
+                    }}><Trash2 size={14} /></button>}
                   </article>
                 ))}
                 {!residents.length && <div className="empty-mini"><Users size={21} /><strong>No people added</strong></div>}
@@ -420,9 +434,10 @@ function NamePrompt({ onBack, onAddPerson, onSkip }: { onBack: () => void; onAdd
   );
 }
 
-function ResidentForm({ resident, noteLimit, autoFocusName = false, onCancel, onSave }: {
+function ResidentForm({ resident, volunteers, activeVolunteerId, autoFocusName = false, onCancel, onSave }: {
   resident?: Resident;
-  noteLimit: number;
+  volunteers: NeighborWalkData["volunteers"];
+  activeVolunteerId: string;
   autoFocusName?: boolean;
   onCancel: () => void;
   onSave: (input: ResidentInput) => void;
@@ -430,13 +445,16 @@ function ResidentForm({ resident, noteLimit, autoFocusName = false, onCancel, on
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(resident?.name ?? "");
   const [faithStatus, setFaithStatus] = useState(resident?.faithStatus ?? "not_discussed");
-  const [notes, setNotes] = useState(resident?.notes ?? "");
+  const [discipleshipStage, setDiscipleshipStage] = useState(resident?.discipleshipStage ?? "new_connection");
+  const [assignedVolunteerId, setAssignedVolunteerId] = useState(resident?.assignedVolunteerId ?? activeVolunteerId);
+  const [status, setStatus] = useState(resident?.status ?? "active");
   const [phone, setPhone] = useState(resident?.phone ?? "");
   const [email, setEmail] = useState(resident?.email ?? "");
   const [preferredContact, setPreferredContact] = useState(resident?.preferredContact ?? "none");
   const contactMethodValid = preferredContact === "email" ? Boolean(email.trim())
     : preferredContact === "text" || preferredContact === "call" ? Boolean(phone.trim()) : true;
-  const canSave = notes.length <= noteLimit && contactMethodValid;
+  const canSave = contactMethodValid;
+  const activeOwner = volunteers.find((volunteer) => volunteer.id === activeVolunteerId);
 
   useEffect(() => {
     if (autoFocusName) nameInputRef.current?.focus();
@@ -447,21 +465,28 @@ function ResidentForm({ resident, noteLimit, autoFocusName = false, onCancel, on
       <div className="form-stack">
         <label className="form-field"><span>Name <small>Optional</small></span><input ref={nameInputRef} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Only if they choose to share it" /></label>
         <label className="form-field"><span>Faith status <small>Self-described only</small></span><select value={faithStatus} onChange={(event) => setFaithStatus(event.target.value as Resident["faithStatus"])}>{faithStatusValues.map((value) => <option value={value} key={value}>{faithStatusLabels[value]}</option>)}</select></label>
-        <label className="form-field"><span>Objective note <small>Optional</small></span><textarea rows={2} maxLength={noteLimit + 1} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Record only what helps honor their request." /><em className={notes.length > noteLimit ? "over" : ""}>{noteLimit - notes.length} characters remaining</em></label>
+        {resident ? <label className="form-field"><span>Discipleship owner</span><select value={assignedVolunteerId} onChange={(event) => setAssignedVolunteerId(event.target.value)}>{volunteers.map((volunteer) => <option value={volunteer.id} key={volunteer.id}>{volunteer.name}</option>)}</select></label> : <div className="form-field person-owner-confirmation"><span>Discipleship owner</span><strong><UserRound size={15} /> {activeOwner?.name ?? "You"}</strong><small>You will own this relationship because you are adding it.</small></div>}
+        <label className="form-field"><span>Relationship stage</span><select value={discipleshipStage} onChange={(event) => setDiscipleshipStage(event.target.value as Resident["discipleshipStage"])}>{discipleshipStageValues.map((value) => <option value={value} key={value}>{discipleshipStageLabels[value]}</option>)}</select></label>
       </div>
       <div className="contact-fields">
         <label className="form-field"><span>Phone <small>Optional</small></span><input inputMode="tel" autoComplete="off" maxLength={40} value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
         <label className="form-field"><span>Email <small>Optional</small></span><input type="email" inputMode="email" autoComplete="off" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         <label className="form-field"><span>Preferred contact</span><select value={preferredContact} onChange={(event) => setPreferredContact(event.target.value as Resident["preferredContact"])}><option value="none">No preference</option><option value="text">Text message</option><option value="call">Phone call</option><option value="email">Email</option></select></label>
       </div>
+      <label className="form-field"><span>Tracking status</span><select value={status} onChange={(event) => setStatus(event.target.value as Resident["status"])}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
       {!contactMethodValid && <p className="form-warning">Enter the phone number or email needed for the selected contact method.</p>}
       <div className="modal-actions"><button className="button quiet" onClick={onCancel}>Cancel</button><button className="button primary" disabled={!canSave} onClick={() => onSave({
         name: name.trim() || undefined,
         faithStatus,
-        notes: notes.trim() || undefined,
+        discipleshipStage,
+        assignedVolunteerId,
+        sharedWithVolunteerIds: resident?.sharedWithVolunteerIds ?? [],
+        sharedWithTeamIds: resident?.sharedWithTeamIds ?? [],
+        status,
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         preferredContact,
+        lastContactAt: resident?.lastContactAt,
       })}><Save size={15} /> Save person</button></div>
     </div>
   );

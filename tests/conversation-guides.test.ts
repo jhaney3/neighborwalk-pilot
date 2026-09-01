@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   conversationGuideTeam,
+  conversationGuideFromRow,
   legacyConversationGuide,
   makeBlankGuideStep,
   normalizeGuideSteps,
@@ -108,6 +109,28 @@ describe("conversation guides", () => {
       coaching: "",
       reminder: "",
       scriptureReferences: [],
+    });
+  });
+
+  it("reads Supabase timestamps that include a UTC offset", () => {
+    const parsed = conversationGuideFromRow({
+      id: "00000000-0000-4000-8000-000000000001",
+      church_id: "00000000-0000-4000-8000-000000000002",
+      scope: "church",
+      owner_user_id: null,
+      title: "Listen, share, invite",
+      description: "A guide",
+      steps: [step()],
+      sort_order: 0,
+      created_by: "00000000-0000-4000-8000-000000000003",
+      updated_by: "00000000-0000-4000-8000-000000000003",
+      created_at: "2026-08-29T12:00:00+00:00",
+      updated_at: "2026-08-29T12:00:01.123456+00:00",
+    });
+
+    expect(parsed).toMatchObject({
+      createdAt: "2026-08-29T12:00:00.000Z",
+      updatedAt: "2026-08-29T12:00:01.123Z",
     });
   });
 });

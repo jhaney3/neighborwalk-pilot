@@ -100,7 +100,12 @@ export function mergePendingWorkspaceChanges(remote: NeighborWalkData, local: Ne
   const visits = applyEntityMutations(remote.visits, local.visits, mutations, "visit")
     .sort((left, right) => right.recordedAt.localeCompare(left.recordedAt));
   let followUps = applyEntityMutations(remote.followUps, local.followUps, mutations, "follow_up");
+  followUps = applyEntityMutations(followUps, local.followUps, mutations, "person_follow_up");
   const residents = applyEntityMutations(remote.residents, local.residents, mutations, "resident");
+  const residentIds = new Set(residents.map((resident) => resident.id));
+  const personNotes = applyEntityMutations(remote.personNotes, local.personNotes, mutations, "person_note")
+    .filter((note) => residentIds.has(note.residentId))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const territories = applyEntityMutations(remote.territories, local.territories, mutations, "territory");
   const guide = applyEntityMutations(remote.guide, local.guide, mutations, "guide")
     .sort((left, right) => left.order - right.order);
@@ -150,6 +155,7 @@ export function mergePendingWorkspaceChanges(remote: NeighborWalkData, local: Ne
     visits,
     followUps,
     residents,
+    personNotes,
     guide,
     audit: mergeAudit(remote.audit, local.audit, mutations),
     preferences: local.preferences,

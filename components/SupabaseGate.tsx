@@ -1,15 +1,20 @@
 "use client";
 
-import { Check, Mail, MapPinned, Navigation, ShieldCheck } from "lucide-react";
+import { Check, KeyRound, Mail, MapPinned, Navigation, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { NeighborWalkApp } from "../app/NeighborWalkApp";
+import { authErrorMessage, validAuthEmail } from "../lib/auth";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
 
 export function NeighborWalkRoot() {
   const configured = isSupabaseConfigured();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(configured);
+  const [passwordRecovery, setPasswordRecovery] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
+  });
 
   useEffect(() => {
     if (!configured) return;
@@ -22,9 +27,11 @@ export function NeighborWalkRoot() {
         setLoading(false);
       }
     });
-    const { data: listener } = client.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = client.auth.onAuthStateChange((event, nextSession) => {
       if (active) {
         setSession(nextSession);
+        if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
+        if (event === "SIGNED_OUT") setPasswordRecovery(false);
         setLoading(false);
       }
     });
@@ -34,9 +41,17 @@ export function NeighborWalkRoot() {
     };
   }, [configured]);
 
+  const updatePassword = async (password: string) => {
+    const client = getSupabaseBrowserClient();
+    if (!client) throw new Error("The church workspace connection is not available.");
+    const { error } = await client.auth.updateUser({ password });
+    if (error) throw new Error(authErrorMessage(error));
+  };
+
   if (!configured) return <NeighborWalkApp />;
   if (loading) return <ConnectionLoading />;
-  if (!session) return <EmailSignIn />;
+  if (!session) return <SignInScreen />;
+  if (passwordRecovery) return <PasswordRecovery email={session.user.email ?? "your account"} onSave={async (password) => { await updatePassword(password); setPasswordRecovery(false); }} />;
 
   return (
     <NeighborWalkApp
@@ -49,6 +64,7 @@ export function NeighborWalkRoot() {
             ? session.user.user_metadata.name
             : undefined,
       }}
+      onUpdatePassword={updatePassword}
       onSignOut={async () => {
         const client = getSupabaseBrowserClient();
         if (client) await client.auth.signOut();
@@ -64,11 +80,14 @@ function authRedirectUrl() {
   return url.toString();
 }
 
-function EmailSignIn() {
+type AuthAction = "google" | "password" | "signup" | "reset" | "link" | null;
+
+function SignInScreen() {
   const [email, setEmail] = useState("");
-  const [sending, setSending] = useState(false);
-  const [signingInWithGoogle, setSigningInWithGoogle] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [action, setAction] = useState<AuthAction>(null);
+  const [confirmation, setConfirmation] = useState<{ title: string; detail: string } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -76,88 +95,141 @@ function EmailSignIn() {
     const hashParams = new URLSearchParams(url.hash.slice(1));
     const authError = url.searchParams.get("error_description") ?? hashParams.get("error_description");
     if (!authError) return;
-    const errorTimer = window.setTimeout(() => setError(authError), 0);
+    const errorTimer = window.setTimeout(() => setError(authErrorMessage(authError)), 0);
     for (const key of ["error", "error_code", "error_description"]) url.searchParams.delete(key);
     url.hash = "";
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
     return () => window.clearTimeout(errorTimer);
   }, []);
 
-  const signInWithGoogle = async () => {
+  const normalizedEmail = () => email.trim().toLowerCase();
+  const requireEmail = () => {
+    if (validAuthEmail(email)) return true;
+    setError("Enter a valid email address.");
+    return false;
+  };
+  const clientOrError = () => {
     const client = getSupabaseBrowserClient();
-    if (!client) {
-      setError("The church workspace connection is not available.");
+    if (!client) setError("The church workspace connection is not available.");
+    return client;
+  };
+  const begin = (nextAction: Exclude<AuthAction, null>) => {
+    setAction(nextAction);
+    setError("");
+    setConfirmation(null);
+  };
+
+  const signInWithGoogle = async () => {
+    const client = clientOrError();
+    if (!client) return;
+    begin("google");
+    const { error: signInError } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: authRedirectUrl() } });
+    if (signInError) {
+      setAction(null);
+      setError(authErrorMessage(signInError));
+    }
+  };
+
+  const submitPassword = async () => {
+    if (!requireEmail()) return;
+    if (password.length < 8) {
+      setError("Use a password with at least 8 characters.");
       return;
     }
-    setSigningInWithGoogle(true);
-    setError("");
-    const { error: signInError } = await client.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: authRedirectUrl(),
-      },
-    });
-    if (signInError) {
-      setSigningInWithGoogle(false);
-      setError(signInError.message);
+    const client = clientOrError();
+    if (!client) return;
+    begin(mode === "signin" ? "password" : "signup");
+    if (mode === "signin") {
+      const { error: signInError } = await client.auth.signInWithPassword({ email: normalizedEmail(), password });
+      setAction(null);
+      if (signInError) setError(authErrorMessage(signInError));
+      return;
     }
+    const { data, error: signUpError } = await client.auth.signUp({ email: normalizedEmail(), password, options: { emailRedirectTo: authRedirectUrl() } });
+    setAction(null);
+    if (signUpError) {
+      setError(authErrorMessage(signUpError));
+      return;
+    }
+    if (!data.session) setConfirmation({ title: "Confirm your account", detail: `Open the confirmation email sent to ${normalizedEmail()}.` });
+  };
+
+  const sendReset = async () => {
+    if (!requireEmail()) return;
+    const client = clientOrError();
+    if (!client) return;
+    begin("reset");
+    const { error: resetError } = await client.auth.resetPasswordForEmail(normalizedEmail(), { redirectTo: authRedirectUrl() });
+    setAction(null);
+    if (resetError) {
+      setError(authErrorMessage(resetError));
+      return;
+    }
+    setConfirmation({ title: "Check your inbox", detail: `A password reset link was requested for ${normalizedEmail()}.` });
   };
 
   const sendLink = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
-      setError("Enter a valid email address.");
-      return;
-    }
-    const client = getSupabaseBrowserClient();
-    if (!client) {
-      setError("The church workspace connection is not available.");
-      return;
-    }
-    setSending(true);
-    setError("");
-    const { error: signInError } = await client.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: authRedirectUrl(),
-      },
-    });
-    setSending(false);
+    if (!requireEmail()) return;
+    const client = clientOrError();
+    if (!client) return;
+    begin("link");
+    const { error: signInError } = await client.auth.signInWithOtp({ email: normalizedEmail(), options: { shouldCreateUser: false, emailRedirectTo: authRedirectUrl() } });
+    setAction(null);
     if (signInError) {
-      setError(signInError.message);
+      setError(authErrorMessage(signInError));
       return;
     }
-    setSent(true);
+    setConfirmation({ title: "Check your inbox", detail: `Open the one-time sign-in link requested for ${normalizedEmail()}.` });
   };
 
+  const busy = action !== null;
   return (
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="signin-title">
-        <div className="auth-route" aria-hidden="true">
-          <span><Navigation size={18} /></span><i /><span><MapPinned size={18} /></span>
-        </div>
+        <div className="auth-route" aria-hidden="true"><span><Navigation size={18} /></span><i /><span><MapPinned size={18} /></span></div>
         <p className="eyebrow">NeighborWalk church workspace</p>
         <h1 id="signin-title">Keep every doorstep accounted for.</h1>
-        <p className="auth-intro">Sign in securely to share territories, visit outcomes, and follow-up reminders with your church team.</p>
-        {sent ? (
-          <div className="auth-confirmation" role="status">
-            <Check size={20} />
-            <div><strong>Check your inbox</strong><span>Open the NeighborWalk sign-in link sent to {email.trim()}.</span></div>
+        <p className="auth-intro">Google is the quickest way in. Password sign-in is also available and does not send an email each time.</p>
+        <div className="auth-form">
+          <button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button>
+          <div className="auth-divider"><span>or use your password</span></div>
+          <form className="auth-credentials" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
+            <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" /></label>
+            <label className="form-field"><span>Password</span><input type="password" minLength={8} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+            <button className="button primary auth-submit" disabled={busy}>{action === "password" || action === "signup" ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}</button>
+          </form>
+          <div className="auth-secondary-actions">
+            {mode === "signin" ? <><button type="button" disabled={busy} onClick={() => void sendReset()}>Forgot password?</button><button type="button" disabled={busy} onClick={() => { setMode("signup"); setError(""); setConfirmation(null); }}>Create an account</button></> : <button type="button" disabled={busy} onClick={() => { setMode("signin"); setError(""); setConfirmation(null); }}>Back to sign in</button>}
           </div>
-        ) : (
-          <div className="auth-form">
-            <button className="button auth-submit auth-google" disabled={signingInWithGoogle || sending} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{signingInWithGoogle ? "Opening Google…" : "Continue with Google"}</button>
-            <div className="auth-divider"><span>or use an email link</span></div>
-            <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" onKeyDown={(event) => { if (event.key === "Enter") void sendLink(); }} /></label>
-            {error && <p className="auth-error" role="alert">{error}</p>}
-            <button className="button quiet auth-submit" disabled={sending || signingInWithGoogle} onClick={() => void sendLink()}><Mail size={16} />{sending ? "Sending…" : "Email me a sign-in link"}</button>
-          </div>
-        )}
-        <div className="auth-privacy"><ShieldCheck size={16} /><span>Canvassing records are available only to signed-in members of the same church workspace.</span></div>
+          {mode === "signup" && <p className="auth-hint">Account confirmation uses one email. After that, routine password sign-ins do not.</p>}
+          {confirmation && <div className="auth-confirmation" role="status"><Check size={20} /><div><strong>{confirmation.title}</strong><span>{confirmation.detail}</span></div></div>}
+          {error && <p className="auth-error" role="alert">{error}</p>}
+          <details className="auth-email-fallback"><summary>Use a one-time email link instead</summary><p>This fallback sends an email and may be unavailable when the project email limit is reached.</p><button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}><Mail size={16} />{action === "link" ? "Sending…" : "Send one-time link"}</button></details>
+        </div>
+        <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are private to their owner unless shared. Church leaders can oversee the full workspace.</span></div>
       </section>
     </main>
   );
+}
+
+function PasswordRecovery({ email, onSave }: { email: string; onSave: (password: string) => Promise<void> }) {
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const save = async () => {
+    if (password.length < 8) return setError("Use a password with at least 8 characters.");
+    if (password !== confirmation) return setError("The passwords do not match.");
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(password);
+    } catch (saveError) {
+      setError(authErrorMessage(saveError));
+      setSaving(false);
+    }
+  };
+  return <main className="auth-shell"><section className="auth-card auth-recovery" aria-labelledby="recovery-title"><div className="auth-route" aria-hidden="true"><span><KeyRound size={18} /></span><i /><span><MapPinned size={18} /></span></div><p className="eyebrow">Account recovery</p><h1 id="recovery-title">Choose a new password.</h1><p className="auth-intro">Set a password for {email}. Future sign-ins will not need an email link.</p><form className="auth-form" onSubmit={(event) => { event.preventDefault(); void save(); }}><label className="form-field"><span>New password</span><input type="password" minLength={8} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><label className="form-field"><span>Confirm password</span><input type="password" minLength={8} autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>{error && <p className="auth-error" role="alert">{error}</p>}<button className="button primary auth-submit" disabled={saving}>{saving ? "Saving…" : "Save password and continue"}</button></form></section></main>;
 }
 
 function ConnectionLoading() {

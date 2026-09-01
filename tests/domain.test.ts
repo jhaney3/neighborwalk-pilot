@@ -56,6 +56,7 @@ describe("NeighborWalk domain", () => {
       ...current,
       schemaVersion: 5,
       residents: undefined,
+      personNotes: undefined,
       followUps: current.followUps.map((followUp) => {
         const legacyFollowUp: Record<string, unknown> = { ...followUp };
         delete legacyFollowUp.history;
@@ -68,6 +69,7 @@ describe("NeighborWalk domain", () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
     expect(parsed.data.residents).toEqual([]);
+    expect(parsed.data.personNotes).toEqual([]);
     expect(parsed.data.followUps).toHaveLength(current.followUps.length);
     expect(parsed.data.followUps.every((followUp) => Array.isArray(followUp.history))).toBe(true);
   });
@@ -83,6 +85,7 @@ describe("NeighborWalk domain", () => {
       faithStatus: "not_discussed" as const,
       phone: "5550100142",
       preferredContact: "text" as const,
+      notes: "Asked for a copy of the Gospel of John.",
       consentToStore: true,
       consentToContact: true,
       consentRecordedAt: timestamp,
@@ -95,6 +98,7 @@ describe("NeighborWalk domain", () => {
       church: { ...current.church, requireFollowUpConsent: true },
       visits: current.visits.map((visit) => ({ ...visit, followUpConsent: visit.outcome === "follow_up" })),
       residents: [legacyResident],
+      personNotes: [],
     };
 
     const migrated = neighborWalkDataSchema.parse(migrateNeighborWalkData(legacy));
@@ -103,12 +107,57 @@ describe("NeighborWalk domain", () => {
     expect(migrated.visits).toHaveLength(current.visits.length);
     expect(migrated.followUps).toHaveLength(current.followUps.length);
     expect(migrated.residents).toHaveLength(1);
-    expect(migrated.residents[0]).toMatchObject({ name: "Neighbor", phone: "5550100142" });
+    expect(migrated.residents[0]).toMatchObject({
+      name: "Neighbor",
+      phone: "5550100142",
+      discipleshipStage: "new_connection",
+      assignedVolunteerId: current.preferences.activeVolunteerId,
+      status: "active",
+    });
+    expect(migrated.personNotes).toContainEqual(expect.objectContaining({
+      id: "person_note_legacy_resident_legacy",
+      residentId: "resident_legacy",
+      kind: "general",
+      body: "Asked for a copy of the Gospel of John.",
+    }));
+    expect(migrated.residents[0]).not.toHaveProperty("notes");
     expect(migrated.church).not.toHaveProperty("requireFollowUpConsent");
     expect(migrated.visits[0]).not.toHaveProperty("followUpConsent");
     expect(migrated.residents[0]).not.toHaveProperty("consentToStore");
     expect(migrated.residents[0]).not.toHaveProperty("consentToContact");
     expect(migrated.residents[0]).not.toHaveProperty("consentRecordedAt");
+  });
+
+  it("moves a legacy person next step into the dated follow-up queue", () => {
+    const current = createSeedData();
+    const person = current.residents[0];
+    const dueAt = "2030-09-10T17:00:00.000Z";
+    const legacy = {
+      ...current,
+      schemaVersion: 9,
+      residents: [{
+        ...person,
+        nextStep: "Invite them to coffee and check in about their prayer request.",
+        nextStepDueAt: dueAt,
+      }],
+      followUps: current.followUps.filter((followUp) => !followUp.residentId),
+      sync: { ...current.sync, pending: [] },
+    };
+
+    const migrated = neighborWalkDataSchema.parse(migrateNeighborWalkData(legacy));
+    const migratedTask = migrated.followUps.find((followUp) => followUp.residentId === person.id);
+
+    expect(migratedTask).toMatchObject({
+      id: `followup_next_step_${person.id}`,
+      residentId: person.id,
+      propertyId: person.propertyId,
+      dueAt,
+      status: "scheduled",
+      note: "Invite them to coffee and check in about their prayer request.",
+    });
+    expect(migrated.residents[0]).not.toHaveProperty("nextStep");
+    expect(migrated.residents[0]).not.toHaveProperty("nextStepDueAt");
+    expect(migrated.sync.pending).toEqual([]);
   });
 
   it("stores contact details without in-app approval fields", () => {
@@ -119,6 +168,12 @@ describe("NeighborWalk domain", () => {
       propertyId: data.properties[0].id,
       name: "Shared voluntarily",
       faithStatus: "exploring" as const,
+      discipleshipStage: "exploring_faith" as const,
+      assignedVolunteerId: data.preferences.activeVolunteerId,
+      createdByVolunteerId: data.preferences.activeVolunteerId,
+      sharedWithVolunteerIds: [],
+      sharedWithTeamIds: [],
+      status: "active" as const,
       phone: "555-0100",
       preferredContact: "text" as const,
       createdAt: new Date().toISOString(),
@@ -259,8 +314,13 @@ describe("NeighborWalk domain", () => {
       propertyId: property.id,
       name: "Shared voluntarily",
       faithStatus: "exploring" as const,
+      discipleshipStage: "building_relationship" as const,
+      assignedVolunteerId: data.preferences.activeVolunteerId,
+      createdByVolunteerId: data.preferences.activeVolunteerId,
+      sharedWithVolunteerIds: [],
+      sharedWithTeamIds: [],
+      status: "active" as const,
       preferredContact: "none" as const,
-      notes: "Requested information about service times.",
       createdAt: timestamp,
       updatedAt: timestamp,
     };

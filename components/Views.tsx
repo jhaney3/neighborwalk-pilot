@@ -69,19 +69,32 @@ import { ScriptureReader } from "./ScriptureReader";
 
 export function FollowUpsView({
   data,
+  canManage,
+  activeVolunteerId,
+  initialPersonId,
+  onClearPersonFocus,
   onOpenProperty,
+  onOpenPerson,
+  onAddPersonNote,
   onComplete,
   onReschedule,
   onCancel,
 }: {
   data: NeighborWalkData;
+  canManage: boolean;
+  activeVolunteerId: string;
+  initialPersonId?: string | null;
+  onClearPersonFocus: () => void;
   onOpenProperty: (propertyId: string) => void;
+  onOpenPerson: (residentId: string) => void;
+  onAddPersonNote: (residentId: string, kind: "general", body: string) => string;
   onComplete: (followUpId: string, input: FollowUpCompletionInput) => void;
   onReschedule: (followUpId: string, date: string, note?: string) => void;
   onCancel: (followUpId: string, note?: string) => void;
 }) {
   const [filter, setFilter] = useState<"open" | "overdue" | "today" | "upcoming" | "completed" | "cancelled">("open");
   const [query, setQuery] = useState("");
+  const focusedPerson = data.residents.find((resident) => resident.id === initialPersonId);
   const propertyMap = useMemo(() => new Map(data.properties.map((property) => [property.id, property])), [data.properties]);
   const teamMap = useMemo(() => new Map(data.teams.map((team) => [team.id, team.name])), [data.teams]);
   const residentMap = useMemo(() => {
@@ -96,6 +109,7 @@ export function FollowUpsView({
   }, [data.residents]);
   const today = new Date().toISOString().slice(0, 10);
   const tasks = data.followUps
+    .filter((followUp) => !initialPersonId || followUp.residentId === initialPersonId)
     .filter((followUp) => {
       const dueDate = followUp.dueAt.slice(0, 10);
       if (filter === "completed") return followUp.status === "completed";
@@ -110,14 +124,17 @@ export function FollowUpsView({
       const property = propertyMap.get(followUp.propertyId);
       const normalizedQuery = query.trim().toLowerCase();
       if (!normalizedQuery) return true;
-      const residentText = (residentMap.get(followUp.propertyId) ?? []).flatMap((resident) => [
+      const relevantResidents = followUp.residentId
+        ? data.residents.filter((resident) => resident.id === followUp.residentId)
+        : residentMap.get(followUp.propertyId) ?? [];
+      const residentText = relevantResidents.flatMap((resident) => [
         resident.name,
         resident.phone,
         resident.email,
-        resident.notes,
         faithStatusLabels[resident.faithStatus],
       ]).filter(Boolean).join(" ");
-      return `${property?.address ?? ""} ${followUp.note ?? ""} ${residentText}`.toLowerCase().includes(normalizedQuery);
+      const noteText = followUp.residentId ? data.personNotes.filter((note) => note.residentId === followUp.residentId).map((note) => note.body).join(" ") : "";
+      return `${property?.address ?? ""} ${followUp.note ?? ""} ${residentText} ${noteText}`.toLowerCase().includes(normalizedQuery);
     })
     .sort((a, b) => filter === "completed" || filter === "cancelled"
       ? b.createdAt.localeCompare(a.createdAt)
@@ -126,6 +143,7 @@ export function FollowUpsView({
   return (
     <div className="content-view followups-view">
       <ViewHeading eyebrow="Care continues" title="Follow-ups" description="Manage return visits and keep every next step clear." aside={<div className="heading-count"><CalendarClock size={18} /><strong>{data.followUps.filter((item) => item.status === "scheduled").length}</strong><span>open</span></div>} />
+      {focusedPerson && <div className="followup-person-focus"><UserRound size={15} /><span>Showing tasks for <strong>{focusedPerson.name || "this person"}</strong></span><button onClick={onClearPersonFocus}>Show all follow-ups</button></div>}
       <div className="list-toolbar">
         <div className="segmented-control" aria-label="Follow-up date filter">
           {(["open", "overdue", "today", "upcoming", "completed", "cancelled"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
@@ -138,7 +156,14 @@ export function FollowUpsView({
           {tasks.map((followUp) => {
             const property = propertyMap.get(followUp.propertyId);
             if (!property) return null;
-            return <FollowUpCard key={followUp.id} followUp={followUp} property={property} residents={residentMap.get(property.id) ?? []} teams={data.teams} teamName={followUp.assignedTeamId ? teamMap.get(followUp.assignedTeamId) : undefined} noteLimit={data.church.noteCharacterLimit} onOpen={() => onOpenProperty(property.id)} onComplete={(input) => onComplete(followUp.id, input)} onReschedule={(date, note) => onReschedule(followUp.id, date, note)} onCancel={(note) => onCancel(followUp.id, note)} />;
+            const residents = followUp.residentId
+              ? data.residents.filter((resident) => resident.id === followUp.residentId)
+              : residentMap.get(property.id) ?? [];
+            const personNotes = followUp.residentId ? data.personNotes.filter((note) => note.residentId === followUp.residentId) : [];
+            const owner = followUp.residentId ? data.volunteers.find((volunteer) => volunteer.id === residents[0]?.assignedVolunteerId) : undefined;
+            const person = residents[0];
+            const canEdit = !followUp.residentId || canManage || person?.createdByVolunteerId === activeVolunteerId || person?.assignedVolunteerId === activeVolunteerId;
+            return <FollowUpCard key={followUp.id} followUp={followUp} property={property} residents={residents} personNotes={personNotes} ownerName={owner?.name} canEdit={canEdit} teams={data.teams} teamName={followUp.assignedTeamId ? teamMap.get(followUp.assignedTeamId) : undefined} noteLimit={data.church.noteCharacterLimit} onOpen={() => onOpenProperty(property.id)} onOpenPerson={onOpenPerson} onAddPersonNote={onAddPersonNote} onComplete={(input) => onComplete(followUp.id, input)} onReschedule={(date, note) => onReschedule(followUp.id, date, note)} onCancel={(note) => onCancel(followUp.id, note)} />;
           })}
         </div>
       ) : (
@@ -148,14 +173,19 @@ export function FollowUpsView({
   );
 }
 
-function FollowUpCard({ followUp, property, residents, teams, teamName, noteLimit, onOpen, onComplete, onReschedule, onCancel }: {
+function FollowUpCard({ followUp, property, residents, personNotes, ownerName, canEdit, teams, teamName, noteLimit, onOpen, onOpenPerson, onAddPersonNote, onComplete, onReschedule, onCancel }: {
   followUp: FollowUp;
   property: Property;
   residents: Resident[];
+  personNotes: NeighborWalkData["personNotes"];
+  ownerName?: string;
+  canEdit: boolean;
   teams: NeighborWalkData["teams"];
   teamName?: string;
   noteLimit: number;
   onOpen: () => void;
+  onOpenPerson: (residentId: string) => void;
+  onAddPersonNote: (residentId: string, kind: "general", body: string) => string;
   onComplete: (input: FollowUpCompletionInput) => void;
   onReschedule: (date: string, note?: string) => void;
   onCancel: (note?: string) => void;
@@ -184,7 +214,7 @@ function FollowUpCard({ followUp, property, residents, teams, teamName, noteLimi
           <em>{formatDateTime(followUp.dueAt, { weekday: "long" })}</em>
         </div>
         <div className="followup-card-title">
-          <div className="followup-card-meta"><span><Users size={13} /> {teamName || "Unassigned"}</span></div>
+          <div className="followup-card-meta"><span>{followUp.residentId ? <UserRound size={13} /> : <Users size={13} />} {followUp.residentId ? `${ownerName || "Person owner"} · private person task` : teamName || "Unassigned location task"}</span></div>
           <h2>{property.address}{property.unit ? ` · ${property.unit}` : ""}</h2>
         </div>
       </header>
@@ -195,9 +225,9 @@ function FollowUpCard({ followUp, property, residents, teams, teamName, noteLimi
           {followUp.completionNote && <p className="completion-note"><Check size={13} /> {followUp.completionNote}</p>}
           {followUp.history.length > 1 && <details className="followup-history"><summary>{followUp.history.length} updates</summary>{followUp.history.slice().reverse().map((activity) => <div key={activity.id}><strong>{activity.action.replaceAll("_", " ")}</strong><span>{activity.note || (activity.dueAt ? formatDateTime(activity.dueAt, { month: "short", day: "numeric" }) : "No note")}</span><small>{formatDateTime(activity.createdAt)}</small></div>)}</details>}
         </section>
-        <FollowUpPeople residents={residents} />
+        <FollowUpPeople residents={residents} personNotes={personNotes} noteLimit={noteLimit} linkedPersonId={followUp.residentId} onOpenPerson={onOpenPerson} onAddPersonNote={onAddPersonNote} />
       </div>
-      {followUp.status !== "scheduled" ? (
+      {followUp.status !== "scheduled" || !canEdit ? (
         <div className="followup-actions single"><button className="button quiet small" onClick={onOpen}><MapIcon size={14} /> View on map</button></div>
       ) : editingDate ? (
         <div className="inline-date-editor">
@@ -226,9 +256,19 @@ function FollowUpCard({ followUp, property, residents, teams, teamName, noteLimi
   );
 }
 
-function FollowUpPeople({ residents }: { residents: Resident[] }) {
+function FollowUpPeople({ residents, personNotes, noteLimit, linkedPersonId, onOpenPerson, onAddPersonNote }: {
+  residents: Resident[];
+  personNotes: NeighborWalkData["personNotes"];
+  noteLimit: number;
+  linkedPersonId?: string;
+  onOpenPerson: (residentId: string) => void;
+  onAddPersonNote: (residentId: string, kind: "general", body: string) => string;
+}) {
+  const [noteBody, setNoteBody] = useState("");
+  const sortedNotes = [...personNotes].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const noteValid = Boolean(linkedPersonId && noteBody.trim() && noteBody.length <= noteLimit);
   return <section className="followup-people" aria-label="People recorded at this location">
-    <div className="followup-people-heading"><span><Users size={14} /> People to contact</span><strong>{residents.length}</strong></div>
+    <div className="followup-people-heading"><span><Users size={14} /> {linkedPersonId ? "Person context" : "People to contact"}</span><strong>{residents.length}</strong></div>
     {residents.length ? <div className="followup-person-list">{residents.map((resident) => {
       const smsNumber = resident.phone?.replace(/[^\d+]/g, "");
       const displayPhone = resident.phone ? formatPhoneNumber(resident.phone) : undefined;
@@ -238,15 +278,21 @@ function FollowUpPeople({ residents }: { residents: Resident[] }) {
         <span className="followup-person-avatar" aria-hidden="true">{resident.name?.trim().charAt(0).toUpperCase() || "?"}</span>
         <div className="followup-person-copy">
           <div><strong>{resident.name || "Name not provided"}</strong><span>{faithStatusLabels[resident.faithStatus]}</span></div>
-          {resident.notes && <p>{resident.notes}</p>}
           {!canText && !canEmail ? <small><Phone size={12} /> No phone number or email saved</small> : null}
         </div>
-        {(canText || canEmail) && <div className="followup-contact-actions">
+        <div className="followup-contact-actions">
           {canText && <a className={resident.preferredContact === "text" ? "preferred" : undefined} href={`sms:${smsNumber}`} aria-label={`Text ${resident.name || "this person"} at ${displayPhone}`}><MessageCircle size={14} /><span><small>{resident.preferredContact === "text" ? "Preferred text" : "Text"}</small><strong>{displayPhone}</strong></span></a>}
           {canEmail && <a className={resident.preferredContact === "email" ? "preferred" : undefined} href={`mailto:${resident.email}`} aria-label={`Email ${resident.name || "this person"} at ${resident.email}`}><Mail size={14} /><span><small>{resident.preferredContact === "email" ? "Preferred email" : "Email"}</small><strong>{resident.email}</strong></span></a>}
-        </div>}
+          <button onClick={() => onOpenPerson(resident.id)} aria-label={`Open ${resident.name || "person"} discipleship profile`}><UserRound size={14} /><span><small>Discipleship</small><strong>View profile</strong></span></button>
+        </div>
       </article>;
     })}</div> : <p className="followup-people-empty"><Phone size={13} /> No people are recorded at this location.</p>}
+    {linkedPersonId && <div className="followup-person-notes">
+      <div><strong>Person notes</strong><span>{sortedNotes.length}</span></div>
+      {sortedNotes.length ? <div className="followup-note-list">{sortedNotes.slice(0, 3).map((note) => <article key={note.id}><p>{note.body}</p><time>{formatDateTime(note.createdAt, { month: "short", day: "numeric", year: "numeric" })}</time></article>)}</div> : <p>No notes yet.</p>}
+      {sortedNotes.length > 3 && <button onClick={() => onOpenPerson(linkedPersonId)}>View all {sortedNotes.length} notes</button>}
+      <div className="followup-note-composer"><input value={noteBody} maxLength={noteLimit + 1} onChange={(event) => setNoteBody(event.target.value)} placeholder="Add a note to this person’s history" aria-label="Add person note" /><button className="button quiet small" disabled={!noteValid} onClick={() => { onAddPersonNote(linkedPersonId, "general", noteBody); setNoteBody(""); }}><MessageCircle size={13} /> Save note</button></div>
+    </div>}
   </section>;
 }
 
@@ -263,33 +309,33 @@ function CompleteFollowUpModal({ followUp, teams, noteLimit, onClose, onSave }: 
   const [nextNote, setNextNote] = useState("");
   const [assignedTeamId, setAssignedTeamId] = useState(followUp.assignedTeamId ?? "");
   const valid = completionNote.length <= noteLimit && nextNote.length <= noteLimit
-    && (!scheduleAnother || Boolean(nextDate) && nextDate >= new Date().toISOString().slice(0, 10));
-  return <Modal title="Complete follow-up" description="Record the result and schedule the next step if needed." onClose={onClose}>
+    && (!scheduleAnother || Boolean(nextDate) && nextDate >= new Date().toISOString().slice(0, 10) && (!followUp.residentId || Boolean(nextNote.trim())));
+  return <Modal title="Complete follow-up" description={followUp.residentId ? "Record what happened. Your note will also become part of this person’s history." : "Record the result and schedule the next step if needed."} onClose={onClose}>
     <div className="form-stack">
-      <label className="form-field"><span>Completion note <small>Optional</small></span><textarea rows={3} maxLength={noteLimit + 1} value={completionNote} onChange={(event) => setCompletionNote(event.target.value)} placeholder="Briefly record what happened or what was requested." /></label>
+      <label className="form-field"><span>{followUp.residentId ? "Person note" : "Completion note"} <small>Optional</small></span><textarea rows={3} maxLength={noteLimit + 1} value={completionNote} onChange={(event) => setCompletionNote(event.target.value)} placeholder="Briefly record what happened or what was requested." />{followUp.residentId && <small>Saved in this person’s single note history.</small>}</label>
       <label className={`toggle-row additional-followup-toggle${scheduleAnother ? " active" : ""}`}><input type="checkbox" checked={scheduleAnother} onChange={(event) => setScheduleAnother(event.target.checked)} /><span className="compact-toggle-label">Schedule an additional follow-up</span></label>
       {scheduleAnother && <section className="additional-followup-panel" aria-label="Additional follow-up details">
         <div className="additional-followup-heading">
           <span><CalendarClock size={17} /></span>
-          <div><strong>Plan the next visit</strong><small>Set the handoff while the details are fresh.</small></div>
+          <div><strong>Plan the next task</strong><small>Keep the relationship moving while the details are fresh.</small></div>
         </div>
         <div className="additional-followup-fields">
           <div className="form-field additional-followup-field">
-            <label className="additional-followup-label" htmlFor="additional-followup-date"><i>1</i><span><strong>Next date</strong><small>When should someone return?</small></span></label>
+            <label className="additional-followup-label" htmlFor="additional-followup-date"><i>1</i><span><strong>Due date</strong><small>When should this happen?</small></span></label>
             <input id="additional-followup-date" type="date" min={new Date().toISOString().slice(0, 10)} value={nextDate} onChange={(event) => setNextDate(event.target.value)} />
           </div>
-          <div className="form-field additional-followup-field">
+          {!followUp.residentId && <div className="form-field additional-followup-field">
             <label className="additional-followup-label" htmlFor="additional-followup-group"><i>2</i><span><strong>Assign group</strong><small>Who should own the next visit?</small></span></label>
             <select id="additional-followup-group" value={assignedTeamId} onChange={(event) => setAssignedTeamId(event.target.value)}><option value="">Unassigned</option>{teams.map((team) => <option value={team.id} key={team.id}>{team.name}</option>)}</select>
-          </div>
+          </div>}
           <div className="form-field additional-followup-field full">
-            <label className="additional-followup-label" htmlFor="additional-followup-note"><i>3</i><span><strong>Next-step note</strong><small>What should the next volunteer know? Optional.</small></span></label>
+            <label className="additional-followup-label" htmlFor="additional-followup-note"><i>{followUp.residentId ? "2" : "3"}</i><span><strong>What needs to happen?</strong><small>{followUp.residentId ? "Required for a person task." : "What should the next volunteer know? Optional."}</small></span></label>
             <textarea id="additional-followup-note" rows={3} maxLength={noteLimit + 1} value={nextNote} onChange={(event) => setNextNote(event.target.value)} placeholder="Example: Bring service times and text before visiting." />
           </div>
         </div>
       </section>}
     </div>
-    <div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={!valid} onClick={() => onSave({ completionNote: completionNote.trim() || undefined, nextFollowUp: scheduleAnother ? { dueAt: new Date(`${nextDate}T17:00:00`).toISOString(), note: nextNote.trim() || undefined, assignedTeamId: assignedTeamId || undefined } : undefined })}><Check size={15} /> Complete follow-up</button></div>
+    <div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={!valid} onClick={() => onSave({ completionNote: completionNote.trim() || undefined, nextFollowUp: scheduleAnother ? { dueAt: new Date(`${nextDate}T17:00:00`).toISOString(), note: nextNote.trim() || undefined, assignedTeamId: followUp.residentId ? undefined : assignedTeamId || undefined } : undefined })}><Check size={15} /> Complete follow-up</button></div>
   </Modal>;
 }
 
@@ -302,6 +348,7 @@ export function GuideView({
   teams,
   teamGuideDefaults,
   canManage,
+  allowBuiltInManagement,
   libraryError,
   onSave,
   onDelete,
@@ -316,6 +363,7 @@ export function GuideView({
   teams: NeighborWalkData["teams"];
   teamGuideDefaults: Record<string, string>;
   canManage: boolean;
+  allowBuiltInManagement: boolean;
   libraryError?: string | null;
   onSave: (input: ConversationGuideInput) => Promise<ConversationGuide>;
   onDelete: (guideId: string) => Promise<void>;
@@ -333,8 +381,9 @@ export function GuideView({
     ?? guides[0];
   const steps = selectedGuide?.steps ?? [];
   const step = steps[index] ?? steps[0];
-  const canEditSelected = Boolean(selectedGuide && (selectedGuide.scope === "personal" || canManage));
-  const churchGuides = guides.filter((guide) => guide.scope === "church");
+  const canUseBuiltInActions = (guide: ConversationGuide) => guide.id !== "legacy_church_guide" || allowBuiltInManagement;
+  const canEditSelected = Boolean(selectedGuide && canUseBuiltInActions(selectedGuide) && (selectedGuide.scope === "personal" || canManage));
+  const churchGuides = guides.filter((guide) => guide.scope === "church" && canUseBuiltInActions(guide));
 
   const chooseGuide = (guideId: string) => {
     setSelectedGuideId(guideId);
@@ -397,7 +446,7 @@ export function GuideView({
                 <span className={`guide-scope-mark ${guide.scope}`}>{guide.scope === "church" ? <Church size={15} /> : <LockKeyhole size={15} />}</span>
                 <span><small>{guide.scope === "church" ? "Church guide" : "Only me"}</small><strong>{guide.title}</strong><em>{guide.description || `${guide.steps.length} conversation steps`}</em></span>
               </button>
-              <button className={`guide-favorite-button${favorite ? " active" : ""}`} onClick={() => void makeFavorite(guide.id)} aria-label={favorite ? `${guide.title} is your favorite guide` : `Make ${guide.title} your favorite guide`} aria-pressed={favorite}><Star size={16} fill={favorite ? "currentColor" : "none"} /></button>
+              {canUseBuiltInActions(guide) && <button className={`guide-favorite-button${favorite ? " active" : ""}`} onClick={() => void makeFavorite(guide.id)} aria-label={favorite ? `${guide.title} is your favorite guide` : `Make ${guide.title} your favorite guide`} aria-pressed={favorite}><Star size={16} fill={favorite ? "currentColor" : "none"} /></button>}
             </article>;
           })}
         </div> : <div className="guide-library-empty"><BookOpenText size={22} /><div><strong>No conversation guides yet</strong><span>Create a private guide for yourself, or ask a leader to publish a church guide.</span></div></div>}
@@ -425,7 +474,7 @@ export function GuideView({
         <section className="guide-active-heading">
           <div><span className={`guide-scope-label ${selectedGuide.scope}`}>{selectedGuide.scope === "church" ? <Church size={13} /> : <LockKeyhole size={13} />}{selectedGuide.scope === "church" ? "Church guide" : "Private guide"}</span><h2>{selectedGuide.title}</h2><p>{selectedGuide.description || `${steps.length} conversation steps`}</p></div>
           <div className="guide-active-actions">
-            {selectedGuide.id !== favoriteGuideId && <button className="button quiet" onClick={() => void makeFavorite(selectedGuide.id)}><Star size={15} /> Set as favorite</button>}
+            {canUseBuiltInActions(selectedGuide) && selectedGuide.id !== favoriteGuideId && <button className="button quiet" onClick={() => void makeFavorite(selectedGuide.id)}><Star size={15} /> Set as favorite</button>}
             {selectedGuide.scope === "church" && <button className="button quiet" onClick={() => setEditor({ guide: selectedGuide, scope: "personal", copy: true })}><Copy size={15} /> Make a private copy</button>}
             {canEditSelected && <button className="button quiet" onClick={() => setEditor({ guide: selectedGuide, scope: selectedGuide.scope })}><Edit3 size={15} /> Edit guide</button>}
           </div>
@@ -668,6 +717,7 @@ export function SettingsView({
   favoriteGuideId,
   accountEmail,
   onSignOut,
+  onUpdatePassword,
   onUpdateChurch,
   onSetPreference,
   onSetFavoriteGuide,
@@ -687,6 +737,7 @@ export function SettingsView({
   favoriteGuideId?: string;
   accountEmail?: string;
   onSignOut?: () => Promise<void>;
+  onUpdatePassword?: (password: string) => Promise<void>;
   onUpdateChurch: (patch: Partial<NeighborWalkData["church"]>) => void;
   onSetPreference: <K extends keyof NeighborWalkData["preferences"]>(key: K, value: NeighborWalkData["preferences"][K]) => void;
   onSetFavoriteGuide: (guideId: string) => Promise<void>;
@@ -706,6 +757,9 @@ export function SettingsView({
   const [mapStyleUrl, setMapStyleUrl] = useState(data.preferences.mapStyleUrl);
   const [clearing, setClearing] = useState(false);
   const [clearConfirmation, setClearConfirmation] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
 
   useEffect(() => {
     const handleInstallPrompt = (event: Event) => {
@@ -770,6 +824,23 @@ export function SettingsView({
     setMapStyleUrl(next.preferences.mapStyleUrl);
   };
 
+  const saveAccountPassword = async () => {
+    if (!onUpdatePassword) return;
+    if (newPassword.length < 8) return setMessage("Use a password with at least 8 characters.");
+    if (newPassword !== confirmPassword) return setMessage("The passwords do not match.");
+    setUpdatingPassword(true);
+    try {
+      await onUpdatePassword(newPassword);
+      setNewPassword("");
+      setConfirmPassword("");
+      setMessage("Password saved. You can now sign in without requesting an email link.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The password could not be saved.");
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
   return (
     <div className="content-view settings-view">
       <ViewHeading eyebrow="Church and device" title="Settings" description={canManage ? "Set ministry guardrails, prepare offline use, and manage workspace data." : "Manage your account, map, reminders, and this device."} />
@@ -778,6 +849,7 @@ export function SettingsView({
       <div className="settings-grid">
         {data.sync.mode === "connected" && <SettingsSection icon={<LockKeyhole size={18} />} title="Account and access" description="Your access level is assigned by a church leader.">
           <div className="connection-card connected"><LockKeyhole size={18} /><span><strong>Signed-in church account</strong>{accountEmail || "Authenticated member"} · {canManage ? "Leader access" : "Volunteer access"}</span></div>
+          {onUpdatePassword && <details className="account-password"><summary>Set or change password</summary><div><p>Use a password for routine sign-in without waiting for an email.</p><label className="form-field"><span>New password</span><input type="password" minLength={8} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><label className="form-field"><span>Confirm password</span><input type="password" minLength={8} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label><button className="button quiet" disabled={updatingPassword} onClick={() => void saveAccountPassword()}><Save size={15} /> {updatingPassword ? "Saving…" : "Save password"}</button></div></details>}
           {onSignOut && <button className="button quiet" onClick={() => void onSignOut()}><LogOut size={15} /> Sign out</button>}
         </SettingsSection>}
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const APP_SCHEMA_VERSION = 7;
+export const APP_SCHEMA_VERSION = 10;
 
 export const outcomeValues = [
   "unvisited",
@@ -171,6 +171,35 @@ export const faithStatusValues = [
 export type FaithStatus = (typeof faithStatusValues)[number];
 export type ContactPreference = "none" | "text" | "call" | "email";
 
+export const discipleshipStageValues = [
+  "new_connection",
+  "building_relationship",
+  "exploring_faith",
+  "following_jesus",
+  "growing",
+  "multiplying",
+] as const;
+
+export type DiscipleshipStage = (typeof discipleshipStageValues)[number];
+export type ResidentStatus = "active" | "paused" | "archived";
+export type PersonNoteKind = "conversation" | "prayer" | "milestone" | "general";
+
+export const discipleshipStageLabels: Record<DiscipleshipStage, string> = {
+  new_connection: "New connection",
+  building_relationship: "Building relationship",
+  exploring_faith: "Exploring faith",
+  following_jesus: "Following Jesus",
+  growing: "Growing",
+  multiplying: "Helping others grow",
+};
+
+export const personNoteKindLabels: Record<PersonNoteKind, string> = {
+  conversation: "Conversation",
+  prayer: "Prayer",
+  milestone: "Milestone",
+  general: "General note",
+};
+
 export const faithStatusLabels: Record<FaithStatus, string> = {
   not_discussed: "Not discussed",
   christian: "Christian",
@@ -186,15 +215,31 @@ export type Resident = {
   propertyId: string;
   name?: string;
   faithStatus: FaithStatus;
+  discipleshipStage: DiscipleshipStage;
+  assignedVolunteerId: string;
+  createdByVolunteerId: string;
+  sharedWithVolunteerIds: string[];
+  sharedWithTeamIds: string[];
+  status: ResidentStatus;
   phone?: string;
   email?: string;
   preferredContact: ContactPreference;
-  notes?: string;
+  lastContactAt?: string;
   createdAt: string;
   updatedAt: string;
 };
 
-export type ResidentInput = Omit<Resident, "id" | "churchId" | "propertyId" | "createdAt" | "updatedAt">;
+export type ResidentInput = Omit<Resident, "id" | "churchId" | "propertyId" | "createdByVolunteerId" | "createdAt" | "updatedAt">;
+
+export type PersonNote = {
+  id: string;
+  churchId: string;
+  residentId: string;
+  authorId: string;
+  kind: PersonNoteKind;
+  body: string;
+  createdAt: string;
+};
 
 export type FollowUpActivity = {
   id: string;
@@ -209,7 +254,8 @@ export type FollowUp = {
   id: string;
   churchId: string;
   propertyId: string;
-  sourceVisitId: string;
+  residentId?: string;
+  sourceVisitId?: string;
   assignedTeamId?: string;
   dueAt: string;
   status: "scheduled" | "completed" | "cancelled";
@@ -264,7 +310,7 @@ export type ConversationGuideInput = Pick<
 export type AuditEntry = {
   id: string;
   action: string;
-  entityType: "property" | "visit" | "follow_up" | "resident" | "team" | "territory" | "settings" | "guide" | "data";
+  entityType: "property" | "visit" | "follow_up" | "person_follow_up" | "resident" | "person_note" | "team" | "territory" | "settings" | "guide" | "data";
   entityId: string;
   actorId: string;
   createdAt: string;
@@ -308,6 +354,7 @@ export type NeighborWalkData = {
   visits: Visit[];
   followUps: FollowUp[];
   residents: Resident[];
+  personNotes: PersonNote[];
   guide: GuideStep[];
   audit: AuditEntry[];
   preferences: AppPreferences;
@@ -336,10 +383,16 @@ const residentSchema = z.object({
   propertyId: z.string().min(1),
   name: z.string().min(1).max(120).optional(),
   faithStatus: z.enum(faithStatusValues),
+  discipleshipStage: z.enum(discipleshipStageValues),
+  assignedVolunteerId: z.string().min(1),
+  createdByVolunteerId: z.string().min(1),
+  sharedWithVolunteerIds: z.array(z.string().min(1)).max(250),
+  sharedWithTeamIds: z.array(z.string().min(1)).max(100),
+  status: z.enum(["active", "paused", "archived"]),
   phone: z.string().min(3).max(40).optional(),
   email: z.string().email().max(254).optional(),
   preferredContact: z.enum(["none", "text", "call", "email"]),
-  notes: z.string().max(2000).optional(),
+  lastContactAt: z.string().datetime().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 }).superRefine((resident, context) => {
@@ -464,7 +517,8 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
     id: z.string().min(1),
     churchId: z.string().min(1),
     propertyId: z.string().min(1),
-    sourceVisitId: z.string().min(1),
+    residentId: z.string().min(1).optional(),
+    sourceVisitId: z.string().min(1).optional(),
     assignedTeamId: z.string().optional(),
     dueAt: z.string().datetime(),
     status: z.enum(["scheduled", "completed", "cancelled"]),
@@ -476,6 +530,15 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
     completedAt: z.string().datetime().optional(),
   })),
   residents: z.array(residentSchema),
+  personNotes: z.array(z.object({
+    id: z.string().min(1),
+    churchId: z.string().min(1),
+    residentId: z.string().min(1),
+    authorId: z.string().min(1),
+    kind: z.enum(["conversation", "prayer", "milestone", "general"]),
+    body: z.string().min(1).max(2000),
+    createdAt: z.string().datetime(),
+  })),
   guide: z.array(z.object({
     id: z.string().min(1),
     order: z.number().int().min(1),
@@ -489,7 +552,7 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
   audit: z.array(z.object({
     id: z.string().min(1),
     action: z.string().min(1),
-    entityType: z.enum(["property", "visit", "follow_up", "resident", "team", "territory", "settings", "guide", "data"]),
+    entityType: z.enum(["property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "settings", "guide", "data"]),
     entityId: z.string().min(1),
     actorId: z.string().min(1),
     createdAt: z.string().datetime(),
@@ -510,7 +573,7 @@ export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
     lastSyncedAt: z.string().datetime().optional(),
     pending: z.array(z.object({
       id: z.string().min(1),
-      entityType: z.enum(["property", "visit", "follow_up", "resident", "team", "territory", "settings", "guide", "data"]),
+      entityType: z.enum(["property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "settings", "guide", "data"]),
       entityId: z.string().min(1),
       operation: z.enum(["upsert", "delete"]),
       changedAt: z.string().datetime(),
@@ -657,7 +720,7 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - data.church.retentionDays);
   const scheduledSourceVisitIds = new Set(
-    data.followUps.filter((followUp) => followUp.status === "scheduled").map((followUp) => followUp.sourceVisitId),
+    data.followUps.filter((followUp) => followUp.status === "scheduled").flatMap((followUp) => followUp.sourceVisitId ? [followUp.sourceVisitId] : []),
   );
   const keepVisits = data.visits.filter((visit) => {
     if (visit.outcome === "do_not_visit") return true;
@@ -665,15 +728,20 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
   });
   const keepVisitIds = new Set(keepVisits.map((visit) => visit.id));
   const keepFollowUps = data.followUps.filter(
-    (followUp) => followUp.status === "scheduled" || keepVisitIds.has(followUp.sourceVisitId),
+    (followUp) => followUp.status === "scheduled" || Boolean(followUp.sourceVisitId && keepVisitIds.has(followUp.sourceVisitId)),
   );
   const keepAudit = data.audit.filter((entry) => new Date(entry.createdAt) >= cutoff);
-  const activeFollowUpPropertyIds = new Set(
-    keepFollowUps.filter((followUp) => followUp.status === "scheduled").map((followUp) => followUp.propertyId),
+  const activeFollowUpResidentIds = new Set(
+    keepFollowUps.filter((followUp) => followUp.status === "scheduled").flatMap((followUp) => followUp.residentId ? [followUp.residentId] : []),
   );
   const keepResidents = data.residents.filter(
-    (resident) => activeFollowUpPropertyIds.has(resident.propertyId) || new Date(resident.updatedAt) >= cutoff,
+    (resident) => resident.status !== "archived"
+      || activeFollowUpResidentIds.has(resident.id)
+      || new Date(resident.updatedAt) >= cutoff,
   );
+  const keptResidentIds = new Set(keepResidents.map((resident) => resident.id));
+  const keepPersonNotes = data.personNotes.filter((note) => keptResidentIds.has(note.residentId));
+  const finalFollowUps = keepFollowUps.filter((followUp) => !followUp.residentId || keptResidentIds.has(followUp.residentId));
   const properties = data.properties.map((property) => {
     const retainedVisits = keepVisits
       .filter((visit) => visit.propertyId === property.id)
@@ -687,5 +755,13 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
       visitCount: retainedVisits.length,
     };
   });
-  return { ...data, properties, visits: keepVisits, followUps: keepFollowUps, residents: keepResidents, audit: keepAudit };
+  return {
+    ...data,
+    properties,
+    visits: keepVisits,
+    followUps: finalFollowUps,
+    residents: keepResidents,
+    personNotes: keepPersonNotes,
+    audit: keepAudit,
+  };
 }

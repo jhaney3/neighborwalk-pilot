@@ -28,6 +28,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MapCanvas, type MapSearchTarget } from "../components/MapCanvas";
 import { PropertyDrawer } from "../components/PropertyDrawer";
+import { PeopleView } from "../components/PeopleView";
 import { FollowUpsView, GuideView, LeaderView, Modal, SettingsView } from "../components/Views";
 import {
   centerForBoundary,
@@ -48,7 +49,7 @@ import { coverageForTerritory, type TerritoryCoverageById } from "../lib/territo
 import { useTerritoryParcels } from "../lib/use-territory-parcels";
 import { useVisibleParcels } from "../lib/use-visible-parcels";
 
-type View = "map" | "followups" | "guide" | "leader" | "settings";
+type View = "map" | "people" | "followups" | "guide" | "leader" | "settings";
 type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[]; parcel?: ParcelDetails; legacyPropertyIds?: string[] };
 type ParcelSelection = { parcel: ParcelReference; situsAddress?: string | null; propertyIds: string[] };
 type SavedAddressResult = { propertyId: string; territoryId: string; label: string; detail: string; coordinates: Coordinates; color: string };
@@ -74,10 +75,12 @@ const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
   { value: "do_not_visit", label: "Skip" },
 ];
 
-export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: SupabaseUser | null; onSignOut?: () => Promise<void> } = {}) {
+export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: { supabaseUser?: SupabaseUser | null; onSignOut?: () => Promise<void>; onUpdatePassword?: (password: string) => Promise<void> } = {}) {
   const { data, loading, storageError, online, saving, syncing, workspaceStatus, workspaceMembership, guideLibrary, guideLibraryError, activeTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
   const [viewOverride, setViewOverride] = useState<View | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [followUpPersonId, setFollowUpPersonId] = useState<string | null>(null);
   const [guidedPropertyId, setGuidedPropertyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | Outcome>("all");
   const [query, setQuery] = useState("");
@@ -202,7 +205,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
   const requestedView = typeof window === "undefined"
     ? data.preferences.lastView
     : new URLSearchParams(window.location.search).get("view") ?? data.preferences.lastView;
-  const allowedViews: View[] = ["map", "followups", "guide", "leader", "settings"];
+  const allowedViews: View[] = ["map", "people", "followups", "guide", "leader", "settings"];
   const initialView = allowedViews.includes(requestedView as View) ? requestedView as View : "map";
   const view = viewOverride ?? (initialView === "leader" && !canManage ? "map" : initialView);
   const coverage = coverageByTerritory[activeTerritory.id]
@@ -224,6 +227,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
     ? dwellingsForParcel(data.properties, pendingAdd.parcel)
     : [];
   const openFollowUps = data.followUps.filter((followUp) => followUp.status === "scheduled").length;
+  const activePeople = data.residents.filter((resident) => resident.status === "active").length;
   const editingTerritory = editingTerritoryId ? data.territories.find((territory) => territory.id === editingTerritoryId) : undefined;
   const territoryEditorEventId = editingTerritory?.eventId ?? data.preferences.activeEventId;
   const territoryEditorTeams = data.teams.filter((team) => team.eventId === territoryEditorEventId);
@@ -356,7 +360,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
           </div>
           <nav className="sidebar-nav" aria-label="Main sections">
             <NavButton active={view === "map"} icon={<MapIcon size={18} />} label="Walk map" onClick={() => navigate("map")} />
-            <NavButton active={view === "followups"} icon={<CalendarClock size={18} />} label="Follow-ups" count={openFollowUps} onClick={() => navigate("followups")} />
+            <NavButton active={view === "people"} icon={<Users size={18} />} label="People" count={activePeople} onClick={() => navigate("people")} />
+            <NavButton active={view === "followups"} icon={<CalendarClock size={18} />} label="Follow-ups" count={openFollowUps} onClick={() => { setFollowUpPersonId(null); navigate("followups"); }} />
             <NavButton active={view === "guide"} icon={<BookOpenText size={18} />} label="Conversation guide" onClick={() => navigate("guide")} />
             {canManage && <NavButton active={view === "leader"} icon={<BarChart3 size={18} />} label="Leader view" onClick={() => navigate("leader")} />}
             <NavButton active={view === "settings"} icon={<Settings2 size={18} />} label="Settings" onClick={() => navigate("settings")} />
@@ -475,21 +480,23 @@ export function NeighborWalkApp({ supabaseUser, onSignOut }: { supabaseUser?: Su
                 </div>
                 {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => points.slice(0, -1))}><Undo2 size={15} /> Undo</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={draftBoundary.length < 3} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
               </div>
-              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={teamDefaultGuideId && activeGuideTeam ? `${activeGuideTeam.name} default` : "Your favorite"} canManage={canManage} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
+              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={teamDefaultGuideId && activeGuideTeam ? `${activeGuideTeam.name} default` : "Your favorite"} canManage={canManage} activeVolunteerId={activeVolunteer.id} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
             </section>
           )}
-          {view === "followups" && <FollowUpsView data={data} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onComplete={(id, input) => { actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next visit scheduled" : "Follow-up completed"); }} onReschedule={(id, date, note) => { actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={(id, note) => { actions.cancelFollowUp(id, note); setToast("Follow-up cancelled"); }} />}
-          {view === "guide" && <GuideView guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} effectiveGuideId={favoriteConversationGuide?.id} activeTeamId={activeGuideTeam?.id} activeTeamName={activeGuideTeam?.name} teams={data.teams} teamGuideDefaults={guideLibrary.teamGuideDefaults} canManage={canManage} libraryError={guideLibraryError} onSave={actions.saveConversationGuide} onDelete={actions.deleteConversationGuide} onSetFavorite={actions.setFavoriteConversationGuide} onSetTeamDefault={actions.setTeamConversationGuide} />}
+          {view === "followups" && <FollowUpsView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialPersonId={followUpPersonId} onClearPersonFocus={() => setFollowUpPersonId(null)} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onOpenPerson={(residentId) => { setSelectedPersonId(residentId); navigate("people"); }} onAddPersonNote={actions.addPersonNote} onComplete={(id, input) => { actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next task scheduled" : "Follow-up completed"); }} onReschedule={(id, date, note) => { actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={(id, note) => { actions.cancelFollowUp(id, note); setToast("Follow-up cancelled"); }} />}
+          {view === "people" && <PeopleView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialSelectedResidentId={selectedPersonId} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} onAddPersonNote={actions.addPersonNote} onDeletePersonNote={actions.deletePersonNote} onAddPersonFollowUp={actions.addPersonFollowUp} onOpenFollowUps={(residentId) => { setFollowUpPersonId(residentId); navigate("followups"); }} />}
+          {view === "guide" && <GuideView guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} effectiveGuideId={favoriteConversationGuide?.id} activeTeamId={activeGuideTeam?.id} activeTeamName={activeGuideTeam?.name} teams={data.teams} teamGuideDefaults={guideLibrary.teamGuideDefaults} canManage={canManage} allowBuiltInManagement={data.sync.mode === "device_only"} libraryError={guideLibraryError} onSave={actions.saveConversationGuide} onDelete={actions.deleteConversationGuide} onSetFavorite={actions.setFavoriteConversationGuide} onSetTeamDefault={actions.setTeamConversationGuide} />}
           {view === "leader" && canManage && <LeaderView data={data} coverageByTerritory={coverageByTerritory} membership={workspaceMembership} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} />}
-          {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onSetFavoriteGuide={actions.setFavoriteConversationGuide} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onClearOutreach={actions.clearOutreachData} onSync={actions.syncNow} />}
+          {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdatePassword={onUpdatePassword} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onSetFavoriteGuide={actions.setFavoriteConversationGuide} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onClearOutreach={actions.clearOutreachData} onSync={actions.syncNow} />}
         </section>
       </div>
 
       <nav className="mobile-nav" aria-label="Main navigation">
         <MobileNav active={view === "map"} icon={<MapIcon size={20} />} label="Map" onClick={() => navigate("map")} />
-        <MobileNav active={view === "followups"} icon={<CalendarClock size={20} />} label="Follow-ups" count={openFollowUps} onClick={() => navigate("followups")} />
+        <MobileNav active={view === "people"} icon={<Users size={20} />} label="People" count={activePeople} onClick={() => navigate("people")} />
+        <MobileNav active={view === "followups"} icon={<CalendarClock size={20} />} label="Follow-ups" count={openFollowUps} onClick={() => { setFollowUpPersonId(null); navigate("followups"); }} />
         <MobileNav active={view === "guide"} icon={<BookOpenText size={20} />} label="Guide" onClick={() => navigate("guide")} />
-        {canManage ? <MobileNav active={view === "leader"} icon={<Users size={20} />} label="Leader" onClick={() => navigate("leader")} /> : <MobileNav active={view === "settings"} icon={<Settings2 size={20} />} label="Settings" onClick={() => navigate("settings")} />}
+        {canManage ? <MobileNav active={view === "leader"} icon={<BarChart3 size={20} />} label="Leader" onClick={() => navigate("leader")} /> : <MobileNav active={view === "settings"} icon={<Settings2 size={20} />} label="Settings" onClick={() => navigate("settings")} />}
       </nav>
 
       {pendingAdd && <AddPropertyModal intent={pendingAdd} existingDwellingCount={pendingParcelDwellings.length} guideName={favoriteConversationGuide?.title} guideAvailable={Boolean(favoriteConversationGuide?.steps.length)} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}

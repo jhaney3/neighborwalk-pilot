@@ -2,19 +2,20 @@
 
 NeighborWalk is a mobile-first progressive web app for respectful neighborhood outreach. Volunteers can work from a real interactive map, record one objective outcome per visit, schedule follow-ups, and use a church-approved conversation guide. Leaders can define territories and see operational coverage without ranking residents, conversations, or volunteers.
 
-The app remains offline-first with IndexedDB and an installable service worker. When Supabase is configured, members sign in by email and synchronize a church workspace protected by grants and row-level security.
+The app remains offline-first with IndexedDB and an installable service worker. When Supabase is configured, members sign in with Google or email and password, then synchronize a church workspace protected by grants and row-level security.
 
 ## Included
 
 - MapLibre neighborhood map with house/location markers, outcome filters, address search, geolocation, and tappable building detection
 - leader-drawn territory boundaries with assignment and coverage summaries
 - visit history, objective notes, do-not-revisit status, and scheduled return visits
-- follow-up queue with overdue/today/upcoming filters, rescheduling, completion, and cancellation
+- unified follow-up task queue for location visits and person care, with overdue/today/upcoming filters, notes, rescheduling, completion, and cancellation
+- searchable, private-by-default discipleship directory with a named owner for every person, explicit team/member sharing, dated follow-up plans, and one visible note history
 - editable, church-approved conversation guide with sample words and Scripture references
 - leader dashboard for territories, teams, coverage, outcomes, and audit activity
 - offline device storage, ordered writes, validated import/export, retention enforcement, and a service worker
 - installable PWA manifest, responsive desktop/mobile layouts, reduced-motion support, and device notifications
-- Supabase Google and passwordless email authentication with revision-aware workspace synchronization
+- Supabase Google, email/password, recovery, and optional one-time-link authentication with revision-aware workspace synchronization
 - production PostgreSQL/PostGIS migrations with explicit grants, row-level security, and a parcel-ready spatial index
 - OpenAPI 3.1 contract for bootstrap, sync, map data, visits, follow-ups, and reverse geocoding
 
@@ -52,7 +53,7 @@ Copy `.env.example` to `.env.local` for local development. MapTiler browser keys
 | `NEXT_PUBLIC_GEOCODER_URL` | Same-origin or trusted proxy endpoint used for reverse address lookup. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical production origin used for metadata. |
 
-Without both Supabase variables, NeighborWalk intentionally stays in device-only demo mode. With them, the app requires Google or passwordless email sign-in and offers the first verified user a clean Lawrenceburg church workspace.
+Without both Supabase variables, NeighborWalk intentionally stays in device-only demo mode. With them, the app requires Google or email sign-in and offers the first verified user a clean Lawrenceburg church workspace.
 
 When `NEXT_PUBLIC_MAPTILER_KEY` is configured, new installs use MapTiler Streets and existing version-3 installs migrate once from a bundled OpenFreeMap style. Users can still choose another layer afterward. MapTiler supplies streets and building footprints, not legal parcel boundaries; a separate parcel provider is required for a Zillow-style parcel overlay.
 
@@ -71,18 +72,29 @@ NeighborWalk's Google button uses Supabase's hosted OAuth callback. Complete the
 
 Do not put the Google Client Secret in a `NEXT_PUBLIC_` environment variable or commit it to this repository. It belongs only in the Supabase provider configuration.
 
+### Production email and password setup
+
+NeighborWalk uses Google as the quickest sign-in path and email/password as the dependable alternative. A routine password sign-in does not send an email. Account confirmation, password recovery, and the optional one-time-link fallback do send email.
+
+Supabase's built-in email sender is best-effort and currently limited to two messages per hour, so it is not suitable for a live rollout. Before inviting real users, configure a custom SMTP provider under **Authentication > Email > SMTP Settings** and test account confirmation and recovery from the production origin. Keep email confirmation enabled. Existing magic-link users can sign in once and choose **Settings > Account and access > Set or change password**.
+
+For the small no-domain pilot, use a dedicated Gmail account with `smtp.gmail.com`, port `465`, the full Gmail address as both sender and username, and a Google App Password after enabling 2-Step Verification. Never use or store the account's normal Google password in Supabase. Supabase warns that personal-email SMTP is not designed for higher-volume transactional delivery, so move to a domain-backed transactional provider before a broader public rollout.
+
+SMS is intentionally not enabled as the default workaround. Supabase phone login requires a separately configured SMS provider and incurs a message on each OTP login; it is useful only if the ministry decides that the added provider cost and phone-number lifecycle risks are worthwhile.
+
 The applied database source is stored in `supabase/migrations/`. It creates:
 
 - church workspaces and authenticated memberships
 - an offline-first workspace snapshot with optimistic revision checks
 - a privacy-minimized parcel table and bounding-box RPC for Lawrence County data
 - explicit Data API grants and tenant-scoped RLS policies
+- protected discipleship people, note, and follow-up tables whose RLS grants access only to creators, assigned owners, explicit shares, and church leaders
 
 `docs/database/postgres.sql` and `docs/api/openapi.yaml` preserve the more normalized future backend design. The connected pilot currently uses the smaller Supabase schema so the existing offline document can synchronize without discarding field functionality.
 
 ## Data and records model
 
-NeighborWalk records addresses because the workflow is location-based and can store person details supplied for follow-up. It deliberately excludes receptiveness scores, conversion tracking, and volunteer leaderboards. Notes are optional, character-limited, and described as objective operational context. Approval and retention records are maintained outside the app.
+NeighborWalk records addresses because the workflow is location-based and can store person details supplied for follow-up. People are private to the person who added them and their assigned discipleship owner unless explicitly shared with a group or church member; leaders can oversee every record. The person who adds a record becomes its initial discipleship owner. Each active person may include a non-numeric relationship stage, dated tasks in the unified follow-up queue, and one chronological note history visible from both the profile and its follow-ups. Stages provide shared ministry context; they are not scores. The app deliberately excludes receptiveness scores, conversion tallies, and volunteer leaderboards. Notes are optional, character-limited, and described as care context. Approval and retention records are maintained outside the app.
 
 Ordinary visit history and audit entries expire according to the church retention setting. Active follow-up source records remain until resolved; do-not-revisit instructions persist so future volunteers can honor the resident's request. Leaders should establish a documented deletion process and legal basis appropriate to their jurisdiction before collecting live data.
 
@@ -90,7 +102,7 @@ Exported backups are readable JSON and can contain sensitive ministry records. S
 
 ## Deployment status
 
-The production PWA is publicly reachable at [neighborwalk-pilot.vercel.app](https://neighborwalk-pilot.vercel.app). The public app shell requires its own Google or passwordless Supabase sign-in; PostgreSQL grants and row-level security protect workspace and parcel records after authentication. The former Sites deployment remains available only as a temporary cutover fallback.
+The production PWA is publicly reachable at [neighborwalk-pilot.vercel.app](https://neighborwalk-pilot.vercel.app). The public app shell requires its own Google or Supabase email sign-in; PostgreSQL grants and row-level security protect workspace and parcel records after authentication. The former Sites deployment remains available only as a temporary cutover fallback.
 
 Vercel project: `jhaney3s-projects/neighborwalk-pilot`. Production and Preview both contain the browser-safe MapTiler and Supabase variables listed above. Deployment Protection is disabled so volunteers do not encounter a separate Vercel login screen. To publish the linked workspace again:
 

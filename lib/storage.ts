@@ -57,21 +57,107 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   );
   const requiresSchemaMigration = version < APP_SCHEMA_VERSION;
   if (!requiresSchemaMigration && !shouldAdoptMapTiler) return candidate;
+  const fallbackVolunteerId = typeof storedPreferences.activeVolunteerId === "string"
+    ? storedPreferences.activeVolunteerId
+    : Array.isArray(data.volunteers) && data.volunteers[0] && typeof data.volunteers[0] === "object"
+      ? String((data.volunteers[0] as Record<string, unknown>).id ?? defaults.preferences.activeVolunteerId)
+      : defaults.preferences.activeVolunteerId;
+  const storedResidents = Array.isArray(data.residents) ? data.residents : [];
+  const migratedResidents = storedResidents.map((candidateResident) => {
+    if (!candidateResident || typeof candidateResident !== "object" || Array.isArray(candidateResident)) return candidateResident;
+    const resident = withoutLegacyFields(
+      candidateResident,
+      ["consentToStore", "consentToContact", "consentRecordedAt", "notes", "nextStep", "nextStepDueAt"],
+    ) as Record<string, unknown>;
+    return version < 9 ? {
+      ...resident,
+      discipleshipStage: resident.discipleshipStage ?? "new_connection",
+      assignedVolunteerId: resident.assignedVolunteerId ?? fallbackVolunteerId,
+      createdByVolunteerId: resident.createdByVolunteerId ?? fallbackVolunteerId,
+      sharedWithVolunteerIds: Array.isArray(resident.sharedWithVolunteerIds) ? resident.sharedWithVolunteerIds : [],
+      sharedWithTeamIds: Array.isArray(resident.sharedWithTeamIds) ? resident.sharedWithTeamIds : [],
+      status: resident.status ?? "active",
+    } : resident;
+  });
+  const storedPersonNotes = Array.isArray(data.personNotes) ? data.personNotes : [];
+  const storedFollowUps = Array.isArray(data.followUps) ? data.followUps : [];
+  const defaultFollowUpDays = data.church && typeof data.church === "object" && !Array.isArray(data.church)
+    && typeof (data.church as Record<string, unknown>).defaultFollowUpDays === "number"
+    ? Number((data.church as Record<string, unknown>).defaultFollowUpDays)
+    : defaults.church.defaultFollowUpDays;
+  const migrationTime = new Date();
+  const migratedNextStepFollowUps = version < 10 ? storedResidents.flatMap((candidateResident) => {
+    if (!candidateResident || typeof candidateResident !== "object" || Array.isArray(candidateResident)) return [];
+    const resident = candidateResident as Record<string, unknown>;
+    const note = typeof resident.nextStep === "string" ? resident.nextStep.trim() : "";
+    const residentId = typeof resident.id === "string" ? resident.id : "";
+    const propertyId = typeof resident.propertyId === "string" ? resident.propertyId : "";
+    if (!note || !residentId || !propertyId) return [];
+    const id = `followup_next_step_${residentId}`;
+    if (storedFollowUps.some((candidateFollowUp) => candidateFollowUp && typeof candidateFollowUp === "object" && !Array.isArray(candidateFollowUp)
+      && ((candidateFollowUp as Record<string, unknown>).id === id
+        || ((candidateFollowUp as Record<string, unknown>).residentId === residentId
+          && (candidateFollowUp as Record<string, unknown>).status === "scheduled")))) return [];
+    const storedDueAt = typeof resident.nextStepDueAt === "string" && !Number.isNaN(new Date(resident.nextStepDueAt).getTime())
+      ? new Date(resident.nextStepDueAt).toISOString()
+      : new Date(migrationTime.getTime() + defaultFollowUpDays * 86_400_000).toISOString();
+    const createdAt = typeof resident.updatedAt === "string" && !Number.isNaN(new Date(resident.updatedAt).getTime())
+      ? new Date(resident.updatedAt).toISOString()
+      : migrationTime.toISOString();
+    const actorId = typeof resident.assignedVolunteerId === "string"
+      ? resident.assignedVolunteerId
+      : typeof resident.createdByVolunteerId === "string" ? resident.createdByVolunteerId : fallbackVolunteerId;
+    return [{
+      id,
+      churchId: typeof resident.churchId === "string" ? resident.churchId : defaults.church.id,
+      propertyId,
+      residentId,
+      dueAt: storedDueAt,
+      status: "scheduled",
+      note,
+      history: [{
+        id: `activity_migrated_${residentId}`,
+        action: "created",
+        note,
+        dueAt: storedDueAt,
+        actorId,
+        createdAt,
+      }],
+      createdAt,
+    }];
+  }) : [];
+  const migratedLegacyNotes = version < 9 ? storedResidents.flatMap((candidateResident) => {
+    if (!candidateResident || typeof candidateResident !== "object" || Array.isArray(candidateResident)) return [];
+    const resident = candidateResident as Record<string, unknown>;
+    const body = typeof resident.notes === "string" ? resident.notes.trim() : "";
+    const residentId = typeof resident.id === "string" ? resident.id : "";
+    if (!body || !residentId) return [];
+    if (storedPersonNotes.some((candidateNote) => candidateNote && typeof candidateNote === "object" && !Array.isArray(candidateNote) && (candidateNote as Record<string, unknown>).id === `person_note_legacy_${residentId}`)) return [];
+    return [{
+      id: `person_note_legacy_${residentId}`,
+      churchId: typeof resident.churchId === "string" ? resident.churchId : defaults.church.id,
+      residentId,
+      authorId: typeof resident.assignedVolunteerId === "string" ? resident.assignedVolunteerId : fallbackVolunteerId,
+      kind: "general",
+      body,
+      createdAt: typeof resident.createdAt === "string"
+        ? resident.createdAt
+        : typeof resident.updatedAt === "string" ? resident.updatedAt : new Date().toISOString(),
+    }];
+  }) : [];
   return {
     ...data,
     schemaVersion: APP_SCHEMA_VERSION,
     church: withoutLegacyFields(data.church, ["requireFollowUpConsent"]),
-    residents: Array.isArray(data.residents)
-      ? data.residents.map((resident) => withoutLegacyFields(resident, ["consentToStore", "consentToContact", "consentRecordedAt"]))
-      : [],
+    residents: migratedResidents,
+    personNotes: [...storedPersonNotes, ...migratedLegacyNotes],
     visits: Array.isArray(data.visits)
       ? data.visits.map((visit) => withoutLegacyFields(visit, ["followUpConsent"]))
       : [],
-    followUps: Array.isArray(data.followUps)
-      ? data.followUps.map((followUp) => followUp && typeof followUp === "object"
+    followUps: [...storedFollowUps, ...migratedNextStepFollowUps]
+      .map((followUp) => followUp && typeof followUp === "object"
         ? { ...followUp as Record<string, unknown>, history: Array.isArray((followUp as Record<string, unknown>).history) ? (followUp as Record<string, unknown>).history : [] }
-        : followUp)
-      : [],
+        : followUp),
     preferences: {
       ...defaults.preferences,
       ...storedPreferences,
@@ -80,7 +166,12 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
         ? MAP_STYLE_CONFIGURATION_REVISION
         : storedMapStyleRevision,
     },
-    sync: data.sync && typeof data.sync === "object" ? data.sync : { mode: "device_only", pending: [] },
+    sync: data.sync && typeof data.sync === "object" && !Array.isArray(data.sync) ? {
+      ...data.sync as Record<string, unknown>,
+      pending: Array.isArray((data.sync as Record<string, unknown>).pending)
+        ? (data.sync as Record<string, unknown>).pending as unknown[]
+        : [],
+    } : { mode: "device_only", pending: [] },
     updatedAt: new Date().toISOString(),
   };
 }

@@ -135,6 +135,112 @@ export type NeighborWalkDatabase = {
         };
         Relationships: [];
       };
+      discipleship_people: {
+        Row: {
+          id: string;
+          church_id: string;
+          property_id: string;
+          created_by: string;
+          assigned_to: string;
+          shared_user_ids: string[];
+          shared_team_ids: string[];
+          name: string | null;
+          faith_status: string;
+          discipleship_stage: string;
+          status: string;
+          phone: string | null;
+          email: string | null;
+          preferred_contact: string;
+          next_step: string | null;
+          next_step_due_at: string | null;
+          last_contact_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          church_id: string;
+          property_id: string;
+          created_by: string;
+          assigned_to: string;
+          shared_user_ids?: string[];
+          shared_team_ids?: string[];
+          name?: string | null;
+          faith_status: string;
+          discipleship_stage: string;
+          status: string;
+          phone?: string | null;
+          email?: string | null;
+          preferred_contact: string;
+          next_step?: string | null;
+          next_step_due_at?: string | null;
+          last_contact_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<NeighborWalkDatabase["public"]["Tables"]["discipleship_people"]["Insert"], "id" | "church_id" | "created_by" | "created_at">>;
+        Relationships: [];
+      };
+      discipleship_person_notes: {
+        Row: {
+          id: string;
+          church_id: string;
+          person_id: string;
+          author_id: string;
+          kind: string;
+          body: string;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          church_id: string;
+          person_id: string;
+          author_id: string;
+          kind: string;
+          body: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      discipleship_follow_ups: {
+        Row: {
+          id: string;
+          church_id: string;
+          person_id: string;
+          property_id: string;
+          source_visit_id: string | null;
+          created_by: string;
+          due_at: string;
+          status: string;
+          note: string | null;
+          completion_note: string | null;
+          parent_follow_up_id: string | null;
+          history: Json;
+          created_at: string;
+          completed_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          church_id: string;
+          person_id: string;
+          property_id: string;
+          source_visit_id?: string | null;
+          created_by: string;
+          due_at: string;
+          status: string;
+          note?: string | null;
+          completion_note?: string | null;
+          parent_follow_up_id?: string | null;
+          history?: Json;
+          created_at?: string;
+          completed_at?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<NeighborWalkDatabase["public"]["Tables"]["discipleship_follow_ups"]["Insert"], "id" | "church_id" | "person_id" | "created_by" | "created_at">>;
+        Relationships: [];
+      };
       parcels: {
         Row: {
           id: number;

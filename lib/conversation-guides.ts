@@ -158,9 +158,16 @@ export function writeLocalGuideLibrary(state: GuideLibraryState) {
   window.localStorage.setItem(LOCAL_GUIDE_LIBRARY_KEY, JSON.stringify(state));
 }
 
-function guideFromRow(row: GuideRow): ConversationGuide | null {
+function canonicalIsoTimestamp(value: string): string | null {
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime()) ? null : timestamp.toISOString();
+}
+
+export function conversationGuideFromRow(row: GuideRow): ConversationGuide | null {
   const parsedSteps = z.array(guideStepSchema).min(1).max(24).safeParse(row.steps);
-  if (!parsedSteps.success) return null;
+  const createdAt = canonicalIsoTimestamp(row.created_at);
+  const updatedAt = canonicalIsoTimestamp(row.updated_at);
+  if (!parsedSteps.success || !createdAt || !updatedAt) return null;
   const parsedGuide = conversationGuideSchema.safeParse({
     id: row.id,
     churchId: row.church_id,
@@ -170,8 +177,8 @@ function guideFromRow(row: GuideRow): ConversationGuide | null {
     description: row.description,
     steps: normalizeGuideSteps(parsedSteps.data),
     sortOrder: row.sort_order,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt,
+    updatedAt,
   });
   return parsedGuide.success ? parsedGuide.data : null;
 }
@@ -203,7 +210,7 @@ export async function loadConnectedGuideLibrary(
   if (preferenceResult.error) throw preferenceResult.error;
   if (teamDefaultsResult.error) throw teamDefaultsResult.error;
   const guides = (guideResult.data ?? []).flatMap((row) => {
-    const guide = guideFromRow(row);
+    const guide = conversationGuideFromRow(row);
     return guide ? [guide] : [];
   });
   const favoriteGuideId = preferenceResult.data?.favorite_guide_id;
@@ -252,7 +259,7 @@ export async function saveConnectedGuide(
       .select("id, church_id, scope, owner_user_id, title, description, steps, sort_order, created_by, updated_by, created_at, updated_at")
       .single();
   if (result.error) throw result.error;
-  const guide = guideFromRow(result.data);
+  const guide = conversationGuideFromRow(result.data);
   if (!guide) throw new Error("The saved guide could not be read.");
   return guide;
 }

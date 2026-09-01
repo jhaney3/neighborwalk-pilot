@@ -106,6 +106,12 @@ describe("workspace synchronization", () => {
       propertyId: seed.properties[0].id,
       name: "Neighbor",
       faithStatus: "not_discussed" as const,
+      discipleshipStage: "new_connection" as const,
+      assignedVolunteerId: seed.preferences.activeVolunteerId,
+      createdByVolunteerId: seed.preferences.activeVolunteerId,
+      sharedWithVolunteerIds: [],
+      sharedWithTeamIds: [],
+      status: "active" as const,
       preferredContact: "none" as const,
       createdAt,
       updatedAt: createdAt,
@@ -130,6 +136,78 @@ describe("workspace synchronization", () => {
 
     expect(merged.residents).toContainEqual(resident);
     expect(merged.teams).toContainEqual(team);
+    expect(neighborWalkDataSchema.safeParse(merged).success).toBe(true);
+  });
+
+  it("merges person notes independently so concurrent history is preserved", () => {
+    const seed = connected(createSeedData());
+    const resident = seed.residents[0];
+    const remoteNote = {
+      id: "person_note_remote",
+      churchId: seed.church.id,
+      residentId: resident.id,
+      authorId: seed.volunteers[1].id,
+      kind: "prayer" as const,
+      body: "Remote prayer note",
+      createdAt: "2030-08-13T12:04:00.000Z",
+    };
+    const localNote = {
+      id: "person_note_local",
+      churchId: seed.church.id,
+      residentId: resident.id,
+      authorId: seed.volunteers[2].id,
+      kind: "conversation" as const,
+      body: "Offline conversation note",
+      createdAt: "2030-08-13T12:05:00.000Z",
+    };
+    const remote = { ...seed, personNotes: [remoteNote, ...seed.personNotes] };
+    const local = {
+      ...seed,
+      personNotes: [localNote, ...seed.personNotes],
+      sync: { mode: "connected" as const, pending: [pending("person_note", localNote.id)] },
+    };
+
+    const merged = mergePendingWorkspaceChanges(remote, local);
+
+    expect(merged.personNotes.map((note) => note.id)).toContain(remoteNote.id);
+    expect(merged.personNotes.map((note) => note.id)).toContain(localNote.id);
+    expect(neighborWalkDataSchema.safeParse(merged).success).toBe(true);
+  });
+
+  it("merges protected person follow-ups without putting them in the shared task stream", () => {
+    const seed = connected(createSeedData());
+    const resident = seed.residents[0];
+    const personFollowUp = {
+      id: "followup_person_local",
+      churchId: seed.church.id,
+      propertyId: resident.propertyId,
+      residentId: resident.id,
+      dueAt: "2030-08-20T17:00:00.000Z",
+      status: "scheduled" as const,
+      note: "Send the reading plan and ask how the first week went.",
+      history: [{
+        id: "activity_person_local",
+        action: "created" as const,
+        note: "Send the reading plan and ask how the first week went.",
+        dueAt: "2030-08-20T17:00:00.000Z",
+        actorId: resident.assignedVolunteerId,
+        createdAt: "2030-08-13T12:05:00.000Z",
+      }],
+      createdAt: "2030-08-13T12:05:00.000Z",
+    };
+    const local = {
+      ...seed,
+      followUps: [...seed.followUps, personFollowUp],
+      sync: { mode: "connected" as const, pending: [pending("person_follow_up", personFollowUp.id)] },
+    };
+
+    const merged = mergePendingWorkspaceChanges(seed, local);
+
+    expect(merged.followUps).toContainEqual(personFollowUp);
+    expect(merged.sync.pending).toContainEqual(expect.objectContaining({
+      entityType: "person_follow_up",
+      entityId: personFollowUp.id,
+    }));
     expect(neighborWalkDataSchema.safeParse(merged).success).toBe(true);
   });
 });
