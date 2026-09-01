@@ -65,8 +65,7 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (["/signin-with-chatgpt", "/signout-with-chatgpt", "/callback"].includes(url.pathname)
-    || url.pathname.startsWith("/api/")
+  if (url.pathname.startsWith("/api/")
     || url.pathname.startsWith("/v1/")) return;
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request));

@@ -4,6 +4,25 @@ import { headers } from "next/headers";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 
+const PRODUCTION_ORIGIN = "https://neighborwalk-pilot.vercel.app";
+
+function metadataOrigin(requestHost: string | null, forwardedProtocol: string | null): string {
+  const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (configuredOrigin) {
+    try {
+      return new URL(configuredOrigin).origin;
+    } catch {
+      // Fall back to the known production origin if an environment value is malformed.
+    }
+  }
+
+  const localHost = requestHost && (/^localhost(?::\d+)?$/i.test(requestHost) || /^127\.0\.0\.1(?::\d+)?$/.test(requestHost));
+  if (localHost) {
+    return `${forwardedProtocol ?? "http"}://${requestHost}`;
+  }
+  return PRODUCTION_ORIGIN;
+}
+
 const archivo = Archivo({
   variable: "--font-archivo",
   subsets: ["latin"],
@@ -17,10 +36,10 @@ const plexMono = IBM_Plex_Mono({
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "neighborwalk-pilot.jhaney.chatgpt.site";
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
+  const host = requestHeaders.get("host");
+  const protocol = requestHeaders.get("x-forwarded-proto");
   return {
-    metadataBase: new URL(`${protocol}://${host}`),
+    metadataBase: new URL(metadataOrigin(host, protocol)),
     title: "NeighborWalk — Neighborhood outreach, kept in order",
     description: "An offline-ready territory, visit, follow-up, and conversation companion for church outreach teams.",
     applicationName: "NeighborWalk",

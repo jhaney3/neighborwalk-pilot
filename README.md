@@ -102,7 +102,7 @@ Exported backups are readable JSON and can contain sensitive ministry records. S
 
 ## Deployment status
 
-The production PWA is publicly reachable at [neighborwalk-pilot.vercel.app](https://neighborwalk-pilot.vercel.app). The public app shell requires its own Google or Supabase email sign-in; PostgreSQL grants and row-level security protect workspace and parcel records after authentication. The former Sites deployment remains available only as a temporary cutover fallback.
+The canonical production PWA is deployed through the linked GitHub repository and Vercel project at [neighborwalk-pilot.vercel.app](https://neighborwalk-pilot.vercel.app). Make application changes in this repository; Vercel owns production and preview builds. The public app shell requires its own Google or Supabase email sign-in; PostgreSQL grants and row-level security protect workspace and parcel records after authentication.
 
 Vercel project: `jhaney3s-projects/neighborwalk-pilot`. Production and Preview both contain the browser-safe MapTiler and Supabase variables listed above. Deployment Protection is disabled so volunteers do not encounter a separate Vercel login screen. To publish the linked workspace again:
 

@@ -15,7 +15,6 @@
 
 # next.js
 /.next/
-/.vinext/
 /out/
 /public/maplibre-gl-worker.mjs
 /public/maplibre-gl-shared.mjs
@@ -38,8 +37,6 @@ yarn-error.log*
 # vercel
 .vercel
 
-/dist/
-/.wrangler/
 /outputs/
 /work/
 /supabase/.temp/
