@@ -1,30 +1,86 @@
 /* Shared native dropdown treatment. Keep the familiar platform menu while making
    every trigger read as the same NeighborWalk control. */
 select:not([multiple]) {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235d7169' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
   appearance: none;
   -webkit-appearance: none;
-  min-width: 0;
-  min-height: 39px;
-  padding-right: 32px;
-  border: 1px solid #cbdad4;
-  border-radius: 10px;
+  padding-right: 34px;
   color: var(--ink);
-  background-color: white;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235d7169' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+  background-image: var(--select-chevron);
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 14px;
-  box-shadow: 0 1px 2px rgba(18,49,40,.04);
   cursor: pointer;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.2;
-  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
-select:not([multiple]):hover:not(:disabled) { border-color: #91b4a7; background-color: var(--surface-subtle); }
-select:not([multiple]):active:not(:disabled) { border-color: var(--pine-600); background-color: var(--mint-50); }
-select:not([multiple]):focus-visible { border-color: var(--pine-600); box-shadow: 0 0 0 3px rgba(57,127,107,.12); }
+select:not([multiple]):hover:not(:disabled) { border-color: #91b4a7; }
+select:not([multiple]):active:not(:disabled) { border-color: var(--pine-600); }
+select:not([multiple]):focus-visible { border-color: var(--pine-600); box-shadow: 0 0 0 3px rgba(57,127,107,.14), 0 1px 2px rgba(18,49,40,.06); }
 select:not([multiple]):disabled { color: var(--soft); background-color: var(--mist-100); cursor: not-allowed; opacity: .72; }
 select:not([multiple]) option { color: var(--ink); background: white; }
 select:not([multiple]) option:checked { color: var(--pine-950); background: var(--mint-100); }
 .select-wrap select:not([multiple]) { padding-right: 32px; background-image: none; }
+
+/* Progressively enhance only the opened menu. The trigger keeps its dimensions,
+   surface, type, and spacing from the feature-level rules above this layer. */
+@supports (appearance: base-select) and selector(select::picker(select)) {
+  select:not([multiple]) {
+    appearance: base-select;
+    -webkit-appearance: base-select;
+    position: relative;
+    align-items: center;
+    background-image: none;
+  }
+
+  select:not([multiple])::picker-icon {
+    content: "";
+    display: block;
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-end: 10px;
+    inline-size: 14px;
+    block-size: 14px;
+    translate: 0 -50%;
+    background: var(--select-chevron) center / 14px no-repeat;
+    transition: rotate .15s ease;
+  }
+  select:not([multiple]):open::picker-icon { rotate: 180deg; }
+
+  .select-wrap select:not([multiple])::picker-icon { display: none; }
+  .select-wrap > svg { transition: transform .15s ease; }
+  .select-wrap select:not([multiple]):open + svg { transform: translateY(-50%) rotate(180deg); }
+
+  select:not([multiple])::picker(select) {
+    appearance: base-select;
+    -webkit-appearance: base-select;
+    min-inline-size: anchor-size(width);
+    max-block-size: min(320px,50svh);
+    margin-block: 5px;
+    overflow: auto;
+    padding: 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: 11px;
+    color: var(--ink);
+    background: white;
+    box-shadow: 0 16px 38px rgba(18,49,40,.18);
+  }
+
+  select:not([multiple]) option {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    font-size: inherit;
+    line-height: 1.25;
+  }
+
+  select:not([multiple]) option:hover,
+  select:not([multiple]) option:focus-visible { background: var(--mint-50); }
+  select:not([multiple]) option:checked { color: var(--pine-950); background: var(--mint-100); font-weight: 700; }
+  select:not([multiple]) option:disabled { color: var(--soft); cursor: not-allowed; }
+  select:not([multiple]) option::checkmark { order: 1; margin-left: auto; color: var(--pine-700); }
+}
