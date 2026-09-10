@@ -131,17 +131,6 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  useEffect(() => {
-    if (!data?.preferences.notificationsEnabled || !("Notification" in window) || Notification.permission !== "granted") return;
-    const today = new Date().toISOString().slice(0, 10);
-    const due = data.followUps.filter((followUp) => followUp.status === "scheduled" && followUp.dueAt.slice(0, 10) <= today).length;
-    const notificationKey = `neighborwalk-notified-${today}`;
-    if (due && window.localStorage.getItem(notificationKey) !== String(due)) {
-      new Notification("NeighborWalk follow-ups", { body: `${due} return visit${due === 1 ? " is" : "s are"} due today or overdue.` });
-      window.localStorage.setItem(notificationKey, String(due));
-    }
-  }, [data?.followUps, data?.preferences.notificationsEnabled]);
-
   const visibleOutcomes = useMemo(() => new Set<Outcome>(
     filter === "all" ? Object.keys(outcomeMeta) as Outcome[] : [filter],
   ), [filter]);

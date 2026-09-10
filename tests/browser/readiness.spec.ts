@@ -72,6 +72,27 @@ async function queued(page: Page) {
   });
 }
 
+test("email reminders require explicit self opt-in and can be turned off without changing church records", async ({ context, page }) => {
+  await isolate(context); await signIn(page);
+  await page.goto(origin + "/app/settings");
+  await expect(page.getByRole("heading", { name: "Email reminders", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enable daily email reminders", exact: true })).toBeDisabled();
+  await expect(page.getByText(/Email delivery has not been enabled and verified/)).toBeVisible();
+  // Only the availability response is fictional. Preference writes/reads use
+  // the real local RPC; no sender credentials or scheduler are configured.
+  await context.route("**/api/reminders/status", (route) => route.fulfill({ contentType: "application/json", body: '{"available":true}' }));
+  await page.getByRole("button", { name: "Reload reminder settings", exact: true }).click();
+  const enable = page.getByRole("button", { name: "Enable daily email reminders", exact: true });
+  await expect(enable).toBeEnabled(); await enable.click();
+  await expect(page.getByText("You have opted in.", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("You have opted in.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Turn off email reminders", exact: true }).click();
+  await expect(page.getByText("You have not opted in.", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("You have not opted in.", { exact: true })).toBeVisible();
+});
+
 test("cold offline guide, 100 durable encounters, close/reopen and exactly-once reconnect", async ({ context, page }) => {
   await isolate(context);
   await signIn(page);

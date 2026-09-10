@@ -1440,6 +1440,14 @@ export type Database = {
           version: number
         }[]
       }
+      outreach_reminder_preference: {
+        Args: { enabled?: boolean; target_church: string }
+        Returns: Json
+      }
+      outreach_reminder_worker: {
+        Args: { action: string; args?: Json }
+        Returns: Json
+      }
       outreach_update_member: {
         Args: {
           expected_active: boolean

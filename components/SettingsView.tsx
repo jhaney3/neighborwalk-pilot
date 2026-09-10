@@ -1,12 +1,13 @@
 "use client";
 
-import { AlertTriangle, Bell, BookOpenText, Check, Church, CloudOff, Database, Download, FileJson, LockKeyhole, LogOut, MapPinned, RefreshCcw, Save, Smartphone, Star, Trash2, Upload, Wifi } from "lucide-react";
+import { AlertTriangle, BookOpenText, Check, Church, CloudOff, Database, Download, FileJson, LockKeyhole, LogOut, MapPinned, RefreshCcw, Save, Smartphone, Star, Trash2, Upload, Wifi } from "lucide-react";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useAsyncAction } from "../lib/use-async-action";
 import { requestAppInstall } from "../lib/install";
 import { isSafeWebUrl, type ConversationGuide, type NeighborWalkData } from "../lib/domain";
 import { Modal, ViewHeading } from "./ui";
+import { ReminderSettings } from "./ReminderSettings";
 
 export function SettingsView({
   data,
@@ -62,13 +63,6 @@ export function SettingsView({
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updatingPassword, setUpdatingPassword] = useState(false);
-
-  const requestNotifications = async () => {
-    if (!("Notification" in window)) return setMessage("Notifications are not available in this browser.");
-    const permission = await Notification.requestPermission();
-    await onSetPreference("notificationsEnabled", permission === "granted");
-    setMessage(permission === "granted" ? "Notifications are enabled while NeighborWalk is open. These are not scheduled reminders and will not arrive when the app is closed." : "Notifications remain off on this device.");
-  };
 
   const installApp = async () => {
     setMessage(await requestAppInstall());
@@ -172,8 +166,10 @@ export function SettingsView({
           <label className="form-field"><span>Map style URL</span><input inputMode="url" value={mapStyleUrl} onChange={(event) => setMapStyleUrl(event.target.value)} /></label>
           <button className="button quiet" disabled={action.busy} onClick={() => void action.run(saveMapStyle)}><Save size={15} /> Save map style</button>
           <label className="toggle-row"><input type="checkbox" checked={data.preferences.compactMapMarkers} onChange={(event) => { const value = event.target.checked; void action.run(() => onSetPreference("compactMapMarkers", value)); }} /><span><strong>Compact location dots</strong>Use smaller status dots in dense neighborhoods.</span></label>
-          <div className="button-row"><button className="button quiet" disabled={action.busy} onClick={() => void action.run(requestNotifications)}><Bell size={15} /> Enable open-app alerts</button><button className="button quiet" onClick={installApp}><Smartphone size={15} /> Install app</button></div>
+          <div className="button-row"><button className="button quiet" onClick={installApp}><Smartphone size={15} /> Install app</button></div>
         </SettingsSection>
+
+        <ReminderSettings key={data.church.id} churchId={data.church.id} timezone={data.church.timezone} online={online} connected={data.sync.mode === "connected"} />
 
         <SettingsSection icon={<Database size={18} />} title="Data and synchronization" description={data.sync.mode === "connected" ? "Changes save to the church workspace automatically. Manual sync remains available as a fallback." : "This build is device-only until your backend is connected."}>
           <div className={`connection-card ${data.sync.mode}`}>
