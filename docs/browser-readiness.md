@@ -27,8 +27,13 @@ Fictional browser encounters remain in the local fixture church with a generated
 | IndexedDB quota failure during saving | Error visible, form/input retained, no server record; retry after restoring storage saved once |
 | Invalid invitation | Secret scrubbed from URL; explicit dismissal restored the existing workspace without changing church data |
 | Native location dialog | Initial focus contained, reverse tab contained, Escape closed, focus returned to the launching location |
+| Expired access token / cold offline reopen | Explicit recently prepared-cache selection, one offline entry, exactly one server record after real authentication reconnects |
+| Known API permission denial | Cache window invalidated; later offline token expiry could not reopen it |
+| Cross-tab session removal | Records hidden; original queued work retained and unavailable to an unsigned-in session |
+| Same-account tab handover | Second writer blocked; closing the original allowed reopening with the pending entry intact and both later entries shared once |
+| Leader-to-volunteer task responsibility | Assignment, decline, acceptance and completion matched server state; completion was unavailable before acceptance |
 
-The complete automated browser suite passed again after anonymous app-shell precaching was hardened (about one minute locally). All 131 unit tests, lint, types and the optimized build passed at this checkpoint. The new browser CI job still needs its first hosted run.
+The original three-scenario browser suite passed in hosted CI run `34450072005`. Seven scenarios passed together locally (about two minutes), and the eighth task-responsibility scenario passed separately. The subsequent worker route-boundary hardening has unit coverage and awaits its hosted run. Full verification passes 140 unit tests, lint, types and the optimized build.
 
 ## Offline design
 
@@ -38,13 +43,17 @@ The worker prepares the anonymous app shell and those assets before installation
 
 No API responses, sign-in/invitation routes, invite tokens, external map imagery, source maps, private records or arbitrary image URLs are included. Church records remain in account-scoped IndexedDB. New invitation links use URL fragments so their secret is not sent in HTTP request paths/query strings. Legacy query links are accepted and scrubbed after preservation in session storage.
 
+When an expired access token cannot refresh, the user may explicitly select an already prepared offline workspace only while its membership check is less than 24 hours old and the same account remains in SDK storage. This is a device-cache selector, not a new login or server credential. Known API denial, a missing/mismatched session or an expired/future membership check disables it. Browser storage is not a cryptographically sealed authorization boundary: someone controlling the browser profile can inspect its stored records. Devices and downloads must be protected accordingly.
+
+An exclusive Web Lock permits one live workspace tab/window per account in a browser profile, preventing stale tab snapshots from overwriting the device queue. A second tab must close the first and retry; separate devices are unaffected. In-flight acknowledged writes settle before orderly release; the browser releases the lock when a tab/process ends. Unsupported browsers get an explicit safe refusal. See [Web Locks behavior](https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request).
+
 Protected view navigation uses Next.js's documented native History integration. Each view uses the persistent client workspace; changing views does not need a network-only Server Component request or interrupt an IndexedDB write. Direct links and browser history remain available.
 
 References: [Next.js native History integration](https://nextjs.org/docs/app/getting-started/linking-and-navigating#native-history-api), [Playwright service-worker testing and limitations](https://playwright.dev/docs/service-workers).
 
 ## Still required before release
 
-- Expiring authentication during a long disconnected interval; known revocation and account switching with pending work.
+- Full 24-hour window expiry while open, fresh sign-in as another account and recovery of the original account’s pending work. Expired token, known API denial and cross-tab removal paths are covered above.
 - Service-worker version transition with pending records and multiple open tabs/windows; storage eviction and backgrounding/screen lock.
 - Live permission conflict/recovery; concurrent area/group archival and person moves with open tasks.
 - iPhone Safari/installed PWA, Android Chrome/installed PWA and proportionate desktop Safari/Firefox checks. Chromium emulation is not a substitute for actual devices.

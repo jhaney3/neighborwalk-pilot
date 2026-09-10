@@ -56,6 +56,8 @@ import { versionKey, type CommandOperation } from "./command-schema";
 import { prepareReviewedCommand } from "./outreach-recovery";
 import { downloadBlob } from "./download";
 import { offlineMembershipValid } from "./offline-access";
+import { WORKSPACE_CACHE_KEY } from "./offline-identity";
+import { acquireWorkspaceTab } from "./workspace-tab";
 import { observeOfflineShell, type OfflineShellState } from "./offline-shell";
 import { pendingInvitation, clearPendingInvitation } from "./invitations";
 import { authoredRecovery } from "./device-recovery";
@@ -64,14 +66,14 @@ import { requireCalendarDate } from "./calendar";
 import { addContactRestriction, liftContactRestriction, type RestrictionInput } from "./contact-restrictions";
 import { previewRetention, submitAdministration, type AdminInput } from "./administration";
 import { exportCsv, type ImportKind } from "./csv-exchange";
-import { changeFollowUp, createFollowUp } from "./follow-ups";
+import { assignFollowUp as assignTask, changeFollowUp, createFollowUp, respondToFollowUp } from "./follow-ups";
 import { isProductionApp, storageKey } from "./environment";
 import {
   volunteerIdForUser,
   withAuthenticatedVolunteer,
 } from "./discipleship";
 
-export type SupabaseUser = { id: string; email: string; name?: string };
+export type SupabaseUser = { id: string; email: string; name?: string; offlineStart?: true };
 export type WorkspaceMembership = {
   churchId: string;
   userId: string;
@@ -82,7 +84,6 @@ export type WorkspaceMembership = {
 type WorkspaceStatus = "device_only" | "connecting" | "invitation_required" | "ready" | "locked";
 type WorkspaceConnection = WorkspaceMembership & { revision: number; verifiedAt?: string };
 
-const WORKSPACE_CACHE_KEY = storageKey("neighborwalk-supabase-workspace");
 const AUTO_SYNC_DELAY_MS = 1200;
 const AUTO_SYNC_MAX_RETRY_MS = 30000;
 
@@ -177,6 +178,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
   useEffect(() => {
     let active = true;
+    let releaseTab: (() => void) | undefined;
+    let installedStore: DurableWorkspaceStore | null = null;
     const publish = (next: NeighborWalkData) => {
       if (!active) return;
       dataRef.current = next;
@@ -187,6 +190,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       if (!active) return;
       storageScopeRef.current = scope;
       storeRef.current = new DurableWorkspaceStore(next, (value) => saveNeighborWalkData(value, scope), publish);
+      installedStore = storeRef.current;
       publish(next);
     };
     const load = async () => {
@@ -203,6 +207,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         const client = getSupabaseBrowserClient();
         if (!client) throw new Error("The church service is not configured.");
         if (cachedConnection) cached = await loadScopedNeighborWalkData({ userId: supabaseUser.id, churchId: cachedConnection.churchId });
+        if (supabaseUser.offlineStart) throw new OutreachApiError("Opening the explicitly selected prepared offline workspace.");
         setWorkspaceStatus("connecting");
         const getMemberships = () => client.from("church_memberships")
           .select("church_id, user_id, role, member_email, display_name").eq("user_id", supabaseUser.id).eq("active", true).order("joined_at");
@@ -219,6 +224,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         if (!active) return;
         const membership = membershipResult.data?.find((m) => m.church_id === cachedConnection?.churchId) ?? membershipResult.data?.[0];
         if (!membership) {
+          if (cachedConnection) writeWorkspaceConnection({ ...cachedConnection, verifiedAt: "" });
           workspaceRef.current = null;
           setWorkspaceMembership(null);
           roleRef.current = null;
@@ -257,8 +263,11 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         setWorkspaceStatus("ready");
       } catch (error) {
         if (!active) return;
+        if (cachedConnection && error instanceof OutreachApiError && /^(42501|PGRST3)/.test(error.code ?? "")) {
+          writeWorkspaceConnection({ ...cachedConnection, verifiedAt: "" });
+        }
         const allowedOffline = cached && offlineMembershipValid(cachedConnection?.verifiedAt)
-          && (!navigator.onLine || (error instanceof OutreachApiError && !error.code));
+          && error instanceof OutreachApiError && !error.code;
         if (allowedOffline && supabaseUser && cachedConnection && cached) {
           workspaceRef.current = cachedConnection;
           roleRef.current = cachedConnection.role;
@@ -276,8 +285,30 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         }
       } finally { if (active) setLoading(false); }
     };
-    void load();
-    return () => { active = false; };
+    const boot = (async () => {
+      // Let React's discarded Strict Mode setup clean up before taking a lock.
+      await Promise.resolve();
+      if (!active) return;
+      if (supabaseUser) {
+        releaseTab = await acquireWorkspaceTab(navigator.locks, storageKey("neighborwalk-workspace-writer") + ":" + supabaseUser.id);
+        if (!active) return;
+      }
+      await load();
+    })().catch((error) => {
+      if (active) { setWorkspaceStatus("locked"); setStorageError(error instanceof Error ? error.message : "Device coordination failed. Saved records have not been cleared."); setLoading(false); }
+    });
+    return () => {
+      active = false;
+      if (storeRef.current === installedStore) storeRef.current = null;
+      const inFlightSync = syncInFlightRef.current;
+      // Finish writes already acknowledged to the user before another tab can
+      // install its snapshot. New callbacks can no longer obtain this store.
+      void boot.then(async () => {
+        await Promise.allSettled([installedStore?.settled(), inFlightSync]);
+        await installedStore?.settled();
+        releaseTab?.();
+      });
+    };
   }, [supabaseUser]);
 
   useEffect(() => {
@@ -710,14 +741,11 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     }, "settings", current.church.id, "settings.updated", "Church settings updated"));
   }, [supabaseUser, updateData]);
 
-  const assignFollowUp = useCallback((id: string, volunteerId: string) => updateData((current) => ({
-    ...current, followUps: current.followUps.map((task) => task.id === id ? { ...task, assignedVolunteerId: volunteerId,
-      acceptance: volunteerId === current.preferences.activeVolunteerId ? "accepted" : "pending" } : task),
-  })), [updateData]);
+  const assignFollowUp = useCallback((id: string, volunteerId: string) => updateData((current) => assignTask(current, id, volunteerId,
+    actorIdRef.current ?? current.preferences.activeVolunteerId, new Date().toISOString())), [updateData]);
 
-  const acceptFollowUp = useCallback((id: string, acceptance: "accepted" | "declined") => updateData((current) => ({
-    ...current, followUps: current.followUps.map((task) => task.id === id ? { ...task, acceptance } : task),
-  })), [updateData]);
+  const acceptFollowUp = useCallback((id: string, acceptance: "accepted" | "declined") => updateData((current) => respondToFollowUp(current, id, acceptance,
+    actorIdRef.current ?? current.preferences.activeVolunteerId, new Date().toISOString())), [updateData]);
 
   const handoffPerson = useCallback((id: string, action: "request" | "accept" | "decline" | "cancel", assignedVolunteerId?: string) => {
     if (!storageScopeRef.current) return Promise.reject(new Error("Care handoffs require a connected church workspace."));

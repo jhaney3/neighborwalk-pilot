@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { changeFollowUp, createFollowUp } from "../lib/follow-ups";
+import { assignFollowUp, changeFollowUp, createFollowUp, respondToFollowUp } from "../lib/follow-ups";
+import { createSeedData } from "../lib/seed";
 
 const now = "2026-09-08T12:00:00.000Z";
 const tomorrow = "2026-09-09T17:00:00.000Z";
@@ -40,5 +41,35 @@ describe("follow-up lifecycle", () => {
     expect(cancelled.history.at(-1)?.note).toBe("Location marked do not revisit.");
     expect(changeFollowUp(cancelled, { action: "completed" }, "volunteer", tomorrow)).toBe(cancelled);
     expect(original.status).toBe("scheduled");
+  });
+
+  it("does not complete or reschedule unaccepted work, but permits cancellation", () => {
+    const task = createFollowUp(input, "volunteer", now);
+    for (const acceptance of ["pending", "declined", undefined] as const) {
+      expect(() => changeFollowUp({ ...task, acceptance }, { action: "completed" }, "volunteer", now)).toThrow("must accept");
+      expect(() => changeFollowUp({ ...task, acceptance }, { action: "rescheduled", dueAt: tomorrow }, "volunteer", now)).toThrow("must accept");
+      expect(changeFollowUp({ ...task, acceptance }, { action: "cancelled", note: "No longer requested." }, "volunteer", now).status).toBe("cancelled");
+    }
+  });
+
+  it("requires an active owner and records reassignment/acceptance without rewriting history", () => {
+    const seed = createSeedData();
+    const leader = { ...seed.volunteers[0], id: "leader", role: "leader" as const, active: true };
+    const volunteer = { ...leader, id: "volunteer", role: "volunteer" as const };
+    const inactive = { ...volunteer, id: "inactive", active: false };
+    const task = createFollowUp({ ...input, id: "task" }, leader.id, now);
+    const data = { ...seed, volunteers: [leader, volunteer, inactive], followUps: [task] };
+    expect(() => assignFollowUp(data, "missing", volunteer.id, leader.id, now)).toThrow("no longer open");
+    expect(() => assignFollowUp(data, task.id, inactive.id, leader.id, now)).toThrow("active church member");
+    expect(() => assignFollowUp(data, task.id, volunteer.id, volunteer.id, now)).toThrow("Only a church leader");
+    const assigned = assignFollowUp(data, task.id, volunteer.id, leader.id, now);
+    expect(assigned.followUps[0].acceptance).toBe("pending");
+    expect(() => respondToFollowUp(assigned, task.id, "accepted", leader.id, now)).toThrow("responsible person");
+    const declined = respondToFollowUp(assigned, task.id, "declined", volunteer.id, now);
+    const accepted = respondToFollowUp(declined, task.id, "accepted", volunteer.id, now);
+    expect(accepted.followUps[0].history.map((entry) => entry.action)).toEqual(["created", "reassigned", "declined", "accepted"]);
+    expect(task.history).toHaveLength(1);
+    expect(respondToFollowUp(accepted, task.id, "accepted", volunteer.id, now)).toBe(accepted);
+    expect(() => respondToFollowUp({ ...accepted, followUps: [{ ...accepted.followUps[0], status: "completed" }] }, task.id, "declined", volunteer.id, now)).toThrow("no longer open");
   });
 });

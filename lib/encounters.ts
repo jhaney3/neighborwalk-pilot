@@ -36,7 +36,7 @@ export function recordEncounter(current: NeighborWalkData, input: EncounterInput
     objectiveNote: person ? undefined : note, recordedAt: timestamp, deviceId };
   let tasks = current.followUps;
   if (input.outcome === "follow_up") tasks = [...tasks, createFollowUp({ id: createId("followup"), churchId: current.church.id,
-    propertyId: property?.id, residentId: person?.id, sourceVisitId: visitId, eventId: input.eventId, assignedTeamId: input.assignedTeamId,
+    propertyId: person?.propertyId ?? property?.id, residentId: person?.id, sourceVisitId: visitId, eventId: input.eventId, assignedTeamId: input.assignedTeamId,
     assignedVolunteerId: person?.assignedVolunteerId ?? actorId, dueAt: due, note,
     channel: property ? "visit" : person?.preferredContact === "none" || !person ? "other" : person.preferredContact,
   }, actorId, timestamp)];

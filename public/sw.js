@@ -3,6 +3,15 @@ const CACHE_SCOPE = new URL(self.location.href).searchParams.has("sandbox") ? "-
 const APP_CACHE = `neighborwalk-app-${self.NEIGHBORWALK_BUILD.version}${CACHE_SCOPE}`;
 const CORE = ["/", "/app/today", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", ...self.NEIGHBORWALK_BUILD.assets];
 const STATIC_DESTINATIONS = new Set(["style", "script", "worker", "image", "font", "manifest"]);
+const PUBLIC_PAGES = new Set(["/", "/how-it-works", "/pricing", "/trust", "/help", "/pilot", "/privacy", "/terms", "/demo"]);
+function preparedAppPath(pathname) {
+  const parts = pathname.split("/").filter(Boolean).slice(1);
+  if (!pathname.startsWith("/app/") || !["today", "outreach", "locations", "people", "followups", "guides", "leader", "settings", "more", "recovery", "data"].includes(parts[0])) return false;
+  if (parts.length === 1) return true;
+  if (!/^[A-Za-z0-9_-]{1,240}$/.test(parts[1] || "")) return false;
+  return (parts.length === 2 && ["outreach", "people", "locations", "followups", "guides"].includes(parts[0]))
+    || (parts.length === 3 && parts[0] === "outreach" && parts[2] === "field");
+}
 
 self.addEventListener("install", (event) => {
   // Do not replace the running app while a volunteer has unsent work.
@@ -72,7 +81,10 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")
     || url.pathname === "/login" || url.pathname.startsWith("/auth/") || url.pathname === "/invite" || url.pathname.startsWith("/invite/")) return;
   if (request.mode === "navigate") {
-    const safeAppQuery = url.pathname.startsWith("/app/") && [...url.searchParams].every(([key, value]) =>
+    // Unknown paths remain server 404s, not a cached Today screen. New public
+    // routes must be deliberately reviewed before becoming cacheable.
+    if (!PUBLIC_PAGES.has(url.pathname) && !preparedAppPath(url.pathname)) return;
+    const safeAppQuery = url.pathname === "/app/followups" && [...url.searchParams].every(([key, value]) =>
       key === "person" ? /^[A-Za-z0-9_-]{1,240}$/.test(value) : key === "scope" && ["mine", "all", "team", "unowned", "declined"].includes(value));
     if (!url.search || safeAppQuery) event.respondWith(navigation(request));
     return;

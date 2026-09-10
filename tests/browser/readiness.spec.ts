@@ -129,3 +129,127 @@ test("quota failure retains the form and never claims a persisted encounter", as
   await expect(dialog).toBeHidden();
   await expect.poll(() => recorded(prefix + " quota")).toBe(1);
 });
+
+test("expired access token can explicitly reopen a recently prepared offline workspace", async ({ context, page }) => {
+  await isolate(context); await signIn(page);
+  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await context.setOffline(true);
+  // Exercise the SDK's expired-session path without emitting the fictional
+  // account's credentials into test output or replacing its refresh token.
+  await page.evaluate(() => {
+    const key = "neighborwalk-auth:sandbox:http://127.0.0.1:54321";
+    const stored = JSON.parse(localStorage.getItem(key)!);
+    stored.expires_at = Math.floor(Date.now() / 1000) - 60;
+    localStorage.setItem(key, JSON.stringify(stored));
+  });
+  await page.close();
+  const reopened = await context.newPage();
+  await reopened.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
+  await expect(reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toBeVisible();
+  await reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true }).click();
+  await expect(reopened.getByRole("heading", { name: /Hello,/ })).toBeVisible();
+  await context.setOffline(true);
+  await encounter(reopened, prefix + " expired /one");
+  expect(await queued(reopened)).toBe(1);
+  expect(recorded(prefix + " expired")).toBe(0);
+  await context.setOffline(false);
+  await expect.poll(() => queued(reopened), { timeout: 120_000 }).toBe(0);
+  expect(recorded(prefix + " expired")).toBe(1);
+});
+
+test("known access denial locks the cache and prevents a later offline reopen", async ({ context, page }) => {
+  await isolate(context); await signIn(page);
+  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  // Exercise the UI's real API-denial path without suspending the shared fixture
+  // account. Actual membership removal is covered by the SQL regression suite.
+  await context.route("**/rest/v1/rpc/outreach_workspace_info", (route) => route.fulfill({ status: 403,
+    contentType: "application/json", body: JSON.stringify({ code: "42501", message: "Fictional access denial" }) }));
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-supabase-workspace:sandbox:http://127.0.0.1:54321")!).verifiedAt)).toBe("");
+  await context.setOffline(true);
+  await page.evaluate(() => {
+    const key = "neighborwalk-auth:sandbox:http://127.0.0.1:54321";
+    const auth = JSON.parse(localStorage.getItem(key)!);
+    auth.expires_at = Math.floor(Date.now() / 1000) - 60;
+    localStorage.setItem(key, JSON.stringify(auth));
+  });
+  await page.close();
+  const reopened = await context.newPage(); await reopened.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
+  await expect(reopened.getByRole("heading", { name: "Check your connection or invitation" })).toBeVisible({ timeout: 45_000 });
+  await expect(reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
+  await expect(reopened.getByRole("heading", { name: /Hello,/ })).toHaveCount(0);
+});
+
+test("cross-tab session removal hides offline records without clearing authored work", async ({ context, page }) => {
+  await isolate(context); await signIn(page);
+  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  const second = await context.newPage(); await second.goto(origin + "/app/today");
+  await expect(second.getByText(/already open in another tab or window/)).toBeVisible();
+  await context.setOffline(true);
+  await encounter(page, prefix + " signout /one");
+  expect(await queued(page)).toBe(1);
+  await second.evaluate(() => localStorage.removeItem("neighborwalk-auth:sandbox:http://127.0.0.1:54321"));
+  await expect(page.getByRole("heading", { name: "Pick up where care left off." })).toBeVisible();
+  expect(await queued(page)).toBe(1);
+  expect(recorded(prefix + " signout")).toBe(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Pick up where care left off." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
+});
+
+test("a second tab cannot overwrite unsent work and can reopen after the first closes", async ({ context, page }) => {
+  await isolate(context); await signIn(page);
+  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await context.setOffline(true);
+  await encounter(page, prefix + " tabs /one");
+  const second = await context.newPage(); await second.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
+  await expect(second.getByText(/already open in another tab or window/)).toBeVisible();
+  await expect(second.getByRole("button", { name: "Record a community encounter", exact: true })).toHaveCount(0);
+  expect(await queued(second)).toBe(1);
+  await page.close(); await second.reload();
+  await expect(second.getByRole("heading", { name: /Hello,/ })).toBeVisible();
+  expect(await queued(second)).toBe(1);
+  await context.setOffline(true);
+  await encounter(second, prefix + " tabs /two");
+  expect(await queued(second)).toBe(2);
+  expect(recorded(prefix + " tabs")).toBe(0);
+  await context.setOffline(false);
+  await expect.poll(() => queued(second), { timeout: 60_000 }).toBe(0);
+  expect(recorded(prefix + " tabs")).toBe(2);
+});
+
+test("a reassigned next step requires the responsible volunteer to accept before completing", async ({ browser, context, page }) => {
+  await isolate(context); await signIn(page);
+  await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "What happened?" }).selectOption("follow_up");
+  await dialog.getByRole("textbox", { name: "Requested next step" }).fill(prefix + " task /one");
+  await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => queued(page)).toBe(0);
+  const taskState = () => JSON.parse(execFileSync("psql", [database, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+    "select json_build_object('id',id,'status',status,'acceptance',acceptance) from public.outreach_tasks where note='" + prefix + " task /one';"], { encoding: "utf8" }).trim()) as { id: string; status: string; acceptance: string };
+  const id = taskState().id;
+  await page.goto(origin + "/app/followups/" + id);
+  await page.getByRole("combobox", { name: "Responsible person" }).selectOption({ label: "Test Volunteer" });
+  await expect.poll(() => taskState().acceptance).toBe("pending");
+  const other = await browser.newContext();
+  try {
+    await isolate(other);
+    const volunteer = await other.newPage(); await signIn(volunteer, "volunteer");
+    await volunteer.goto(origin + "/app/followups/" + id);
+    await expect(volunteer.getByRole("button", { name: "Accept responsibility", exact: true })).toBeVisible();
+    await expect(volunteer.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
+    await volunteer.getByRole("button", { name: "Decline", exact: true }).click();
+    await expect.poll(() => taskState().acceptance).toBe("declined");
+    await expect(volunteer.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
+    await volunteer.getByRole("button", { name: "Accept responsibility", exact: true }).click();
+    await expect.poll(() => taskState().acceptance).toBe("accepted");
+    await volunteer.getByRole("button", { name: "Complete", exact: true }).click();
+    await volunteer.getByRole("dialog").getByRole("textbox", { name: "What happened? (optional)" }).fill("Fictional follow-through completed.");
+    await volunteer.getByRole("dialog").getByRole("button", { name: "Complete follow-up", exact: true }).click();
+    await expect.poll(() => taskState().status).toBe("completed");
+    await expect(volunteer.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
+  } finally { await other.close(); }
+});

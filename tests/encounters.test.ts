@@ -23,6 +23,12 @@ describe("community encounters", () => {
     const after = recordEncounter(before, { eventId: before.events[0].id, context: "service", outcome: "follow_up", objectiveNote: "Bring requested volunteer information", followUpDate: "2026-09-10" }, "volunteer", "device", now);
     expect(after.followUps.at(-1)).toMatchObject({ assignedVolunteerId: "volunteer", dueAt: "2026-09-10", eventId: before.events[0].id, propertyId: undefined, channel: "other" });
   });
+  it("keeps a community encounter address-free while its person's task follows their saved location", () => {
+    const before = createSeedData(); const person = before.residents[0];
+    const after = recordEncounter(before, { residentId: person.id, context: "community_meal", outcome: "follow_up", objectiveNote: "Requested check-in", followUpDate: "2026-09-10" }, person.assignedVolunteerId, "device", now);
+    expect(after.visits[0].propertyId).toBeUndefined();
+    expect(after.followUps.at(-1)).toMatchObject({ residentId: person.id, propertyId: person.propertyId, assignedVolunteerId: person.assignedVolunteerId });
+  });
   it("rejects missing entities, impossible dates, and ambiguous anonymous next steps before acknowledgement", () => {
     const before = createSeedData();
     expect(() => recordEncounter(before, { propertyId: "missing", outcome: "conversation" }, "a", "d", now)).toThrow("no longer");

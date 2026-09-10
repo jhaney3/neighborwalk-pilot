@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { validAppSegments } from "../lib/app-routes";
 
 function worker() {
   const listeners = new Map<string, (event: unknown) => void>();
@@ -53,6 +54,17 @@ describe("service-worker safety", () => {
       listeners.get("fetch")!({ request: { method: "GET", destination: "script", url: "https://neighborwalk.test" + path }, respondWith });
       expect(respondWith).not.toHaveBeenCalled();
     }
+  });
+  it("uses the same reviewed app-route boundary as the server", () => {
+    const { listeners } = worker();
+    for (const path of ["today", "today/extra", "people/person_1", "outreach/outing-1/field", "guides/guide_1", "recovery", "data", "unknown", "people/a/b", "settings/private", "people/%2Fsecret"]) {
+      const respondWith = vi.fn();
+      listeners.get("fetch")!({ request: { method: "GET", mode: "navigate", url: "https://neighborwalk.test/app/" + path }, respondWith });
+      expect(respondWith.mock.calls.length > 0).toBe(validAppSegments(path.split("/")));
+    }
+    const respondWith = vi.fn();
+    listeners.get("fetch")!({ request: { method: "GET", mode: "navigate", url: "https://neighborwalk.test/unreviewed-private-page" }, respondWith });
+    expect(respondWith).not.toHaveBeenCalled();
   });
   it("pins app navigation to the prepared shell while a newer worker waits", async () => {
     const { listeners, fetch } = worker();
