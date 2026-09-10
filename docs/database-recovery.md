@@ -66,7 +66,7 @@ Matching extensions are initialized before schema/data restoration. PostGIS buil
 
 Restore uses a single transaction with stop-on-error, keeps original object ownership where the local roles support it, and verifies every captured table's row count/digest, columns and RLS policies, plus extension names/schemas/versions. Failed targets remain isolated for investigation; no automatic database deletion or live replacement occurs. The report explicitly does **not** claim verified application sign-in or provider configuration.
 
-To exercise the whole local loop and all eight current database permission/workflow suites against the restored copy:
+To exercise the whole local loop and all nine current database permission/workflow suites against the restored copy:
 
 ```sh
 npm run backup:rehearse:local
@@ -91,5 +91,7 @@ None of these remaining production gates is waived by a successful local drill. 
 ## Verified implementation evidence
 
 On September 10, 2026, a local encrypted capture contained 53 tables and 11,870 records. The successful isolated restore `nw_restore_20260910101045_e7fa74e7` matched all captured row digests, columns and RLS policies. All six rollback-only database permission/workflow suites passed against it. Earlier failed isolated targets were retained, not promoted or attached to the app. These counts describe the fictional local sandbox, **not production**.
+
+The later eighteen-migration checkpoint was also captured and restored into `nw_restore_20260910123423_06eec2cc`: 53 tables / 14,771 fictional local records, matching row digests, columns/RLS and extensions, with all nine suites passing. The private drill report is retained at `/tmp/neighborwalk-backup-drill-aN6ngd/verified-report.json`. The capture performed no source writes. Neither drill proves production credentials, off-site retention, application sign-in or provider recovery.
 
 Sources: [Supabase backup scope](https://supabase.com/docs/guides/platform/backups), [Supabase CLI backup/restore and separate configuration](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore), [PostgreSQL consistent dumps and trusted-source warning](https://www.postgresql.org/docs/17/app-pgdump.html), [PostgreSQL snapshot synchronization](https://www.postgresql.org/docs/17/functions-admin.html#FUNCTIONS-SNAPSHOT-SYNCHRONIZATION), [GitHub Ubuntu image tools](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md).

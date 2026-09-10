@@ -327,6 +327,56 @@ export async function finishAdministration(scope: StorageScope, requestId: strin
   await transaction.done;
 }
 
+export type PendingGuideChange = { request: Record<string, unknown>; savedAt: string; scope: StorageScope };
+function validateGuideJournal(entry: PendingGuideChange, scope: StorageScope) {
+  if (entry.scope?.churchId !== scope.churchId || entry.scope?.userId !== scope.userId
+    || entry.request?.churchId !== scope.churchId || entry.request?.userId !== scope.userId || typeof entry.request.id !== "string") {
+    throw new Error("Guide recovery does not match this account and church. The original entry was not changed.");
+  }
+  return entry;
+}
+export async function pendingGuideChange(scope: StorageScope): Promise<PendingGuideChange | null> {
+  const database = await getDatabase();
+  const entry = await database.get(STORE, "guide-pending:" + scopedStorageKey(scope));
+  return entry ? validateGuideJournal(entry, scope) : null;
+}
+export async function preserveGuideChange(scope: StorageScope, request: Record<string, unknown>) {
+  const candidate = validateGuideJournal({ request, scope, savedAt: new Date().toISOString() }, scope);
+  const database = await getDatabase();
+  const transaction = database.transaction(STORE, "readwrite");
+  const key = "guide-pending:" + scopedStorageKey(scope);
+  try {
+    const existing = await transaction.store.get(key);
+    if (existing && JSON.stringify(validateGuideJournal(existing, scope).request) !== JSON.stringify(request)) {
+      throw new Error("A previous guide request needs review. Open Guides to retry it or preserve it as reviewed before starting another.");
+    }
+    await transaction.store.put(existing ?? candidate, key);
+    await transaction.done;
+    return validateGuideJournal(existing ?? candidate, scope);
+  } catch (error) {
+    try { transaction.abort(); } catch { /* The transaction may have failed already. */ }
+    await transaction.done.catch(() => {});
+    throw error;
+  }
+}
+export async function finishGuideChange(scope: StorageScope, requestId: string, result: unknown) {
+  const database = await getDatabase();
+  const transaction = database.transaction(STORE, "readwrite");
+  const key = "guide-pending:" + scopedStorageKey(scope);
+  const original = await transaction.store.get(key);
+  if (!original || original.request?.id !== requestId) { await transaction.done; return; }
+  try {
+    validateGuideJournal(original, scope);
+    await transaction.store.put({ ...original, result, reviewedAt: new Date().toISOString() }, "guide-history:" + scopedStorageKey(scope) + ":" + requestId);
+    await transaction.store.delete(key);
+    await transaction.done;
+  } catch (error) {
+    try { transaction.abort(); } catch { /* Keep a failed original available for review. */ }
+    await transaction.done.catch(() => {});
+    throw error;
+  }
+}
+
 /** Available even when membership has been revoked: only the signed-in
  * account's authored work, never its old read cache or a whole church export. */
 export async function authoredDeviceRecovery(scope: StorageScope) {
@@ -348,13 +398,19 @@ export async function authoredDeviceRecovery(scope: StorageScope) {
     add(key.startsWith("recovery:") ? record?.data : record);
   }
   const administration = [];
+  const guideChanges = [];
   for (const key of keys) {
     if (typeof key !== "string" || !(key === "admin-pending:" + scopeKey || key.startsWith("admin-history:" + scopeKey + ":"))) continue;
     const record = await database.get(STORE, key);
     if (record?.scope?.userId === scope.userId && record.scope.churchId === scope.churchId && record.request?.churchId === scope.churchId) administration.push(record);
   }
-  return { format: "neighborwalk-authored-device-recovery", formatVersion: 1, scope, authored, administration, supervisedCopies,
-    notice: "Only this account’s authored transactions and administration journal. No cached church records. Older copies without reliable authorship remain on the device for supervised recovery." };
+  for (const key of keys) {
+    if (typeof key !== "string" || !(key === "guide-pending:" + scopeKey || key.startsWith("guide-history:" + scopeKey + ":"))) continue;
+    const record = await database.get(STORE, key);
+    try { if (record) guideChanges.push(validateGuideJournal(record, scope)); } catch { supervisedCopies++; }
+  }
+  return { format: "neighborwalk-authored-device-recovery", formatVersion: 1, scope, authored, administration, guideChanges, supervisedCopies,
+    notice: "Only this account’s authored transactions, administration and guide-change journals. No cached church records. Older copies without reliable authorship remain on the device for supervised recovery." };
 }
 
 export async function replaceNeighborWalkData(candidate: unknown): Promise<NeighborWalkData> {

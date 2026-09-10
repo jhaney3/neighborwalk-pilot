@@ -136,7 +136,7 @@ export function SettingsView({
           {onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onSignOut)}><LogOut size={15} /> Sign out</button>}
         </SettingsSection>}
 
-        <SettingsSection icon={<Star size={18} />} title="Favorite conversation guide" description="This guide opens first at a doorstep unless a leader has chosen a guide for your active group.">
+        <SettingsSection icon={<Star size={18} />} title="Favorite conversation guide" description="Your personal preference applies when an outing or assigned group has not selected a church guide. Clear it from Conversation guides to return to the church fallback.">
           {guides.length ? <label className="form-field"><span>Default guide</span><select value={favoriteGuideId ?? ""} onChange={async (event) => { if (!event.target.value) return; try { await onSetFavoriteGuide(event.target.value); setMessage("Favorite conversation guide saved."); } catch (error) { setMessage(error instanceof Error ? error.message : "The favorite guide could not be saved."); } }}><option value="" disabled>Choose a favorite guide</option>{guides.map((guide) => <option value={guide.id} key={guide.id}>{guide.title} · {guide.scope === "church" ? "church" : "only me"}</option>)}</select></label> : <div className="data-note"><BookOpenText size={15} /><span>Create a personal guide or ask a leader to publish a church guide first.</span></div>}
           <div className="data-note"><LockKeyhole size={15} /><span>Personal guides stay private to your account. Church guides are shared with this church workspace.</span></div>
         </SettingsSection>

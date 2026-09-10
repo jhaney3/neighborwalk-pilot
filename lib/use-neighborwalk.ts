@@ -23,14 +23,11 @@ import {
   type TerritoryUpdate,
 } from "./domain";
 import {
-  deleteConnectedGuide,
+  connectedGuideState,
   loadConnectedGuideLibrary,
   guideLibraryErrorMessage,
   normalizeGuideSteps,
   readLocalGuideLibrary,
-  saveConnectedFavorite,
-  saveConnectedGuide,
-  saveConnectedTeamGuideDefault,
   validGuideInput,
   writeLocalGuideLibrary,
   type GuideLibraryState,
@@ -42,6 +39,9 @@ import {
   exportRecoveryArchive,
   pendingAdministration,
   finishAdministration,
+  pendingGuideChange,
+  finishGuideChange,
+  type PendingGuideChange,
   authoredDeviceRecovery,
   importNeighborWalkFile,
   loadNeighborWalkData,
@@ -66,6 +66,7 @@ import { recordEncounter, type EncounterInput } from "./encounters";
 import { requireCalendarDate } from "./calendar";
 import { addContactRestriction, liftContactRestriction, type RestrictionInput } from "./contact-restrictions";
 import { previewDuplicates, previewRetention, submitAdministration, type AdminInput, type DuplicateKind } from "./administration";
+import { applyGuideReceipt, guideSaveInput, savedGuideFromReceipt, submitGuideChange, type GuideChangeInput } from "./guide-changes";
 import { exportCsv, type ImportKind } from "./csv-exchange";
 import { assignFollowUp as assignTask, changeFollowUp, createFollowUp, respondToFollowUp } from "./follow-ups";
 import { isProductionApp, storageKey } from "./environment";
@@ -163,6 +164,10 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const [workspaceMembership, setWorkspaceMembership] = useState<WorkspaceMembership | null>(null);
   const [guideLibrary, setGuideLibrary] = useState<GuideLibraryState>({ guides: [], teamGuideDefaults: {} });
   const [guideLibraryError, setGuideLibraryError] = useState<string | null>(null);
+  const guideLibraryRef = useRef<GuideLibraryState>({ guides: [], teamGuideDefaults: {} });
+  const [guidePending, setGuidePending] = useState<PendingGuideChange | null>(null);
+  const [guideChanging, setGuideChanging] = useState(false);
+  const guideChangeInFlightRef = useRef(false);
   const storeRef = useRef<DurableWorkspaceStore | null>(null);
   const pendingWritesRef = useRef(0);
   const workspaceRef = useRef<WorkspaceConnection | null>(null);
@@ -176,6 +181,18 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const actorIdRef = useRef<string | null>(supabaseUser ? volunteerIdForUser(supabaseUser.id) : null);
   const roleRef = useRef<WorkspaceMembership["role"] | null>(null);
   const storageScopeRef = useRef<StorageScope | undefined>(undefined);
+  const publishGuideLibrary = useCallback((next: GuideLibraryState, churchId: string, userId?: string, persist = false) => {
+    const current = guideLibraryRef.current;
+    if (current.revision !== undefined && (next.revision === undefined || next.revision < current.revision)) return;
+    if (persist && !userId) writeLocalGuideLibrary(next, churchId);
+    guideLibraryRef.current = next;
+    setGuideLibrary(next);
+    setGuideLibraryError(null);
+    if (persist && userId) {
+      try { writeLocalGuideLibrary(next, churchId, userId); }
+      catch { setGuideLibraryError("The shared guide library was read, but this device could not save its refreshed copy. Keep connected and refresh guides before fieldwork."); }
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -201,7 +218,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         if (!supabaseUser) {
           const demo = await loadNeighborWalkData();
           await install({ ...demo, sync: { ...demo.sync, mode: "device_only" } });
-          setGuideLibrary(readLocalGuideLibrary(demo.church.id, demo.guide));
+          publishGuideLibrary(readLocalGuideLibrary(demo.church.id, demo.guide), demo.church.id);
           setWorkspaceStatus("device_only");
           return;
         }
@@ -251,14 +268,13 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         setWorkspaceMembership(connection);
         writeWorkspaceConnection(connection);
         await install(cached ? reconcileOutreachWorkspace(remote, cached) : remote, scope);
+        setGuidePending(await pendingGuideChange(scope));
         try {
           const guides = await loadConnectedGuideLibrary(client, scope.churchId, scope.userId);
           if (!active) return;
-          writeLocalGuideLibrary(guides, scope.churchId, scope.userId);
-          setGuideLibrary(guides);
-          setGuideLibraryError(null);
+          publishGuideLibrary(guides, scope.churchId, scope.userId, true);
         } catch (error) {
-          setGuideLibrary(readLocalGuideLibrary(scope.churchId, [], scope.userId));
+          publishGuideLibrary(readLocalGuideLibrary(scope.churchId, [], scope.userId), scope.churchId, scope.userId);
           setGuideLibraryError(guideLibraryErrorMessage(error));
         }
         setWorkspaceStatus("ready");
@@ -276,7 +292,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           const scoped = withAuthenticatedVolunteer(cached, cachedConnection);
           await install({ ...scoped, sync: { ...scoped.sync, lastError: "Offline workspace. Membership must be checked online within 24 hours." } },
             { userId: supabaseUser.id, churchId: cachedConnection.churchId });
-          setGuideLibrary(readLocalGuideLibrary(cached.church.id, [], supabaseUser.id));
+          publishGuideLibrary(readLocalGuideLibrary(cached.church.id, [], supabaseUser.id), cached.church.id, supabaseUser.id);
+          setGuidePending(await pendingGuideChange({ churchId: cached.church.id, userId: supabaseUser.id }));
           setWorkspaceStatus("ready");
         } else {
           workspaceRef.current = null;
@@ -310,7 +327,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         releaseTab?.();
       });
     };
-  }, [supabaseUser]);
+  }, [publishGuideLibrary, supabaseUser]);
 
   useEffect(() => {
     const update = () => {
@@ -902,106 +919,113 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     });
   }, [supabaseUser, updateData]);
 
+  const requireGuideScope = useCallback(() => {
+    const scope = storageScopeRef.current;
+    if (!supabaseUser || !scope || scope.userId !== supabaseUser.id || !workspaceRef.current || !storeRef.current || !onlineRef.current) {
+      throw new Error("Connect with this church account before changing guides. Prepared guides remain available offline.");
+    }
+    return scope;
+  }, [supabaseUser]);
+
+  const refreshGuideLibrary = useCallback(async () => {
+    const scope = requireGuideScope();
+    const fresh = await loadConnectedGuideLibrary(getSupabaseBrowserClient()!, scope.churchId, scope.userId);
+    publishGuideLibrary(fresh, scope.churchId, scope.userId, true);
+  }, [publishGuideLibrary, requireGuideScope]);
+
+  const performGuideChange = useCallback(async (input: GuideChangeInput | null) => {
+    const scope = requireGuideScope();
+    if (guideChangeInFlightRef.current) throw new Error("Another guide request is still being confirmed.");
+    guideChangeInFlightRef.current = true;
+    setGuideChanging(true);
+    try {
+      const outcome = await submitGuideChange(scope, input, setGuidePending);
+      publishGuideLibrary(applyGuideReceipt(guideLibraryRef.current, outcome.request, outcome.result), scope.churchId, scope.userId, true);
+      try { await refreshGuideLibrary(); }
+      catch (error) { setGuideLibraryError("Your guide change was confirmed. " + guideLibraryErrorMessage(error)); }
+      return outcome;
+    } finally {
+      try { setGuidePending(await pendingGuideChange(scope)); }
+      catch { setGuideLibraryError("The device guide journal could not be read. Keep this browser profile and ask for recovery help before making another guide change."); }
+      guideChangeInFlightRef.current = false;
+      setGuideChanging(false);
+    }
+  }, [publishGuideLibrary, refreshGuideLibrary, requireGuideScope]);
+
+  const reviewGuidePending = useCallback(async () => {
+    const scope = requireGuideScope();
+    if (guideChangeInFlightRef.current) throw new Error("Wait for the current guide request to finish.");
+    guideChangeInFlightRef.current = true; setGuideChanging(true);
+    try {
+      await connectedGuideState(getSupabaseBrowserClient()!, scope.churchId, scope.userId);
+      const pending = await pendingGuideChange(scope);
+      if (pending) await finishGuideChange(scope, String(pending.request.id), { reviewedWithoutResubmitting: true,
+        note: "Original request preserved for recovery. This does not undo any completed server change." });
+      setGuidePending(null);
+      try { await refreshGuideLibrary(); } catch (error) { setGuideLibraryError(guideLibraryErrorMessage(error)); }
+    } finally { guideChangeInFlightRef.current = false; setGuideChanging(false); }
+  }, [refreshGuideLibrary, requireGuideScope]);
+
   const saveConversationGuide = useCallback(async (input: ConversationGuideInput) => {
     if (!validGuideInput(input)) throw new Error("Finish each guide step before saving.");
-    if (input.scope === "church" && supabaseUser && roleRef.current !== "leader") {
-      throw new Error("Only a church leader can publish a church guide.");
+    const library = guideLibraryRef.current;
+    const existing = input.id ? library.guides.find((guide) => guide.id === input.id) : undefined;
+    if (existing && existing.scope !== input.scope) throw new Error("A guide’s privacy level cannot be changed after it is created.");
+    const sortOrder = existing?.sortOrder ?? Math.min(10000, Math.max(0, ...library.guides
+      .filter((guide) => guide.scope === input.scope).map((guide) => guide.sortOrder)) + 10);
+    if (supabaseUser) {
+      const outcome = await performGuideChange(guideSaveInput(input, sortOrder));
+      return savedGuideFromReceipt(outcome.request, outcome.result);
     }
-    const client = getSupabaseBrowserClient();
-    const workspace = workspaceRef.current;
-    let saved: ConversationGuide;
-    if (supabaseUser && client && workspace) {
-      const existing = input.id ? guideLibrary.guides.find((guide) => guide.id === input.id) : undefined;
-      if (existing && existing.scope !== input.scope) throw new Error("A guide’s privacy level cannot be changed after it is created.");
-      const nextSortOrder = Math.min(10000, Math.max(0, ...guideLibrary.guides
-        .filter((guide) => guide.scope === input.scope)
-        .map((guide) => guide.sortOrder)) + 10);
-      saved = await saveConnectedGuide(client, input, workspace.churchId, supabaseUser.id, nextSortOrder);
-    } else {
-      const existing = input.id ? guideLibrary.guides.find((guide) => guide.id === input.id) : undefined;
-      const now = new Date().toISOString();
-      saved = {
-        id: existing?.id ?? createId("guide"),
-        churchId: dataRef.current?.church.id ?? "device_church",
-        scope: existing?.scope ?? input.scope,
-        ownerUserId: (existing?.scope ?? input.scope) === "personal"
-          ? actorIdRef.current ?? dataRef.current?.preferences.activeVolunteerId ?? "device_user"
-          : undefined,
-        title: input.title.trim(),
-        description: input.description.trim(),
-        steps: normalizeGuideSteps(input.steps),
-        sortOrder: existing?.sortOrder ?? Math.min(10000, Math.max(0, ...guideLibrary.guides.map((guide) => guide.sortOrder)) + 10),
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      };
-    }
-    const nextGuides = [...guideLibrary.guides.filter((guide) => guide.id !== saved.id), saved]
-      .sort((first, second) => first.sortOrder - second.sortOrder || first.title.localeCompare(second.title));
-    const next = { ...guideLibrary, guides: nextGuides };
-    setGuideLibrary(next);
-    setGuideLibraryError(null);
-    writeLocalGuideLibrary(next, dataRef.current?.church.id, supabaseUser?.id);
-    return saved;
-  }, [guideLibrary, supabaseUser]);
-
-  const deleteConversationGuide = useCallback(async (guideId: string) => {
-    const guide = guideLibrary.guides.find((item) => item.id === guideId);
-    if (!guide) return;
-    if (guide.scope === "church" && supabaseUser && roleRef.current !== "leader") {
-      throw new Error("Only a church leader can delete a church guide.");
-    }
-    const client = getSupabaseBrowserClient();
-    const workspace = workspaceRef.current;
-    if (supabaseUser && client && workspace) await deleteConnectedGuide(client, guideId);
-    const next: GuideLibraryState = {
-      guides: guideLibrary.guides.filter((item) => item.id !== guideId),
-      favoriteGuideId: guideLibrary.favoriteGuideId === guideId ? undefined : guideLibrary.favoriteGuideId,
-      teamGuideDefaults: Object.fromEntries(
-        Object.entries(guideLibrary.teamGuideDefaults).filter(([, defaultGuideId]) => defaultGuideId !== guideId),
-      ),
+    const now = new Date().toISOString();
+    const saved: ConversationGuide = {
+      id: existing?.id ?? createId("guide"), churchId: dataRef.current?.church.id ?? "device_church",
+      scope: existing?.scope ?? input.scope,
+      ownerUserId: (existing?.scope ?? input.scope) === "personal" ? actorIdRef.current ?? dataRef.current?.preferences.activeVolunteerId ?? "device_user" : undefined,
+      title: input.title.trim(), description: input.description.trim(), steps: normalizeGuideSteps(input.steps),
+      sortOrder, createdAt: existing?.createdAt ?? now, updatedAt: now,
     };
-    setGuideLibrary(next);
-    setGuideLibraryError(null);
-    writeLocalGuideLibrary(next, dataRef.current?.church.id, supabaseUser?.id);
-  }, [guideLibrary, supabaseUser]);
+    publishGuideLibrary({ ...library, guides: [...library.guides.filter((guide) => guide.id !== saved.id), saved] }, saved.churchId, undefined, true);
+    return saved;
+  }, [performGuideChange, publishGuideLibrary, supabaseUser]);
+
+  const deleteConversationGuide = useCallback(async (guideId: string, expectedVersion?: number) => {
+    const library = guideLibraryRef.current;
+    if (supabaseUser) {
+      if (!expectedVersion) throw new Error("Refresh and reopen this guide before archiving it.");
+      await performGuideChange({ action: "archive", guideId, expectedVersion, confirmation: "ARCHIVE GUIDE; KEEP HISTORY" });
+      return;
+    }
+    const next = { ...library, guides: library.guides.filter((guide) => guide.id !== guideId),
+      favoriteGuideId: library.favoriteGuideId === guideId ? undefined : library.favoriteGuideId,
+      teamGuideDefaults: Object.fromEntries(Object.entries(library.teamGuideDefaults).filter(([, id]) => id !== guideId)) };
+    publishGuideLibrary(next, dataRef.current?.church.id ?? "demo", undefined, true);
+  }, [performGuideChange, publishGuideLibrary, supabaseUser]);
 
   const setTeamConversationGuide = useCallback(async (teamId: string, guideId?: string) => {
-    if (supabaseUser && roleRef.current !== "leader") {
-      throw new Error("Only a church leader can set a group guide.");
+    const library = guideLibraryRef.current;
+    if (!dataRef.current?.teams.some((team) => team.id === teamId)) throw new Error("Choose a group in this church workspace.");
+    if (guideId && !library.guides.some((guide) => guide.id === guideId && guide.scope === "church")) throw new Error("Group defaults must use a church guide.");
+    if (supabaseUser) {
+      if (library.revision === undefined) throw new Error("Refresh the guide library before choosing a group guide.");
+      await performGuideChange({ action: "group_default", teamId, guideId: guideId ?? null, expectedVersion: library.teamGuideVersions?.[teamId] ?? 0 });
+      return;
     }
-    if (!dataRef.current?.teams.some((team) => team.id === teamId)) {
-      throw new Error("Choose a group in this church workspace.");
-    }
-    if (guideId && !guideLibrary.guides.some((guide) => guide.id === guideId && guide.scope === "church")) {
-      throw new Error("Group defaults must use a church guide.");
-    }
-    const client = getSupabaseBrowserClient();
-    const workspace = workspaceRef.current;
-    if (supabaseUser && client && workspace) {
-      await saveConnectedTeamGuideDefault(client, workspace.churchId, supabaseUser.id, teamId, guideId);
-    }
-    const teamGuideDefaults = { ...guideLibrary.teamGuideDefaults };
-    if (guideId) teamGuideDefaults[teamId] = guideId;
-    else delete teamGuideDefaults[teamId];
-    const next = { ...guideLibrary, teamGuideDefaults };
-    setGuideLibrary(next);
-    setGuideLibraryError(null);
-    writeLocalGuideLibrary(next, dataRef.current?.church.id, supabaseUser?.id);
-  }, [guideLibrary, supabaseUser]);
+    const defaults = { ...library.teamGuideDefaults };
+    if (guideId) defaults[teamId] = guideId; else delete defaults[teamId];
+    publishGuideLibrary({ ...library, teamGuideDefaults: defaults }, dataRef.current?.church.id ?? "demo", undefined, true);
+  }, [performGuideChange, publishGuideLibrary, supabaseUser]);
 
-  const setFavoriteConversationGuide = useCallback(async (guideId: string) => {
-    if (!guideLibrary.guides.some((guide) => guide.id === guideId)) throw new Error("Choose a guide you can access.");
-    const client = getSupabaseBrowserClient();
-    const workspace = workspaceRef.current;
-    if (supabaseUser && client && workspace) {
-      await saveConnectedFavorite(client, workspace.churchId, supabaseUser.id, guideId);
+  const setFavoriteConversationGuide = useCallback(async (guideId?: string) => {
+    const library = guideLibraryRef.current;
+    if (guideId && !library.guides.some((guide) => guide.id === guideId)) throw new Error("Choose a guide you can access.");
+    if (supabaseUser) {
+      if (library.favoriteVersion === undefined) throw new Error("Refresh the guide library before changing your favorite.");
+      await performGuideChange({ action: "favorite", guideId: guideId ?? null, expectedVersion: library.favoriteVersion });
+      return;
     }
-    const next = { ...guideLibrary, favoriteGuideId: guideId };
-    setGuideLibrary(next);
-    setGuideLibraryError(null);
-    writeLocalGuideLibrary(next, dataRef.current?.church.id, supabaseUser?.id);
-  }, [guideLibrary, supabaseUser]);
-
+    publishGuideLibrary({ ...library, favoriteGuideId: guideId }, dataRef.current?.church.id ?? "demo", undefined, true);
+  }, [performGuideChange, publishGuideLibrary, supabaseUser]);
   const downloadBackup = useCallback(() => {
     if (supabaseUser) throw new Error("Use Data & health for a recently authenticated, audited church export.");
     if (!data) return;
@@ -1122,9 +1146,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       writeWorkspaceConnection(connection);
       try {
         const guides = await loadConnectedGuideLibrary(client, workspace.churchId, supabaseUser.id);
-        writeLocalGuideLibrary(guides, workspace.churchId, supabaseUser.id);
-        setGuideLibrary(guides);
-        setGuideLibraryError(null);
+        publishGuideLibrary(guides, workspace.churchId, supabaseUser.id, true);
       } catch (error) { setGuideLibraryError(guideLibraryErrorMessage(error)); }
       autoRetryAttemptRef.current = 0;
       return !store.snapshot.sync.commands?.some((q) => q.state === "needs_review");
@@ -1156,7 +1178,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       } catch { setStorageError("Device storage could not confirm the sync receipt. Keep this app open; the original command can be retried safely."); }
       return false;
     } finally { setSyncing(false); }
-  }, [supabaseUser]);
+  }, [publishGuideLibrary, supabaseUser]);
 
   const syncNow = useCallback(() => {
     if (syncInFlightRef.current) return syncInFlightRef.current;
@@ -1379,6 +1401,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     workspaceMembership,
     guideLibrary,
     guideLibraryError,
+    guidePending,
+    guideChanging,
     activeTerritory,
     activeVolunteer,
     actions: {
@@ -1408,6 +1432,10 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       deletePersonNote,
       deleteResident,
       saveConversationGuide,
+      refreshGuideLibrary,
+      retryGuideChange: () => performGuideChange(null),
+      reviewGuidePending,
+      getGuidePending: () => storageScopeRef.current ? pendingGuideChange(storageScopeRef.current) : Promise.resolve(null),
       deleteConversationGuide,
       setFavoriteConversationGuide,
       setTeamConversationGuide,

@@ -179,12 +179,13 @@ export type ConversationGuide = {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  version?: number;
 };
 
 export type ConversationGuideInput = Pick<
   ConversationGuide,
   "scope" | "title" | "description" | "steps"
-> & { id?: string };
+> & { id?: string; expectedVersion?: number };
 
 export type AuditEntry = NeighborWalkData["audit"][number];
 

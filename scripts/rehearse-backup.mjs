@@ -22,7 +22,7 @@ try {
   const output = run(["restore-local", "--bundle", bundle, "--expect-source", "local", "--key-file", key, "--confirm", "TRUSTED LOCAL RESTORE"]);
   const report = JSON.parse(output.split("\n").find((line) => line.startsWith("{")) ?? "null");
   if (!report || report.result !== "isolated restore verified" || !/^nw_restore_\d{14}_[a-f0-9]{8}$/.test(report.database)) throw new Error("No verified isolated restore result was returned.");
-  const suites = ["database-readiness.sql", "administration-readiness.sql", "access-administration.sql", "followup-lifecycle.sql", "reminder-readiness.sql", "duplicate-readiness.sql", "encounter-corrections.sql", "session-revocation.sql"];
+  const suites = ["database-readiness.sql", "administration-readiness.sql", "access-administration.sql", "followup-lifecycle.sql", "reminder-readiness.sql", "duplicate-readiness.sql", "encounter-corrections.sql", "session-revocation.sql", "guide-library.sql"];
   for (const suite of suites) execFileSync("psql", ["postgresql://postgres:postgres@127.0.0.1:54322/" + report.database, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=sqlstate", "-f", join(repository, "tests", suite)], { stdio: ["pipe", "pipe", "pipe"] });
   const result = { ...report, permissionAndWorkflowSuites: suites.length, artifacts: directory, sourceWritesPerformed: false };
   await writeFile(join(directory, "verified-report.json"), JSON.stringify(result, null, 2), { flag: "wx", mode: 0o600 });

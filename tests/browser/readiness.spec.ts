@@ -327,6 +327,87 @@ test("guide coaching and reminders reach fieldwork with keyboard-accessible step
   await page.keyboard.press("Escape"); await expect(drawer).toBeHidden();
 });
 
+test("guide writes survive a lost response and reject stale editors while archives preserve the saved record", async ({ browser, context, page }) => {
+  await isolate(context); await signIn(page, "volunteer");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(origin + "/app/guides");
+  const title = "Fictional guide journal " + randomUUID();
+  let guideId = ""; let commandId = ""; let dropped = false;
+  await context.route("**/rest/v1/rpc/outreach_guide_action", async (route) => {
+    const request = route.request().postDataJSON().request;
+    if (!dropped && request.action === "save" && request.content?.title === title) {
+      dropped = true; guideId = request.guideId; commandId = request.id;
+      const response = await route.fetch(); expect(response.ok()).toBe(true);
+      await route.abort("failed");
+    } else await route.continue();
+  });
+  const snapshot = () => {
+    if (!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(guideId) || !/^[a-zA-Z0-9_-]{1,180}$/.test(commandId)) throw new Error("Invalid fictional guide identifiers");
+    return JSON.parse(execFileSync("psql", [database, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+      "select jsonb_build_object('count',count(*),'version',max(version),'archived',bool_or(archived_at is not null),'words',max(steps->0->>'sampleWords'),'receipts',(select count(*) from private.outreach_receipts where church_id='00000000-0000-4000-8000-000000000001' and command_id='guide_" + commandId + "')) from public.conversation_guides where church_id='00000000-0000-4000-8000-000000000001' and id='" + guideId + "';"], { encoding: "utf8" }).trim());
+  };
+  await page.getByRole("button", { name: "New personal guide", exact: true }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox", { name: "Guide name", exact: true }).fill(title);
+  await dialog.getByRole("textbox", { name: "Step title", exact: true }).fill("Fictional guide journal step");
+  await dialog.getByRole("textbox", { name: /Words or testimony notes/ }).fill("Fictional original words");
+  await dialog.getByRole("button", { name: "Save private guide", exact: true }).click();
+  await expect(dialog.getByText(/This submission is preserved exactly/)).toBeVisible();
+  await expect(dialog.getByRole("textbox", { name: "Guide name", exact: true })).toBeDisabled();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(snapshot()).toMatchObject({ count: 1, version: 1, archived: false, receipts: 1 });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "A guide request needs confirmation", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New personal guide", exact: true })).toBeDisabled();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const refreshBounds = await page.getByRole("button", { name: "Refresh guides", exact: true }).boundingBox();
+  const retryBounds = await page.getByRole("button", { name: "Retry original guide request", exact: true }).boundingBox();
+  expect(refreshBounds).not.toBeNull(); expect(retryBounds).not.toBeNull();
+  expect(retryBounds!.y - refreshBounds!.y - refreshBounds!.height).toBeGreaterThanOrEqual(8);
+  await page.screenshot({ path: test.info().outputPath("guide-journal-mobile.png") });
+  await page.getByRole("button", { name: "Retry original guide request", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "A guide request needs confirmation", exact: true })).toHaveCount(0);
+  expect(snapshot()).toMatchObject({ count: 1, version: 1, receipts: 1 });
+  await page.goto(origin + "/app/guides/" + guideId);
+  await page.getByRole("button", { name: "Set as favorite", exact: true }).click();
+  await page.getByRole("button", { name: "Clear personal favorite", exact: true }).click();
+  await expect(page.getByText(/Personal favorite cleared/)).toBeVisible();
+  await page.getByRole("button", { name: "Set as favorite", exact: true }).click();
+  await page.getByRole("button", { name: "Edit guide", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox", { name: /Words or testimony notes/ }).fill("Fictional first device stale edit");
+  const other = await browser.newContext();
+  try {
+    await isolate(other); const otherPage = await other.newPage(); await signIn(otherPage, "volunteer");
+    await otherPage.goto(origin + "/app/guides/" + guideId);
+    await otherPage.getByRole("button", { name: "Edit guide", exact: true }).click();
+    const otherDialog = otherPage.getByRole("dialog");
+    await otherDialog.getByRole("textbox", { name: /Words or testimony notes/ }).fill("Fictional second device accepted edit");
+    await otherDialog.getByRole("button", { name: "Save private guide", exact: true }).click();
+    await expect(otherDialog).toBeHidden();
+    expect(snapshot()).toMatchObject({ version: 2, words: "Fictional second device accepted edit" });
+    await dialog.getByRole("button", { name: "Save private guide", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText(/guide changed or was archived/i);
+    expect(snapshot()).toMatchObject({ version: 2, words: "Fictional second device accepted edit" });
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh guides", exact: true }).click();
+    await expect(page.getByText("“Fictional second device accepted edit”", { exact: true })).toBeVisible();
+    page.once("dialog", (confirmation) => confirmation.accept());
+    await page.getByRole("button", { name: "Preserve request as reviewed", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "A guide request needs confirmation", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Edit guide", exact: true }).click();
+    dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Archive", exact: true }).click();
+    await expect(dialog.getByText(/This is not permanent erasure/)).toBeVisible();
+    await dialog.getByRole("button", { name: "Archive guide", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    expect(snapshot()).toMatchObject({ count: 1, version: 3, archived: true, words: "Fictional second device accepted edit", receipts: 1 });
+    await page.goto(origin + "/app/guides/" + guideId);
+    await expect(page.getByText(/The requested guide is not available in your active library/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: title, exact: true })).toHaveCount(0);
+  } finally { await other.close(); }
+});
+
 test("cold offline guide, 100 durable encounters, close/reopen and exactly-once reconnect", async ({ context, page }) => {
   await isolate(context);
   await signIn(page);

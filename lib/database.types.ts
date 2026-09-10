@@ -145,21 +145,24 @@ export type Database = {
       conversation_guide_preferences: {
         Row: {
           church_id: string
-          favorite_guide_id: string
+          favorite_guide_id: string | null
           updated_at: string
           user_id: string
+          version: number
         }
         Insert: {
           church_id: string
-          favorite_guide_id: string
+          favorite_guide_id?: string | null
           updated_at?: string
           user_id: string
+          version?: number
         }
         Update: {
           church_id?: string
-          favorite_guide_id?: string
+          favorite_guide_id?: string | null
           updated_at?: string
           user_id?: string
+          version?: number
         }
         Relationships: [
           {
@@ -181,24 +184,27 @@ export type Database = {
       conversation_guide_team_defaults: {
         Row: {
           church_id: string
-          guide_id: string
+          guide_id: string | null
           team_id: string
           updated_at: string
           updated_by: string
+          version: number
         }
         Insert: {
           church_id: string
-          guide_id: string
+          guide_id?: string | null
           team_id: string
           updated_at?: string
           updated_by: string
+          version?: number
         }
         Update: {
           church_id?: string
-          guide_id?: string
+          guide_id?: string | null
           team_id?: string
           updated_at?: string
           updated_by?: string
+          version?: number
         }
         Relationships: [
           {
@@ -226,6 +232,7 @@ export type Database = {
       }
       conversation_guides: {
         Row: {
+          archived_at: string | null
           church_id: string
           created_at: string
           created_by: string
@@ -238,8 +245,10 @@ export type Database = {
           title: string
           updated_at: string
           updated_by: string
+          version: number
         }
         Insert: {
+          archived_at?: string | null
           church_id: string
           created_at?: string
           created_by: string
@@ -252,8 +261,10 @@ export type Database = {
           title: string
           updated_at?: string
           updated_by: string
+          version?: number
         }
         Update: {
+          archived_at?: string | null
           church_id?: string
           created_at?: string
           created_by?: string
@@ -266,6 +277,7 @@ export type Database = {
           title?: string
           updated_at?: string
           updated_by?: string
+          version?: number
         }
         Relationships: [
           {
@@ -1476,6 +1488,8 @@ export type Database = {
       }
       outreach_admin_action: { Args: { request: Json }; Returns: Json }
       outreach_apply_command: { Args: { command: Json }; Returns: Json }
+      outreach_guide_action: { Args: { request: Json }; Returns: Json }
+      outreach_guide_state: { Args: { target_church: string }; Returns: Json }
       outreach_read_records: {
         Args: {
           after_id?: string
