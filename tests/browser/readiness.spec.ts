@@ -13,10 +13,24 @@ async function setDisconnected(context: BrowserContext, value: boolean) {
   // CDP's advisory offline state can change around target/tab replacement.
   // Keep an independent request boundary across every page in the context.
   if (value) disconnected.add(context); else disconnected.delete(context);
+  await Promise.all(context.pages().map((page) => page.evaluate((offline) => {
+    localStorage.setItem("fictional-network-disconnected", String(offline));
+  }, value)));
   await context.setOffline(value);
 }
 
 async function isolate(context: BrowserContext) {
+  // Service-worker-controlled pages can bypass Playwright request interception,
+  // and CDP's offline flag can reset when a new target opens. Keep a final fetch
+  // transport boundary in every tab. This only simulates network failure; it
+  // never changes application state, queued commands, or server responses.
+  await context.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (...args: Parameters<typeof fetch>) => {
+      if (localStorage.getItem("fictional-network-disconnected") === "true") return Promise.reject(new TypeError("Failed to fetch"));
+      return originalFetch(...args);
+    };
+  });
   await context.route("**/*", (route) => {
     if (disconnected.has(context)) return route.abort("internetdisconnected");
     const url = new URL(route.request().url());
@@ -212,13 +226,16 @@ test("a second tab cannot overwrite unsent work and can reopen after the first c
   await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
   await setDisconnected(context, true);
   await encounter(page, prefix + " tabs /one");
+  expect(recorded(prefix + " tabs")).toBe(0);
   const second = await context.newPage(); await second.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
   await expect(second.getByText(/already open in another tab or window/)).toBeVisible();
   await expect(second.getByRole("button", { name: "Record a community encounter", exact: true })).toHaveCount(0);
   expect(await queued(second)).toBe(1);
+  expect(recorded(prefix + " tabs")).toBe(0);
   await page.close(); await second.reload();
   await expect(second.getByRole("heading", { name: /Hello,/ })).toBeVisible();
   expect(await queued(second)).toBe(1);
+  expect(recorded(prefix + " tabs")).toBe(0);
   await setDisconnected(context, true);
   await encounter(second, prefix + " tabs /two");
   expect(await queued(second)).toBe(2);
