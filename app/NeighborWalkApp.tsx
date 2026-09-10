@@ -28,6 +28,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MapCanvas, type MapSearchTarget } from "../components/MapCanvas";
 import { PropertyDrawer } from "../components/PropertyDrawer";
+import { AddressList } from "../components/AddressList";
 import { PeopleView } from "../components/PeopleView";
 import { FollowUpsView } from "../components/FollowUpsView";
 import { GuideView } from "../components/GuideView";
@@ -45,6 +46,7 @@ import {
   type Property,
   type Territory,
 } from "../lib/domain";
+import { useAsyncAction } from "../lib/use-async-action";
 import { useNeighborWalk, type SupabaseUser } from "../lib/use-neighborwalk";
 import { conversationGuideTeam, preferredConversationGuide } from "../lib/conversation-guides";
 import { forwardGeocode, reverseGeocode, type AddressSearchResult } from "../lib/geocoding";
@@ -57,7 +59,7 @@ import { useVisibleParcels } from "../lib/use-visible-parcels";
 type View = "map" | "people" | "followups" | "guide" | "leader" | "settings";
 type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[]; parcel?: ParcelDetails; legacyPropertyIds?: string[] };
 type ParcelSelection = { parcel: ParcelReference; situsAddress?: string | null; propertyIds: string[] };
-type SavedAddressResult = { propertyId: string; territoryId: string; label: string; detail: string; coordinates: Coordinates; color: string };
+type SavedAddressResult = { propertyId: string; territoryId?: string; label: string; detail: string; coordinates?: Coordinates; color: string };
 const EMPTY_TERRITORIES: Territory[] = [];
 const EMPTY_PROPERTIES: Property[] = [];
 
@@ -142,6 +144,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
       coverageForTerritory({ territories, properties }, territory.id, territoryParcelResults[territory.id]?.parcels),
     ]));
   }, [properties, territories, territoryParcelResults]);
+  const [outreachDisplay, setOutreachDisplay] = useState<"map" | "list">("map");
   const savedAddressResults = useMemo<SavedAddressResult[]>(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!data || normalizedQuery.length < 2) return [];
@@ -246,11 +249,11 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   };
 
   const selectSavedAddress = (result: SavedAddressResult) => {
-    if (result.territoryId !== activeTerritory.id) actions.selectTerritory(result.territoryId);
+    if (result.territoryId && result.territoryId !== activeTerritory.id) void actions.selectTerritory(result.territoryId).catch(() => undefined);
     setGuidedPropertyId(null);
     setSelectedPropertyId(result.propertyId);
     setQuery(result.label);
-    focusSearchTarget(result.coordinates, 18);
+    if (result.coordinates) focusSearchTarget(result.coordinates, 18);
   };
 
   const selectGeocodedAddress = (result: AddressSearchResult) => {
@@ -283,9 +286,9 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     actions.setPreference("lastView", next);
   };
 
-  const handleAddProperty = (address: string, unit: string, startGuided: boolean) => {
+  const handleAddProperty = async (address: string, unit: string, startGuided: boolean) => {
     if (!pendingAdd) return;
-    const propertyId = actions.addProperty({ ...pendingAdd, address, unit });
+    const propertyId = await actions.addProperty({ ...pendingAdd, address, unit });
     setPendingAdd(null);
     setAddMode(false);
     setGuidedPropertyId(startGuided ? propertyId : null);
@@ -379,6 +382,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
         <section className="workspace">
           {view === "map" && (
             <section className="map-view">
+              <div className="outreach-display-switch" aria-label="Outreach display"><button aria-pressed={outreachDisplay === "list"} onClick={() => setOutreachDisplay("list")}>Address list</button><button aria-pressed={outreachDisplay === "map"} onClick={() => setOutreachDisplay("map")}>Map</button></div>
+              {outreachDisplay === "list" ? <AddressList data={data} onOpen={setSelectedPropertyId} onAdd={actions.addProperty} /> : <>
               <div className="mobile-context-row">
                 <div><p className="eyebrow">{data.events.find((event) => event.id === data.preferences.activeEventId)?.name}</p><button onClick={() => setTerritoryPickerOpen(true)}><strong>{activeTerritory.name}</strong><ChevronDown size={15} /></button></div>
                 <div><strong>{coverage.percent}%</strong><span>{coverageLabel}</span></div>
@@ -476,7 +481,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                   } catch {
                     setPendingAdd(intent);
                   }
-                }} onAssociatePropertiesWithParcel={(propertyIds, parcel) => actions.associatePropertiesWithParcel(propertyIds, parcelReference(parcel))} onDraftBoundaryChange={setDraftBoundary} />
+                }} onUseAddressList={() => setOutreachDisplay("list")} onAssociatePropertiesWithParcel={(propertyIds, parcel) => actions.associatePropertiesWithParcel(propertyIds, parcelReference(parcel))} onDraftBoundaryChange={setDraftBoundary} />
                 <div className="map-floating-actions">
                   {!drawMode && <button className={`map-action-button ${addMode ? "active" : ""}`} aria-label={addMode ? "Cancel adding a location" : "Add a location"} onClick={() => { setAddMode((current) => !current); setSelectedPropertyId(null); setGuidedPropertyId(null); setSelectedParcel(null); }}><Plus size={18} /><span>{addMode ? "Cancel adding" : "Add location"}</span></button>}
                   {canManage && !drawMode && <button className="map-action-button secondary" aria-label={`Edit ${activeTerritory.name}`} onClick={() => openTerritoryEditor(activeTerritory.id)}><Edit3 size={18} /><span>Edit territory</span></button>}
@@ -484,11 +489,12 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                 </div>
                 {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => points.slice(0, -1))}><Undo2 size={15} /> Undo</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={draftBoundary.length < 3} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
               </div>
-              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={teamDefaultGuideId && activeGuideTeam ? `${activeGuideTeam.name} default` : "Your favorite"} canManage={canManage} activeVolunteerId={activeVolunteer.id} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={(input) => { actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
+              </>}
+              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={teamDefaultGuideId && activeGuideTeam ? `${activeGuideTeam.name} default` : "Your favorite"} canManage={canManage} activeVolunteerId={activeVolunteer.id} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={async (input) => { await actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved on this device`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
             </section>
           )}
-          {view === "followups" && <FollowUpsView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialPersonId={followUpPersonId} onClearPersonFocus={() => setFollowUpPersonId(null)} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onOpenPerson={(residentId) => { setSelectedPersonId(residentId); navigate("people"); }} onAddPersonNote={actions.addPersonNote} onComplete={(id, input) => { actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next task scheduled" : "Follow-up completed"); }} onReschedule={(id, date, note) => { actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={(id, note) => { actions.cancelFollowUp(id, note); setToast("Follow-up cancelled"); }} />}
-          {view === "people" && <PeopleView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialSelectedResidentId={selectedPersonId} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property) actions.selectTerritory(property.territoryId); }} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} onAddPersonNote={actions.addPersonNote} onDeletePersonNote={actions.deletePersonNote} onAddPersonFollowUp={actions.addPersonFollowUp} onOpenFollowUps={(residentId) => { setFollowUpPersonId(residentId); navigate("followups"); }} />}
+          {view === "followups" && <FollowUpsView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialPersonId={followUpPersonId} onClearPersonFocus={() => setFollowUpPersonId(null)} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); }} onOpenPerson={(residentId) => { setSelectedPersonId(residentId); navigate("people"); }} onAddPersonNote={actions.addPersonNote} onComplete={async (id, input) => { await actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next task scheduled" : "Follow-up completed"); }} onReschedule={async (id, date, note) => { await actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={async (id, note) => { await actions.cancelFollowUp(id, note); setToast("Follow-up cancelled on this device"); }} onAssign={actions.assignFollowUp} onAccept={actions.acceptFollowUp} />}
+          {view === "people" && <PeopleView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialSelectedResidentId={selectedPersonId} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); }} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} onAddPersonNote={actions.addPersonNote} onDeletePersonNote={actions.deletePersonNote} onAddPersonFollowUp={actions.addPersonFollowUp} onHandoff={actions.handoffPerson} onOpenFollowUps={(residentId) => { setFollowUpPersonId(residentId); navigate("followups"); }} />}
           {view === "guide" && <GuideView guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} effectiveGuideId={favoriteConversationGuide?.id} activeTeamId={activeGuideTeam?.id} activeTeamName={activeGuideTeam?.name} teams={data.teams} teamGuideDefaults={guideLibrary.teamGuideDefaults} canManage={canManage} allowBuiltInManagement={data.sync.mode === "device_only"} libraryError={guideLibraryError} onSave={actions.saveConversationGuide} onDelete={actions.deleteConversationGuide} onSetFavorite={actions.setFavoriteConversationGuide} onSetTeamDefault={actions.setTeamConversationGuide} />}
           {view === "leader" && canManage && <LeaderView data={data} coverageByTerritory={coverageByTerritory} membership={workspaceMembership} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} />}
           {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdatePassword={onUpdatePassword} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onSetFavoriteGuide={actions.setFavoriteConversationGuide} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onClearOutreach={actions.clearOutreachData} onSync={actions.syncNow} />}
@@ -555,9 +561,10 @@ function AddPropertyModal({ intent, existingDwellingCount, guideName, guideAvail
   guideName?: string;
   guideAvailable: boolean;
   onClose: () => void;
-  onSave: (address: string, unit: string, startGuided: boolean) => void;
+  onSave: (address: string, unit: string, startGuided: boolean) => Promise<unknown>;
 }) {
   const [address, setAddress] = useState(intent.suggestedAddress);
+  const action = useAsyncAction();
   const [unit, setUnit] = useState("");
   const countyName = intent.parcel ? PARCEL_COUNTY_NAMES[intent.parcel.countyFips] ?? "Tennessee" : null;
   const needsLabel = existingDwellingCount > 0;
@@ -576,11 +583,12 @@ function AddPropertyModal({ intent, existingDwellingCount, guideName, guideAvail
         <label className="form-field"><span>Dwelling label or unit <small>{needsLabel ? "Required" : "Optional"}</small></span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Rear house, Unit B, Apartment 2" /></label>
       </div>
       {guideAvailable && <div className="guided-start-note"><BookOpenText size={17} /><span><strong>Want a little help at the door?</strong>The guided path opens with {guideName || "your favorite guide"}. You can leave it at any time.</span></div>}
+      {action.error && <p role="alert" className="inline-error">{action.error}</p>}
       <div className="modal-actions split add-location-actions">
         <button className="button quiet" onClick={onClose}>Cancel</button>
         <div>
-          <button className="button quiet" disabled={!canSave} onClick={() => onSave(address, unit, false)}><Plus size={15} /> {guideAvailable ? "Add without guide" : "Add dwelling"}</button>
-          {guideAvailable && <button className="button primary" disabled={!canSave} onClick={() => onSave(address, unit, true)}><BookOpenText size={15} /> Add &amp; use guide</button>}
+          <button className="button quiet" disabled={!canSave || action.busy} onClick={() => void action.run(() => onSave(address, unit, false))}><Plus size={15} /> {guideAvailable ? "Add without guide" : "Add dwelling"}</button>
+          {guideAvailable && <button className="button primary" disabled={!canSave || action.busy} onClick={() => void action.run(() => onSave(address, unit, true))}><BookOpenText size={15} /> Add &amp; use guide</button>}
         </div>
       </div>
     </Modal>

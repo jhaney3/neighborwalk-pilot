@@ -7,7 +7,6 @@ import {
   deleteTerritoryRecord,
   dueDateFromNow,
   enforceRetention,
-  neighborWalkDataSchema,
   updateTerritoryRecord,
   type AuditEntry,
   type ConversationGuide,
@@ -27,7 +26,6 @@ import {
 } from "./domain";
 import {
   deleteConnectedGuide,
-  legacyConversationGuide,
   loadConnectedGuideLibrary,
   normalizeGuideSteps,
   readLocalGuideLibrary,
@@ -42,20 +40,20 @@ import {
   exportNeighborWalkData,
   importNeighborWalkFile,
   loadNeighborWalkData,
-  migrateNeighborWalkData,
+  loadScopedNeighborWalkData,
   saveNeighborWalkData,
+  type StorageScope,
 } from "./storage";
-import { getSupabaseBrowserClient, type Json, type NeighborWalkDatabase } from "./supabase";
+import { createSeedData } from "./seed";
+import { getSupabaseBrowserClient } from "./supabase";
+import { apiError, loadOutreachWorkspace, OutreachApiError, submitOutreachCommand } from "./outreach-client";
+import { commandPending, DurableWorkspaceStore, reconcileOutreachWorkspace, stageWorkspaceChange } from "./outreach-queue";
+import { versionKey, type CommandOperation } from "./command-schema";
 import { changeFollowUp, createFollowUp } from "./follow-ups";
 import { isProductionApp, storageKey } from "./environment";
-import { mergePendingWorkspaceChanges } from "./workspace-sync";
 import {
-  loadConnectedDiscipleship,
-  persistConnectedDiscipleship,
   volunteerIdForUser,
   withAuthenticatedVolunteer,
-  withSnapshotDiscipleship,
-  withoutSnapshotDiscipleship,
 } from "./discipleship";
 
 export type SupabaseUser = { id: string; email: string; name?: string };
@@ -66,12 +64,8 @@ export type WorkspaceMembership = {
   email: string;
   displayName: string;
 };
-type WorkspaceStatus = "device_only" | "connecting" | "invitation_required" | "ready";
-type WorkspaceConnection = WorkspaceMembership & { revision: number };
-type WorkspaceSnapshotRecord = Pick<
-  NeighborWalkDatabase["public"]["Tables"]["workspace_snapshots"]["Row"],
-  "church_id" | "schema_version" | "data" | "revision" | "updated_at"
->;
+type WorkspaceStatus = "device_only" | "connecting" | "invitation_required" | "ready" | "locked";
+type WorkspaceConnection = WorkspaceMembership & { revision: number; verifiedAt?: string };
 
 const WORKSPACE_CACHE_KEY = storageKey("neighborwalk-supabase-workspace");
 const AUTO_SYNC_DELAY_MS = 1200;
@@ -119,7 +113,7 @@ type VisitInput = {
 type NewPropertyInput = {
   address: string;
   unit?: string;
-  coordinates: Coordinates;
+  coordinates?: Coordinates;
   buildingGeometry?: Coordinates[];
   parcel?: ParcelReference;
 };
@@ -150,19 +144,6 @@ function mutation(
   return { id: createId("mutation"), entityType, entityId, operation, changedAt };
 }
 
-async function fetchWorkspaceSnapshot(
-  client: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>,
-  churchId: string,
-): Promise<WorkspaceSnapshotRecord> {
-  const { data, error } = await client
-    .from("workspace_snapshots")
-    .select("church_id, schema_version, data, revision, updated_at")
-    .eq("church_id", churchId)
-    .single();
-  if (error) throw error;
-  return data;
-}
-
 export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const [data, setData] = useState<NeighborWalkData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -175,8 +156,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const [workspaceMembership, setWorkspaceMembership] = useState<WorkspaceMembership | null>(null);
   const [guideLibrary, setGuideLibrary] = useState<GuideLibraryState>({ guides: [], teamGuideDefaults: {} });
   const [guideLibraryError, setGuideLibraryError] = useState<string | null>(null);
-  const saveQueue = useRef<Promise<void>>(Promise.resolve());
-  const saveVersion = useRef(0);
+  const storeRef = useRef<DurableWorkspaceStore | null>(null);
+  const pendingWritesRef = useRef(0);
   const workspaceRef = useRef<WorkspaceConnection | null>(null);
   const dataRef = useRef<NeighborWalkData | null>(null);
   const onlineRef = useRef(true);
@@ -184,161 +165,109 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const autoRetryAttemptRef = useRef(0);
   const actorIdRef = useRef<string | null>(supabaseUser ? volunteerIdForUser(supabaseUser.id) : null);
   const roleRef = useRef<WorkspaceMembership["role"] | null>(null);
+  const storageScopeRef = useRef<StorageScope | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
+    const publish = (next: NeighborWalkData) => {
+      if (!active) return;
+      dataRef.current = next;
+      setData(next);
+    };
+    const install = async (next: NeighborWalkData, scope?: StorageScope) => {
+      await saveNeighborWalkData(next, scope);
+      if (!active) return;
+      storageScopeRef.current = scope;
+      storeRef.current = new DurableWorkspaceStore(next, (value) => saveNeighborWalkData(value, scope), publish);
+      publish(next);
+    };
     const load = async () => {
+      let cached: NeighborWalkData | null = null;
+      const cachedConnection = supabaseUser ? readWorkspaceConnection(supabaseUser.id) : null;
       try {
-        const loaded = await loadNeighborWalkData();
-        if (!active) return;
-        const client = getSupabaseBrowserClient();
-        if (!supabaseUser || !client) {
+        if (!supabaseUser) {
+          const demo = await loadNeighborWalkData();
+          await install({ ...demo, sync: { ...demo.sync, mode: "device_only" } });
+          setGuideLibrary(readLocalGuideLibrary(demo.church.id, demo.guide));
           setWorkspaceStatus("device_only");
-          setWorkspaceMembership(null);
-          roleRef.current = null;
-          setGuideLibrary(readLocalGuideLibrary(loaded.church.id, loaded.guide));
-          setGuideLibraryError(null);
-          setData({ ...loaded, sync: { ...loaded.sync, mode: "device_only" } });
           return;
         }
-
+        const client = getSupabaseBrowserClient();
+        if (!client) throw new Error("The church service is not configured.");
+        if (cachedConnection) cached = await loadScopedNeighborWalkData({ userId: supabaseUser.id, churchId: cachedConnection.churchId });
         setWorkspaceStatus("connecting");
-        try {
-          let { data: membership, error: membershipError } = await client
-            .from("church_memberships")
-            .select("church_id, user_id, role, member_email, display_name")
-            .eq("user_id", supabaseUser.id)
-            .eq("active", true)
-            .limit(1)
-            .maybeSingle();
-          if (!active) return;
-          if (membershipError) throw membershipError;
-          const token = invitationToken();
-          if (!membership && token) {
-            const { error: invitationError } = await client.rpc("accept_church_invitation", { invitation_token: token });
-            if (invitationError) throw invitationError;
-            clearInvitationToken();
-            const membershipResult = await client
-              .from("church_memberships")
-              .select("church_id, user_id, role, member_email, display_name")
-              .eq("user_id", supabaseUser.id)
-              .eq("active", true)
-              .limit(1)
-              .maybeSingle();
-            membership = membershipResult.data;
-            membershipError = membershipResult.error;
-            if (membershipError) throw membershipError;
-          }
-          if (!membership) {
-            setWorkspaceStatus("invitation_required");
-            setWorkspaceMembership(null);
-            roleRef.current = null;
-            setData({ ...loaded, sync: { ...loaded.sync, mode: "connected", lastError: undefined } });
-            return;
-          }
-          const resolvedMembership: WorkspaceMembership = {
-            churchId: membership.church_id,
-            userId: membership.user_id,
-            role: membership.role,
-            email: membership.member_email ?? supabaseUser.email,
-            displayName: membership.display_name ?? supabaseUser.name ?? supabaseUser.email.split("@")[0] ?? "Member",
-          };
-          setWorkspaceMembership(resolvedMembership);
-          roleRef.current = resolvedMembership.role;
-          actorIdRef.current = volunteerIdForUser(supabaseUser.id);
-          const { data: snapshot, error: snapshotError } = await client
-            .from("workspace_snapshots")
-            .select("church_id, schema_version, data, revision, updated_at")
-            .eq("church_id", membership.church_id)
-            .single();
-          if (!active) return;
-          if (snapshotError) throw snapshotError;
-          const parsedRemote = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(snapshot.data));
-          if (!parsedRemote.success) throw new Error("The church workspace contains data from an unsupported app version.");
-          const connectedDiscipleship = await loadConnectedDiscipleship(client, membership.church_id);
-          const parsedProtectedRemote = neighborWalkDataSchema.safeParse(
-            withSnapshotDiscipleship(parsedRemote.data, connectedDiscipleship),
-          );
-          if (!parsedProtectedRemote.success) throw new Error("The protected discipleship records contain unsupported data.");
-          const protectedRemote = parsedProtectedRemote.data;
-          const cachedForUser = readWorkspaceConnection(supabaseUser.id);
-          const connection = { ...resolvedMembership, revision: Number(snapshot.revision) };
-          workspaceRef.current = connection;
-          writeWorkspaceConnection(connection);
-          const hasLocalChanges = cachedForUser?.churchId === membership.church_id
-            && loaded.sync.mode === "connected"
-            && loaded.sync.pending.length > 0;
-          const selected = hasLocalChanges
-            ? mergePendingWorkspaceChanges(protectedRemote, loaded)
-            : protectedRemote;
-          const selectedForMember = withAuthenticatedVolunteer(selected, resolvedMembership);
-          try {
-            const connectedGuideLibrary = await loadConnectedGuideLibrary(client, membership.church_id, supabaseUser.id);
-            if (!active) return;
-            if (connectedGuideLibrary.guides.length) {
-              setGuideLibrary(connectedGuideLibrary);
-            } else {
-              const fallbackGuide = legacyConversationGuide(selectedForMember.church.id, selectedForMember.guide);
-              setGuideLibrary({ guides: [fallbackGuide], favoriteGuideId: fallbackGuide.id, teamGuideDefaults: {} });
-            }
-            setGuideLibraryError(null);
-          } catch (guideError) {
-            if (!active) return;
-            const fallbackGuide = legacyConversationGuide(selectedForMember.church.id, selectedForMember.guide);
-            setGuideLibrary({ guides: [fallbackGuide], favoriteGuideId: fallbackGuide.id, teamGuideDefaults: {} });
-            setGuideLibraryError(guideError instanceof Error ? guideError.message : "Conversation guides could not be loaded.");
-          }
-          setData({
-            ...selectedForMember,
-            sync: {
-              ...selectedForMember.sync,
-              mode: "connected",
-              lastError: undefined,
-            },
-          });
-          setWorkspaceStatus("ready");
-        } catch (error) {
-          if (!active) return;
-          const cached = readWorkspaceConnection(supabaseUser.id);
-          workspaceRef.current = cached;
-          if (cached) {
-            const cachedMembership: WorkspaceMembership = {
-              churchId: cached.churchId,
-              userId: cached.userId,
-              role: cached.role,
-              email: cached.email,
-              displayName: cached.displayName,
-            };
-            setWorkspaceMembership(cachedMembership);
-            roleRef.current = cachedMembership.role;
-            actorIdRef.current = volunteerIdForUser(supabaseUser.id);
-          }
-          const connectedLoaded = cached
-            ? withAuthenticatedVolunteer(loaded, {
-              churchId: cached.churchId,
-              userId: cached.userId,
-              role: cached.role,
-              email: cached.email,
-              displayName: cached.displayName,
-            })
-            : loaded;
-          setData({
-            ...connectedLoaded,
-            sync: {
-              ...connectedLoaded.sync,
-              mode: "connected",
-              lastError: error instanceof Error ? error.message : "The church workspace could not be reached.",
-            },
-          });
-          setGuideLibrary(readLocalGuideLibrary(loaded.church.id, loaded.guide));
-          setGuideLibraryError("Conversation guides are using this device until the church workspace reconnects.");
-          setWorkspaceStatus(cached ? "ready" : "invitation_required");
+        const getMemberships = () => client.from("church_memberships")
+          .select("church_id, user_id, role, member_email, display_name").eq("user_id", supabaseUser.id).eq("active", true).order("joined_at");
+        let membershipResult = await getMemberships();
+        if (membershipResult.error) throw apiError(membershipResult.error);
+        const token = invitationToken();
+        if (token) {
+          const { error } = await client.rpc("accept_church_invitation", { invitation_token: token });
+          if (error) throw apiError(error);
+          clearInvitationToken();
+          membershipResult = await getMemberships();
+          if (membershipResult.error) throw apiError(membershipResult.error);
         }
+        if (!active) return;
+        const membership = membershipResult.data?.find((m) => m.church_id === cachedConnection?.churchId) ?? membershipResult.data?.[0];
+        if (!membership) {
+          workspaceRef.current = null;
+          setWorkspaceMembership(null);
+          roleRef.current = null;
+          const empty = { ...createSeedData(), events: [], teams: [], territories: [], properties: [], visits: [], residents: [], personNotes: [], followUps: [], guide: [], audit: [] };
+          publish({ ...empty, sync: { mode: "connected", pending: [] } });
+          setWorkspaceStatus("invitation_required");
+          return;
+        }
+        if (membership.role !== "leader" && membership.role !== "volunteer") throw new Error("Unsupported membership role.");
+        const scope = { userId: supabaseUser.id, churchId: membership.church_id };
+        cached = await loadScopedNeighborWalkData(scope);
+        const { data: remote, info } = await loadOutreachWorkspace(client, membership.church_id, cached?.preferences);
+        if (!active) return;
+        const connection: WorkspaceConnection = {
+          churchId: membership.church_id, userId: supabaseUser.id, role: info.role,
+          email: membership.member_email ?? supabaseUser.email,
+          displayName: membership.display_name ?? supabaseUser.name ?? "Church member",
+          revision: info.revision, verifiedAt: new Date().toISOString(),
+        };
+        workspaceRef.current = connection;
+        roleRef.current = connection.role;
+        actorIdRef.current = volunteerIdForUser(supabaseUser.id);
+        setWorkspaceMembership(connection);
+        writeWorkspaceConnection(connection);
+        await install(cached ? reconcileOutreachWorkspace(remote, cached) : remote, scope);
+        try {
+          const guides = await loadConnectedGuideLibrary(client, scope.churchId, scope.userId);
+          if (!active) return;
+          writeLocalGuideLibrary(guides, scope.churchId, scope.userId);
+          setGuideLibrary(guides);
+          setGuideLibraryError(null);
+        } catch {
+          setGuideLibrary(readLocalGuideLibrary(scope.churchId, [], scope.userId));
+          setGuideLibraryError("The saved guide library is available; refresh online to check for changes.");
+        }
+        setWorkspaceStatus("ready");
       } catch (error) {
-        if (active) setStorageError(error instanceof Error ? error.message : "Could not open device storage.");
-      } finally {
-        if (active) setLoading(false);
-      }
+        if (!active) return;
+        const allowedOffline = cachedConnection?.verifiedAt && cached
+          && Date.now() - Date.parse(cachedConnection.verifiedAt) < 24 * 60 * 60 * 1000
+          && (!navigator.onLine || (error instanceof OutreachApiError && !error.code));
+        if (allowedOffline && supabaseUser && cachedConnection && cached) {
+          workspaceRef.current = cachedConnection;
+          roleRef.current = cachedConnection.role;
+          setWorkspaceMembership(cachedConnection);
+          const scoped = withAuthenticatedVolunteer(cached, cachedConnection);
+          await install({ ...scoped, sync: { ...scoped.sync, lastError: "Offline workspace. Membership must be checked online within 24 hours." } },
+            { userId: supabaseUser.id, churchId: cachedConnection.churchId });
+          setGuideLibrary(readLocalGuideLibrary(cached.church.id, [], supabaseUser.id));
+          setWorkspaceStatus("ready");
+        } else {
+          workspaceRef.current = null;
+          storeRef.current = null;
+          setWorkspaceStatus("locked");
+          setStorageError(error instanceof Error ? error.message : "The church workspace could not be opened.");
+        }
+      } finally { if (active) setLoading(false); }
     };
     void load();
     return () => { active = false; };
@@ -377,30 +306,36 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     }
   }, []);
 
-  useEffect(() => {
-    if (!data) return;
-    const version = ++saveVersion.current;
-    const savingTimer = window.setTimeout(() => setSaving(true), 0);
-    saveQueue.current = saveQueue.current.catch(() => undefined).then(() => saveNeighborWalkData(data));
-    void saveQueue.current
-      .then(() => {
-        if (version === saveVersion.current) setStorageError(null);
-      })
-      .catch((error: unknown) => {
-        if (version === saveVersion.current) setStorageError(error instanceof Error ? error.message : "Changes could not be saved.");
-      })
-      .finally(() => {
-        if (version === saveVersion.current) setSaving(false);
+  const updateData = useCallback(async (updater: (current: NeighborWalkData) => NeighborWalkData, extraOperations?: (current: NeighborWalkData) => CommandOperation[]) => {
+    const store = storeRef.current;
+    if (!store) throw new Error("Open an authorized church workspace before saving.");
+    pendingWritesRef.current += 1;
+    setSaving(true);
+    try {
+      const next = await store.update((current) => {
+        const changed = updater(current);
+        if (changed === current && !extraOperations) return current;
+        const updated = { ...changed, updatedAt: new Date().toISOString() };
+        const scope = storageScopeRef.current;
+        return scope ? stageWorkspaceChange(current, updated, scope, extraOperations?.(current)) : updated;
       });
-    return () => window.clearTimeout(savingTimer);
-  }, [data]);
+      setStorageError(null);
+      return next;
+    } catch (error) {
+      setStorageError(error instanceof Error ? error.message : "This change was not saved. Keep the form open and try again.");
+      throw error;
+    } finally {
+      pendingWritesRef.current -= 1;
+      setSaving(pendingWritesRef.current > 0);
+    }
+  }, []);
 
-  const updateData = useCallback((updater: (current: NeighborWalkData) => NeighborWalkData) => {
-    setData((current) => {
-      if (!current) return current;
-      const next = updater(current);
-      return next === current ? current : { ...next, updatedAt: new Date().toISOString() };
-    });
+  useEffect(() => {
+    const guard = (event: BeforeUnloadEvent) => {
+      if (pendingWritesRef.current > 0) { event.preventDefault(); event.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
   }, []);
 
   const addAudit = (
@@ -423,7 +358,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     }, ...current.audit].slice(0, 1000),
     sync: {
       ...current.sync,
-      pending: [...current.sync.pending, mutation(entityType, entityId, operation)].slice(-2000),
+      pending: [...current.sync.pending, mutation(entityType, entityId, operation)],
     },
   });
 
@@ -431,22 +366,22 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     key: K,
     value: NeighborWalkData["preferences"][K],
   ) => {
-    updateData((current) => ({
+    return updateData((current) => ({
       ...current,
       preferences: { ...current.preferences, [key]: value },
     }));
   }, [updateData]);
 
   const selectTerritory = useCallback((territoryId: string) => {
-    updateData((current) => ({
+    return updateData((current) => ({
       ...current,
       preferences: { ...current.preferences, activeTerritoryId: territoryId },
     }));
   }, [updateData]);
 
-  const addProperty = useCallback((input: NewPropertyInput) => {
+  const addProperty = useCallback(async (input: NewPropertyInput) => {
     const propertyId = createId("property");
-    updateData((current) => {
+    await updateData((current) => {
       const now = new Date().toISOString();
       const property: Property = {
         id: propertyId,
@@ -461,7 +396,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         visitCount: 0,
         createdAt: now,
         updatedAt: now,
-        source: "map",
+        source: input.coordinates ? "map" : "manual",
       };
       return addAudit(
         { ...current, properties: [...current.properties, property] },
@@ -477,7 +412,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const associatePropertiesWithParcel = useCallback((propertyIds: string[], parcel: ParcelReference) => {
     const targetIds = new Set(propertyIds);
     if (!targetIds.size) return;
-    updateData((current) => {
+    return updateData((current) => {
       const changed = current.properties.filter((property) => (
         targetIds.has(property.id)
         && (property.parcel?.countyFips !== parcel.countyFips || property.parcel.gislink !== parcel.gislink)
@@ -501,7 +436,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [updateData]);
 
   const updateProperty = useCallback((propertyId: string, patch: Pick<Property, "address" | "unit">) => {
-    updateData((current) => addAudit({
+    return updateData((current) => addAudit({
       ...current,
       properties: current.properties.map((property) => property.id === propertyId
         ? { ...property, address: patch.address.trim(), unit: patch.unit?.trim() || undefined, updatedAt: new Date().toISOString() }
@@ -510,7 +445,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [updateData]);
 
   const deleteProperty = useCallback((propertyId: string) => {
-    updateData((current) => {
+    return updateData((current) => {
       const property = current.properties.find((item) => item.id === propertyId);
       const hasPeople = current.residents.some((resident) => resident.propertyId === propertyId);
       if (!property || property.visitCount > 0 || property.currentOutcome === "do_not_visit" || hasPeople) return current;
@@ -522,7 +457,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [updateData]);
 
   const recordVisit = useCallback((input: VisitInput) => {
-    updateData((current) => {
+    return updateData((current) => {
       const property = current.properties.find((item) => item.id === input.propertyId);
       if (!property) return current;
       const linkedResident = input.residentId
@@ -548,12 +483,13 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         // Person-linked care notes stay with the protected task instead of the
         // church-wide visit snapshot.
         objectiveNote: linkedResident ? undefined : objectiveNote,
+        residentId: input.residentId,
         recordedAt: now,
         deviceId: deviceId(),
       };
       const nextProperties = current.properties.map((item) => item.id === property.id ? {
         ...item,
-        currentOutcome: input.outcome,
+        currentOutcome: item.currentOutcome === "do_not_visit" ? "do_not_visit" as const : input.outcome,
         lastVisitedAt: now,
         visitCount: item.visitCount + 1,
         updatedAt: now,
@@ -581,9 +517,10 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           residentId: input.residentId,
           sourceVisitId: visitId,
           assignedTeamId: input.assignedTeamId,
+          assignedVolunteerId: linkedResident?.assignedVolunteerId ?? actorId,
           dueAt: input.followUpDate
-            ? new Date(`${input.followUpDate}T17:00:00`).toISOString()
-            : dueDateFromNow(current.church.defaultFollowUpDays),
+            ? input.followUpDate
+            : dueDateFromNow(current.church.defaultFollowUpDays, current.church.timezone),
           note: objectiveNote,
         }, actorId, now)];
       }
@@ -609,14 +546,14 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           pending: [
             ...result.sync.pending,
             ...[...protectedFollowUpMutationIds].map((followUpId) => mutation("person_follow_up", followUpId)),
-          ].slice(-2000),
+          ],
         },
       };
     });
   }, [updateData]);
 
   const completeFollowUp = useCallback((followUpId: string, input: FollowUpCompletionInput = {}) => {
-    updateData((current) => {
+    return updateData((current) => {
       const existing = current.followUps.find((followUp) => followUp.id === followUpId && followUp.status === "scheduled");
       if (!existing) return current;
       const completionNote = input.completionNote?.trim() || undefined;
@@ -659,7 +596,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         residentId: existing.residentId,
         sourceVisitId: existing.sourceVisitId,
         assignedTeamId: input.nextFollowUp.assignedTeamId,
-        dueAt: nextDueAt.toISOString(),
+        assignedVolunteerId: existing.assignedVolunteerId,
+        channel: existing.channel,
+        dueAt: input.nextFollowUp.dueAt,
         note,
         parentFollowUpId: existing.id,
       }, actorId, now);
@@ -669,7 +608,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [updateData]);
 
   const rescheduleFollowUp = useCallback((followUpId: string, date: string, note?: string) => {
-    updateData((current) => {
+    return updateData((current) => {
       const dueAt = new Date(`${date}T17:00:00`);
       const existing = current.followUps.find((followUp) => followUp.id === followUpId && followUp.status === "scheduled");
       if (!date || Number.isNaN(dueAt.getTime()) || !existing) return current;
@@ -678,14 +617,14 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       return addAudit({
         ...current,
         followUps: current.followUps.map((followUp) => followUp.id === followUpId
-          ? changeFollowUp(followUp, { action: "rescheduled", dueAt: dueAt.toISOString(), note: activityNote }, actorIdRef.current ?? current.preferences.activeVolunteerId, now)
+          ? changeFollowUp(followUp, { action: "rescheduled", dueAt: date, note: activityNote }, actorIdRef.current ?? current.preferences.activeVolunteerId, now)
           : followUp),
       }, existing.residentId ? "person_follow_up" : "follow_up", followUpId, "follow_up.rescheduled", "Follow-up date changed");
     });
   }, [updateData]);
 
   const cancelFollowUp = useCallback((followUpId: string, note?: string) => {
-    updateData((current) => {
+    return updateData((current) => {
       const existing = current.followUps.find((followUp) => followUp.id === followUpId && followUp.status === "scheduled");
       if (!existing) return current;
       const now = new Date().toISOString();
@@ -698,9 +637,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     });
   }, [updateData]);
 
-  const addPersonFollowUp = useCallback((residentId: string, note: string, date: string) => {
+  const addPersonFollowUp = useCallback(async (residentId: string, note: string, date: string) => {
     const followUpId = createId("followup");
-    updateData((current) => {
+    await updateData((current) => {
       const resident = current.residents.find((item) => item.id === residentId);
       const trimmedNote = note.trim();
       const dueAt = new Date(`${date}T17:00:00`);
@@ -711,7 +650,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         churchId: current.church.id,
         propertyId: resident.propertyId,
         residentId,
-        dueAt: dueAt.toISOString(),
+        dueAt: date,
+        assignedVolunteerId: resident.assignedVolunteerId,
         note: trimmedNote,
       }, actorIdRef.current ?? current.preferences.activeVolunteerId, now);
       return addAudit({
@@ -722,11 +662,11 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     return followUpId;
   }, [updateData]);
 
-  const upsertResident = useCallback((propertyId: string, input: ResidentInput, residentId?: string) => {
+  const upsertResident = useCallback(async (propertyId: string | undefined, input: ResidentInput, residentId?: string) => {
     const requestedId = residentId ?? createId("resident");
-    updateData((current) => {
+    await updateData((current) => {
       const property = current.properties.find((item) => item.id === propertyId);
-      if (!property) return current;
+      if (propertyId && !property) throw new Error("Choose an available location or leave the address blank.");
       const existing = residentId ? current.residents.find((resident) => resident.id === residentId) : undefined;
       const now = new Date().toISOString();
       const id = existing?.id ?? requestedId;
@@ -734,7 +674,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       const resident = {
         id,
         churchId: current.church.id,
+        ...existing,
         propertyId,
+        contactPermission: input.contactPermission ?? existing?.contactPermission ?? "not_recorded",
         name: input.name?.trim() || undefined,
         faithStatus: input.faithStatus,
         discipleshipStage: input.discipleshipStage,
@@ -755,14 +697,14 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         residents: existing
           ? current.residents.map((item) => item.id === id ? resident : item)
           : [...current.residents, resident],
-      }, "resident", id, existing ? "resident.updated" : "resident.created", `Person record ${existing ? "updated" : "added"} at ${property.address}`);
+      }, "resident", id, existing ? "resident.updated" : "resident.created", `Person record ${existing ? "updated" : "added"}${property ? ` at ${property.address}` : ""}`);
     });
     return requestedId;
   }, [updateData]);
 
-  const addPersonNote = useCallback((residentId: string, kind: PersonNoteKind, body: string, createdAt?: string) => {
+  const addPersonNote = useCallback(async (residentId: string, kind: PersonNoteKind, body: string, createdAt?: string) => {
     const noteId = createId("person_note");
-    updateData((current) => {
+    await updateData((current) => {
       const resident = current.residents.find((item) => item.id === residentId);
       const trimmedBody = body.trim();
       if (!resident || !trimmedBody || trimmedBody.length > current.church.noteCharacterLimit) return current;
@@ -787,7 +729,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [updateData]);
 
   const deletePersonNote = useCallback((noteId: string) => {
-    updateData((current) => {
+    return updateData((current) => {
       const note = current.personNotes.find((item) => item.id === noteId);
       if (!note) return current;
       return addAudit({
@@ -798,7 +740,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [updateData]);
 
   const deleteResident = useCallback((residentId: string) => {
-    updateData((current) => {
+    return updateData((current) => {
       if (!current.residents.some((resident) => resident.id === residentId)) return current;
       const noteIds = current.personNotes.filter((note) => note.residentId === residentId).map((note) => note.id);
       const followUpIds = current.followUps.filter((followUp) => followUp.residentId === residentId).map((followUp) => followUp.id);
@@ -816,7 +758,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
             ...deleted.sync.pending,
             ...noteIds.map((noteId) => mutation("person_note", noteId, "delete")),
             ...followUpIds.map((followUpId) => mutation("person_follow_up", followUpId, "delete")),
-          ].slice(-2000),
+          ],
         },
       };
     });
@@ -824,16 +766,31 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
   const updateChurch = useCallback((patch: Partial<NeighborWalkData["church"]>) => {
     if (supabaseUser && roleRef.current !== "leader") return;
-    updateData((current) => addAudit({
+    return updateData((current) => addAudit({
       ...current,
       church: { ...current.church, ...patch },
     }, "settings", current.church.id, "settings.updated", "Church settings updated"));
   }, [supabaseUser, updateData]);
 
-  const addTerritory = useCallback((input: NewTerritoryInput) => {
+  const assignFollowUp = useCallback((id: string, volunteerId: string) => updateData((current) => ({
+    ...current, followUps: current.followUps.map((task) => task.id === id ? { ...task, assignedVolunteerId: volunteerId,
+      acceptance: volunteerId === current.preferences.activeVolunteerId ? "accepted" : "pending" } : task),
+  })), [updateData]);
+
+  const acceptFollowUp = useCallback((id: string, acceptance: "accepted" | "declined") => updateData((current) => ({
+    ...current, followUps: current.followUps.map((task) => task.id === id ? { ...task, acceptance } : task),
+  })), [updateData]);
+
+  const handoffPerson = useCallback((id: string, action: "request" | "accept" | "decline" | "cancel", assignedVolunteerId?: string) => {
+    if (!storageScopeRef.current) return Promise.reject(new Error("Care handoffs require a connected church workspace."));
+    return updateData((current) => current, (current) => [{ entityType: "handoff", entityId: id, operation: "upsert",
+      expectedVersion: current.sync.recordVersions?.[versionKey("resident", id)] ?? 0, record: { action, assignedVolunteerId } }]);
+  }, [updateData]);
+
+  const addTerritory = useCallback(async (input: NewTerritoryInput) => {
     const territoryId = createId("territory");
     if (supabaseUser && roleRef.current !== "leader") return territoryId;
-    updateData((current) => {
+    await updateData((current) => {
       const territory: Territory = {
         id: territoryId,
         churchId: current.church.id,
@@ -859,7 +816,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
   const updateTerritory = useCallback((territoryId: string, update: TerritoryUpdate) => {
     if (supabaseUser && roleRef.current !== "leader") return;
-    updateData((current) => {
+    return updateData((current) => {
       const existing = current.territories.find((territory) => territory.id === territoryId);
       if (!existing) return current;
       const boundaryChanged = Boolean(update.boundary);
@@ -875,7 +832,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
   const deleteTerritory = useCallback((territoryId: string, destinationTerritoryId: string) => {
     if (supabaseUser && roleRef.current !== "leader") return;
-    updateData((current) => {
+    return updateData((current) => {
       const territory = current.territories.find((item) => item.id === territoryId);
       const destination = current.territories.find((item) => item.id === destinationTerritoryId);
       if (!territory || !destination || territory.eventId !== destination.eventId) return current;
@@ -885,15 +842,16 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       const audited = addAudit(reassigned, "territory", territoryId, "territory.deleted", `${territory.name} deleted; ${movedLocationCount} locations moved to ${destination.name}`, "delete");
       return {
         ...audited,
-        sync: { ...audited.sync, pending: [...audited.sync.pending, mutation("data", current.church.id)].slice(-2000) },
+        sync: { ...audited.sync, pending: audited.sync.pending.map((item) => item.entityType === "territory" && item.entityId === territoryId && item.operation === "delete"
+          ? { ...item, destinationTerritoryId } : item) },
       };
     });
   }, [supabaseUser, updateData]);
 
-  const addTeam = useCallback((update: TeamUpdate) => {
+  const addTeam = useCallback(async (update: TeamUpdate) => {
     const teamId = createId("team");
     if (supabaseUser && roleRef.current !== "leader") return teamId;
-    updateData((current) => addAudit({
+    await updateData((current) => addAudit({
       ...current,
       teams: [...current.teams, {
         id: teamId,
@@ -908,9 +866,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     return teamId;
   }, [supabaseUser, updateData]);
 
-  const updateTeam = useCallback((teamId: string, update: TeamUpdate) => {
-    if (supabaseUser && roleRef.current !== "leader") return;
-    updateData((current) => addAudit({
+  const updateTeam = useCallback(async (teamId: string, update: TeamUpdate) => {
+    if (supabaseUser && roleRef.current !== "leader") throw new Error("Only a church leader can edit groups.");
+    return updateData((current) => addAudit({
       ...current,
       teams: current.teams.map((team) => team.id === teamId
         ? { ...team, name: update.name.trim(), memberIds: [...new Set(update.memberIds)], status: update.status }
@@ -918,9 +876,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     }, "team", teamId, "team.updated", `${update.name.trim()} updated`));
   }, [supabaseUser, updateData]);
 
-  const deleteTeam = useCallback((teamId: string) => {
-    if (supabaseUser && roleRef.current !== "leader") return;
-    updateData((current) => {
+  const deleteTeam = useCallback(async (teamId: string) => {
+    if (supabaseUser && roleRef.current !== "leader") throw new Error("Only a church leader can archive groups.");
+    return updateData((current) => {
       const team = current.teams.find((item) => item.id === teamId);
       if (!team) return current;
       return addAudit(
@@ -972,7 +930,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     const next = { ...guideLibrary, guides: nextGuides };
     setGuideLibrary(next);
     setGuideLibraryError(null);
-    if (!supabaseUser || !client || !workspace) writeLocalGuideLibrary(next);
+    writeLocalGuideLibrary(next, dataRef.current?.church.id, supabaseUser?.id);
     return saved;
   }, [guideLibrary, supabaseUser]);
 
@@ -994,7 +952,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     };
     setGuideLibrary(next);
     setGuideLibraryError(null);
-    if (!supabaseUser || !client || !workspace) writeLocalGuideLibrary(next);
+    writeLocalGuideLibrary(next, dataRef.current?.church.id, supabaseUser?.id);
   }, [guideLibrary, supabaseUser]);
 
   const setTeamConversationGuide = useCallback(async (teamId: string, guideId?: string) => {
@@ -1018,7 +976,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     const next = { ...guideLibrary, teamGuideDefaults };
     setGuideLibrary(next);
     setGuideLibraryError(null);
-    if (!supabaseUser || !client || !workspace) writeLocalGuideLibrary(next);
+    writeLocalGuideLibrary(next, dataRef.current?.church.id, supabaseUser?.id);
   }, [guideLibrary, supabaseUser]);
 
   const setFavoriteConversationGuide = useCallback(async (guideId: string) => {
@@ -1031,7 +989,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     const next = { ...guideLibrary, favoriteGuideId: guideId };
     setGuideLibrary(next);
     setGuideLibraryError(null);
-    if (!supabaseUser || !client || !workspace) writeLocalGuideLibrary(next);
+    writeLocalGuideLibrary(next, dataRef.current?.church.id, supabaseUser?.id);
   }, [guideLibrary, supabaseUser]);
 
   const downloadBackup = useCallback(() => {
@@ -1048,6 +1006,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
   const importBackup = useCallback(async (file: File) => {
     if (supabaseUser && roleRef.current !== "leader") throw new Error("Only a church leader can import workspace data.");
+    if (supabaseUser) throw new Error("Connected restore requires the reviewed server recovery workflow. No records were changed.");
     const imported = await importNeighborWalkFile(file);
     const connected = Boolean(supabaseUser && getSupabaseBrowserClient());
     const previous = dataRef.current;
@@ -1072,8 +1031,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [supabaseUser]);
 
   const clearOutreachData = useCallback(() => {
+    if (supabaseUser) throw new Error("Shared records cannot be bulk-cleared from this device. Use reviewed archive and retention actions.");
     if (supabaseUser && roleRef.current !== "leader") return;
-    updateData((current) => {
+    return updateData((current) => {
       const removed = current.properties.length + current.visits.length + current.followUps.length + current.residents.length + current.personNotes.length;
       const cleared = addAudit({
         ...current,
@@ -1093,15 +1053,16 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
             ...current.personNotes.map((note) => mutation("person_note", note.id, "delete")),
             ...current.followUps.filter((followUp) => followUp.residentId).map((followUp) => mutation("person_follow_up", followUp.id, "delete")),
             ...current.residents.map((resident) => mutation("resident", resident.id, "delete")),
-          ].slice(-2000),
+          ],
         },
       };
     });
   }, [supabaseUser, updateData]);
 
   const purgeExpired = useCallback(() => {
+    if (supabaseUser) throw new Error("Shared retention requires a server preview and confirmation. No records were changed.");
     if (supabaseUser && roleRef.current !== "leader") return;
-    updateData((current) => {
+    return updateData((current) => {
       const before = current.visits.length;
       const retained = enforceRetention(current);
       const removedResidentIds = new Set(current.residents.filter((resident) => !retained.residents.some((candidate) => candidate.id === resident.id)).map((resident) => resident.id));
@@ -1117,7 +1078,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
             ...removedNotes.map((note) => mutation("person_note", note.id, "delete")),
             ...removedPersonFollowUps.map((followUp) => mutation("person_follow_up", followUp.id, "delete")),
             ...removedResidentIds.values().map((residentId) => mutation("resident", residentId, "delete")),
-          ].slice(-2000),
+          ],
         },
       };
     });
@@ -1125,90 +1086,67 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
   const runSync = useCallback(async () => {
     const client = getSupabaseBrowserClient();
-    let workspace = workspaceRef.current;
-    let candidate = dataRef.current;
-    if (!candidate || !client || !supabaseUser || !workspace || !onlineRef.current) return false;
-    if (!candidate.sync.pending.length) return true;
+    const workspace = workspaceRef.current;
+    const store = storeRef.current;
+    if (!store || !client || !supabaseUser || !workspace || !onlineRef.current || store.snapshot.sync.legacyRecoveryRequired) return false;
     setSyncing(true);
+    let submittedId: string | undefined;
     try {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const submittedMutationIds = new Set(candidate.sync.pending.map((item) => item.id));
-        const submittedUpdatedAt = candidate.updatedAt;
-        const syncedAt = new Date().toISOString();
-        const submittedData: NeighborWalkData = {
-          ...enforceRetention(candidate),
-          sync: { ...candidate.sync, mode: "connected", pending: [], lastSyncedAt: syncedAt, lastError: undefined },
-        };
-        await persistConnectedDiscipleship(client, workspace.churchId, supabaseUser.id, candidate);
-        const snapshotData = withoutSnapshotDiscipleship(submittedData);
-        const { data: saved, error } = await client
-          .from("workspace_snapshots")
-          .update({ schema_version: snapshotData.schemaVersion, data: snapshotData as unknown as Json })
-          .eq("church_id", workspace.churchId)
-          .eq("revision", workspace.revision)
-          .select("revision, data, updated_at")
-          .maybeSingle();
-        if (error) throw error;
-
-        if (saved) {
-          const parsedServerData = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(saved.data));
-          if (!parsedServerData.success) throw new Error("Sync returned invalid data.");
-          const protectedServerData = withAuthenticatedVolunteer(
-            withSnapshotDiscipleship(parsedServerData.data, submittedData), workspace,
-          );
-          const nextConnection = { ...workspace, revision: Number(saved.revision) };
-          workspaceRef.current = nextConnection;
-          writeWorkspaceConnection(nextConnection);
-          setData((current) => {
-            if (!current) return current;
-            const pending = current.sync.pending.filter((item) => !submittedMutationIds.has(item.id));
-            const sync = { ...current.sync, mode: "connected" as const, pending, lastSyncedAt: syncedAt, lastError: undefined };
-            const next = current.updatedAt !== submittedUpdatedAt
-              ? { ...current, sync }
-              : { ...protectedServerData, sync: { ...protectedServerData.sync, ...sync } };
-            dataRef.current = next;
-            return next;
-          });
-          autoRetryAttemptRef.current = 0;
-          return true;
-        }
-
-        if (attempt > 0) throw new Error("Another device is still saving changes.");
-        const latestSnapshot = await fetchWorkspaceSnapshot(client, workspace.churchId);
-        const parsedLatest = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(latestSnapshot.data));
-        if (!parsedLatest.success) throw new Error("The latest church workspace data is invalid.");
-        const latestDiscipleship = await loadConnectedDiscipleship(client, workspace.churchId);
-        const parsedProtectedLatest = neighborWalkDataSchema.safeParse(
-          withSnapshotDiscipleship(parsedLatest.data, latestDiscipleship),
-        );
-        if (!parsedProtectedLatest.success) throw new Error("The latest protected discipleship records are invalid.");
-        const protectedLatest = withAuthenticatedVolunteer(parsedProtectedLatest.data, workspace);
-        workspace = { ...workspace, revision: Number(latestSnapshot.revision) };
-        workspaceRef.current = workspace;
-        writeWorkspaceConnection(workspace);
-        candidate = mergePendingWorkspaceChanges(protectedLatest, dataRef.current ?? candidate);
-        dataRef.current = candidate;
-        setData(candidate);
+      await store.settled();
+      for (let count = 0; count < 50; count += 1) {
+        const queued = store.snapshot.sync.commands?.[0];
+        if (!queued || queued.state === "needs_review") break;
+        submittedId = queued.command.id;
+        const receipt = await submitOutreachCommand(client, queued.command);
+        await store.update((current) => {
+          const commands = (current.sync.commands ?? []).filter((q) => q.command.id !== receipt.id);
+          return { ...current, sync: { ...current.sync, commands, pending: commandPending(commands), warnings: receipt.warnings, lastError: undefined } };
+        });
+        submittedId = undefined;
       }
-      return false;
+      const { data: remote, info } = await loadOutreachWorkspace(client, workspace.churchId, store.snapshot.preferences);
+      await store.update((current) => reconcileOutreachWorkspace(remote, current));
+      const connection = { ...workspace, role: info.role, revision: info.revision, verifiedAt: new Date().toISOString() };
+      workspaceRef.current = connection;
+      roleRef.current = connection.role;
+      setWorkspaceMembership(connection);
+      writeWorkspaceConnection(connection);
+      try {
+        const guides = await loadConnectedGuideLibrary(client, workspace.churchId, supabaseUser.id);
+        writeLocalGuideLibrary(guides, workspace.churchId, supabaseUser.id);
+        setGuideLibrary(guides);
+        setGuideLibraryError(null);
+      } catch { setGuideLibraryError("Guides could not refresh. Your saved library is still available."); }
+      autoRetryAttemptRef.current = 0;
+      return !store.snapshot.sync.commands?.some((q) => q.state === "needs_review");
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "The sync service could not be reached.";
-      setData((current) => {
-        if (!current) return current;
-        const next = {
-          ...current,
-          sync: {
-            ...current.sync,
-            lastError: `Changes are safe on this device. Automatic sync will retry. ${detail}`,
+      const detail = error instanceof Error ? error.message : "The church service could not be reached.";
+      if (error instanceof OutreachApiError && /^(42501|PGRST3)/.test(error.code ?? "")) {
+        const membershipCheck = await client.rpc("outreach_workspace_info", { target_church: workspace.churchId });
+        if (membershipCheck.error && /^(42501|PGRST3)/.test(membershipCheck.error.code ?? "")) {
+          // Keep unsent work in its account-scoped cache, but immediately lock
+          // the visible workspace when current membership cannot authorize it.
+          writeWorkspaceConnection({ ...workspace, verifiedAt: "" });
+          workspaceRef.current = null;
+          storeRef.current = null;
+          dataRef.current = null;
+          setData(null);
+          setWorkspaceStatus("locked");
+          setStorageError("This account no longer has an authorized church session. Unsent work is preserved on this device. Sign in again or ask your church leader for help.");
+          return false;
+        }
+      }
+      const needsReview = error instanceof OutreachApiError && error.needsReview;
+      try {
+        await store.update((current) => ({
+          ...current, sync: { ...current.sync,
+            commands: current.sync.commands?.map((q) => q.command.id === submittedId && needsReview ? { ...q, state: "needs_review", error: detail } : q),
+            lastError: needsReview ? `A queued change needs review: ${detail}` : `Not shared yet. Your queued work remains on this device. ${detail}`,
           },
-        };
-        dataRef.current = next;
-        return next;
-      });
+        }));
+      } catch { setStorageError("Device storage could not confirm the sync receipt. Keep this app open; the original command can be retried safely."); }
       return false;
-    } finally {
-      setSyncing(false);
-    }
+    } finally { setSyncing(false); }
   }, [supabaseUser]);
 
   const syncNow = useCallback(() => {
@@ -1223,7 +1161,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const pendingCount = data?.sync.pending.length ?? 0;
   const pendingVersion = data?.sync.pending.at(-1)?.id ?? "none";
   useEffect(() => {
-    if (!online || workspaceStatus !== "ready" || pendingCount === 0) return;
+    if (!online || workspaceStatus !== "ready" || pendingCount === 0 || dataRef.current?.sync.legacyRecoveryRequired
+      || dataRef.current?.sync.commands?.[0]?.state === "needs_review") return;
     const retryDelay = autoRetryAttemptRef.current === 0
       ? AUTO_SYNC_DELAY_MS
       : Math.min(AUTO_SYNC_MAX_RETRY_MS, 1000 * (2 ** autoRetryAttemptRef.current));
@@ -1245,15 +1184,21 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       if (document.visibilityState === "hidden") {
         void syncNow();
       } else {
-        setAutoRetryTick((current) => current + 1);
+        void syncNow();
       }
     };
-    const retryOnFocus = () => setAutoRetryTick((current) => current + 1);
+    const retryOnFocus = () => { void syncNow(); };
+    const refresh = window.setInterval(() => {
+      if (document.visibilityState === "visible") void syncNow();
+    }, 30_000);
     document.addEventListener("visibilitychange", retryVisibleChanges);
     window.addEventListener("focus", retryOnFocus);
+    window.addEventListener("online", retryOnFocus);
     return () => {
       document.removeEventListener("visibilitychange", retryVisibleChanges);
       window.removeEventListener("focus", retryOnFocus);
+      window.removeEventListener("online", retryOnFocus);
+      window.clearInterval(refresh);
     };
   }, [syncNow]);
 
@@ -1299,6 +1244,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       completeFollowUp,
       rescheduleFollowUp,
       cancelFollowUp,
+      assignFollowUp,
+      acceptFollowUp,
+      handoffPerson,
       addPersonFollowUp,
       upsertResident,
       addPersonNote,

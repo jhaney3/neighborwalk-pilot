@@ -6,6 +6,7 @@ import {
   type NeighborWalkData,
 } from "./domain";
 import { createSeedData } from "./seed";
+import { calendarDate } from "./calendar";
 import { storageKey } from "./environment";
 import {
   DEFAULT_MAP_STYLE_URL,
@@ -17,7 +18,20 @@ import {
 const DB_NAME = storageKey("neighborwalk");
 const DB_VERSION = 1;
 const STORE = "app_state";
-const DATA_KEY = "primary";
+const DATA_KEY = "demo";
+export type StorageScope = { userId: string; churchId: string };
+
+export function scopedStorageKey(scope: StorageScope) {
+  if (!scope.userId || !scope.churchId) throw new Error("An authenticated account and church are required for local records.");
+  return JSON.stringify(["account", scope.userId, scope.churchId]);
+}
+
+export class StorageRecoveryError extends Error {
+  constructor(public readonly backupKey: string) {
+    super("Saved records need recovery. The original data has been preserved; no sample records replaced it. Contact your church leader before clearing browser storage.");
+    this.name = "StorageRecoveryError";
+  }
+}
 
 let databasePromise: Promise<IDBPDatabase> | null = null;
 
@@ -83,6 +97,8 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   });
   const storedPersonNotes = Array.isArray(data.personNotes) ? data.personNotes : [];
   const storedFollowUps = Array.isArray(data.followUps) ? data.followUps : [];
+  const timezone = data.church && typeof data.church === "object" && "timezone" in data.church && typeof data.church.timezone === "string"
+    ? data.church.timezone : defaults.church.timezone;
   const defaultFollowUpDays = data.church && typeof data.church === "object" && !Array.isArray(data.church)
     && typeof (data.church as Record<string, unknown>).defaultFollowUpDays === "number"
     ? Number((data.church as Record<string, unknown>).defaultFollowUpDays)
@@ -158,7 +174,8 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
       : [],
     followUps: [...storedFollowUps, ...migratedNextStepFollowUps]
       .map((followUp) => followUp && typeof followUp === "object"
-        ? { ...followUp as Record<string, unknown>, history: Array.isArray((followUp as Record<string, unknown>).history) ? (followUp as Record<string, unknown>).history : [] }
+        ? { ...followUp as Record<string, unknown>, dueAt: calendarDate(String((followUp as Record<string, unknown>).dueAt), timezone),
+          history: Array.isArray((followUp as Record<string, unknown>).history) ? (followUp as Record<string, unknown>).history : [] }
         : followUp),
     preferences: {
       ...defaults.preferences,
@@ -170,6 +187,9 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
     },
     sync: data.sync && typeof data.sync === "object" && !Array.isArray(data.sync) ? {
       ...data.sync as Record<string, unknown>,
+      legacyRecoveryRequired: Boolean((data.sync as Record<string, unknown>).legacyRecoveryRequired
+        || (version < 11 && Array.isArray((data.sync as Record<string, unknown>).pending)
+          && ((data.sync as Record<string, unknown>).pending as unknown[]).length > 0)),
       pending: Array.isArray((data.sync as Record<string, unknown>).pending)
         ? (data.sync as Record<string, unknown>).pending as unknown[]
         : [],
@@ -178,32 +198,67 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   };
 }
 
-export async function loadNeighborWalkData(): Promise<NeighborWalkData> {
+async function parseStoredData(stored: unknown, key: string): Promise<NeighborWalkData> {
   const database = await getDatabase();
-  const stored = await database.get(STORE, DATA_KEY);
-  if (!stored) {
-    const seeded = createSeedData();
-    await database.put(STORE, seeded, DATA_KEY);
-    return seeded;
+  if (stored && typeof stored === "object" && "schemaVersion" in stored && Number(stored.schemaVersion) < APP_SCHEMA_VERSION) {
+    const archiveKey = `pre-upgrade:${key}:${stored.schemaVersion}`;
+    if (await database.get(STORE, archiveKey) === undefined) await database.put(STORE, stored, archiveKey);
   }
   const migratedCandidate = migrateNeighborWalkData(stored);
   const parsed = neighborWalkDataSchema.safeParse(migratedCandidate);
   if (!parsed.success) {
-    const backupKey = `invalid_${Date.now()}`;
+    const backupKey = `quarantine:${key}:${Date.now()}`;
     await database.put(STORE, stored, backupKey);
-    const seeded = createSeedData();
-    await database.put(STORE, seeded, DATA_KEY);
-    return seeded;
+    throw new StorageRecoveryError(backupKey);
   }
-  const retained = enforceRetention(parsed.data);
-  await database.put(STORE, retained, DATA_KEY);
-  return retained;
+  // Retention is an explicit reviewed operation, not a side effect of opening
+  // a device. This also preserves all queued work during an upgrade.
+  return parsed.data;
 }
 
-export async function saveNeighborWalkData(data: NeighborWalkData): Promise<void> {
-  const parsed = neighborWalkDataSchema.parse(data);
+export async function loadNeighborWalkData(): Promise<NeighborWalkData> {
   const database = await getDatabase();
-  await database.put(STORE, parsed, DATA_KEY);
+  const stored = await database.get(STORE, DATA_KEY);
+  if (stored) return parseStoredData(stored, DATA_KEY);
+  const seeded = createSeedData();
+  await database.put(STORE, seeded, DATA_KEY);
+  return seeded;
+}
+
+export async function loadScopedNeighborWalkData(scope: StorageScope): Promise<NeighborWalkData | null> {
+  const database = await getDatabase();
+  const key = scopedStorageKey(scope);
+  // Bind the former shared cache to its original known owner exactly once,
+  // before connection metadata can be changed by a different sign-in.
+  let legacyOwner = await database.get(STORE, "legacy_owner");
+  if (legacyOwner === undefined) {
+    try {
+      const cached = JSON.parse(window.localStorage.getItem(storageKey("neighborwalk-supabase-workspace")) ?? "null");
+      legacyOwner = cached?.userId && cached?.churchId ? scopedStorageKey(cached) : "unclaimed";
+    } catch { legacyOwner = "unclaimed"; }
+    await database.put(STORE, legacyOwner, "legacy_owner");
+  }
+  let stored = await database.get(STORE, key);
+  if (!stored && legacyOwner === key) {
+    const legacy = await database.get(STORE, "primary");
+    if (legacy) {
+      const parsed = await parseStoredData(legacy, "primary");
+      if (parsed.church.id !== scope.churchId) throw new StorageRecoveryError("primary");
+      await database.put(STORE, parsed, key);
+      stored = parsed;
+    }
+  }
+  if (!stored) return null;
+  const parsed = await parseStoredData(stored, key);
+  if (parsed.church.id !== scope.churchId) throw new StorageRecoveryError(key);
+  return parsed;
+}
+
+export async function saveNeighborWalkData(data: NeighborWalkData, scope?: StorageScope): Promise<void> {
+  const parsed = neighborWalkDataSchema.parse(data);
+  if (scope && scope.churchId !== parsed.church.id) throw new Error("Local records belong to a different church. Nothing was overwritten.");
+  const database = await getDatabase();
+  await database.put(STORE, parsed, scope ? scopedStorageKey(scope) : DATA_KEY);
 }
 
 export async function replaceNeighborWalkData(candidate: unknown): Promise<NeighborWalkData> {
@@ -228,5 +283,6 @@ export async function importNeighborWalkFile(file: File): Promise<NeighborWalkDa
   const text = await file.text();
   const raw = JSON.parse(text) as { data?: unknown; format?: string };
   const candidate = raw?.format === "neighborwalk-backup" ? raw.data : raw;
-  return replaceNeighborWalkData(candidate);
+  // Parsing an upload is not permission to overwrite any local or remote data.
+  return neighborWalkDataSchema.parse(migrateNeighborWalkData(candidate));
 }

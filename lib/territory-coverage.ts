@@ -91,7 +91,7 @@ export function coverageForTerritory(
   const unlinkedTouchedProperties = touchedProperties.filter((property) => !property.parcel);
   const touched = residentialParcels.filter((parcel) => (
     touchedParcelKeys.has(parcelKey(parcel.properties))
-    || unlinkedTouchedProperties.some((property) => geometryContainsPoint(parcel.geometry, property.coordinates))
+    || unlinkedTouchedProperties.some((property) => property.coordinates && geometryContainsPoint(parcel.geometry, property.coordinates))
   )).length;
 
   return {

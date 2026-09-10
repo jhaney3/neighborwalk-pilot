@@ -1,7 +1,8 @@
 "use client";
 
 import { AlertTriangle, Bell, BookOpenText, Check, Church, CloudOff, Database, Download, FileJson, LockKeyhole, LogOut, MapPinned, RefreshCcw, Save, Smartphone, Star, Trash2, Upload, Wifi } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { requestAppInstall } from "../lib/install";
 import { isSafeWebUrl, type ConversationGuide, type NeighborWalkData } from "../lib/domain";
 import { Modal, ViewHeading } from "./ui";
 
@@ -48,7 +49,6 @@ export function SettingsView({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState("");
-  const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [churchName, setChurchName] = useState(data.church.name);
   const [timezone, setTimezone] = useState(data.church.timezone);
   const [noteLimit, setNoteLimit] = useState(String(data.church.noteCharacterLimit));
@@ -60,30 +60,15 @@ export function SettingsView({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updatingPassword, setUpdatingPassword] = useState(false);
 
-  useEffect(() => {
-    const handleInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event);
-    };
-    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
-  }, []);
-
   const requestNotifications = async () => {
     if (!("Notification" in window)) return setMessage("Notifications are not available in this browser.");
     const permission = await Notification.requestPermission();
     onSetPreference("notificationsEnabled", permission === "granted");
-    setMessage(permission === "granted" ? "Follow-up notifications are enabled on this device." : "Follow-up notifications remain off on this device.");
+    setMessage(permission === "granted" ? "Notifications are enabled while NeighborWalk is open. These are not scheduled reminders and will not arrive when the app is closed." : "Notifications remain off on this device.");
   };
 
   const installApp = async () => {
-    const prompt = installPrompt as Event & { prompt?: () => Promise<void>; userChoice?: Promise<{ outcome: string }> };
-    if (prompt.prompt) {
-      await prompt.prompt();
-      setMessage("Install request opened.");
-    } else {
-      setMessage("Use your browser’s Add to Home Screen command to install NeighborWalk.");
-    }
+    setMessage(await requestAppInstall());
   };
 
   const saveChurchProfile = () => {

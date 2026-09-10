@@ -1,4 +1,6 @@
 "use client";
+import { useAsyncAction } from "../lib/use-async-action";
+import { Modal } from "./ui";
 
 import { Check, Copy, Link2, PencilLine, Plus, RefreshCcw, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -28,9 +30,9 @@ function memberLabel(member: Member) {
 export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDeleteTeam }: {
   membership: WorkspaceMembership;
   teams: Team[];
-  onAddTeam: (update: TeamUpdate) => string;
-  onUpdateTeam: (teamId: string, update: TeamUpdate) => void;
-  onDeleteTeam: (teamId: string) => void;
+  onAddTeam: (update: TeamUpdate) => Promise<unknown>;
+  onUpdateTeam: (teamId: string, update: TeamUpdate) => Promise<unknown>;
+  onDeleteTeam: (teamId: string) => Promise<unknown>;
 }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -206,14 +208,14 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
         team={editingTeam === "new" ? undefined : editingTeam}
         members={members.filter((member) => member.active)}
         onClose={() => setEditingTeam(null)}
-        onSave={(update) => {
-          if (editingTeam === "new") onAddTeam(update);
-          else onUpdateTeam(editingTeam.id, update);
+        onSave={async (update) => {
+          if (editingTeam === "new") await onAddTeam(update);
+          else await onUpdateTeam(editingTeam.id, update);
           setEditingTeam(null);
         }}
-        onDelete={editingTeam === "new" ? undefined : () => {
+        onDelete={editingTeam === "new" ? undefined : async () => {
           if (window.confirm(`Delete ${editingTeam.name}? Territory and follow-up assignments will become unassigned.`)) {
-            onDeleteTeam(editingTeam.id);
+            await onDeleteTeam(editingTeam.id);
             setEditingTeam(null);
           }
         }}
@@ -226,16 +228,15 @@ function TeamEditor({ team, members, onClose, onSave, onDelete }: {
   team?: Team;
   members: Member[];
   onClose: () => void;
-  onSave: (update: TeamUpdate) => void;
-  onDelete?: () => void;
+  onSave: (update: TeamUpdate) => Promise<unknown>;
+  onDelete?: () => Promise<unknown>;
 }) {
   const [name, setName] = useState(team?.name ?? "");
+  const action = useAsyncAction();
   const [status, setStatus] = useState<Team["status"]>(team?.status ?? "ready");
   const [memberIds, setMemberIds] = useState<string[]>(team?.memberIds ?? []);
   const volunteerId = (userId: string) => `volunteer_${userId.replaceAll("-", "")}`;
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-    <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="team-editor-title">
-      <div className="modal-heading"><div><h2 id="team-editor-title">{team ? "Edit outreach group" : "Create outreach group"}</h2><p>Groups organize your church members without changing their account access.</p></div><button className="close-button" onClick={onClose} aria-label="Close dialog">×</button></div>
+  return <Modal title={team ? "Edit outreach group" : "Create outreach group"} description="Groups organize members without changing account access." onClose={action.busy ? () => undefined : onClose}>
       <div className="form-stack">
         <label className="form-field"><span>Group name</span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: Team Barnabas" /></label>
         <label className="form-field"><span>Field status</span><select value={status} onChange={(event) => setStatus(event.target.value as Team["status"])}><option value="ready">Ready</option><option value="active">Active</option><option value="finished">Finished</option></select></label>
@@ -244,7 +245,7 @@ function TeamEditor({ team, members, onClose, onSave, onDelete }: {
           return <label key={member.user_id} aria-label={`Include ${memberLabel(member)} in this group`}><input type="checkbox" checked={memberIds.includes(id)} onChange={(event) => setMemberIds((current) => event.target.checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} /><span><strong>{memberLabel(member)}</strong><small>{member.member_email ?? member.role}</small></span></label>;
         })}{!members.length && <p>No active members are available yet.</p>}</fieldset>
       </div>
-      <div className="modal-actions split">{onDelete ? <button className="button danger" onClick={onDelete}><Trash2 size={14} /> Delete group</button> : <span />}<div><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={name.trim().length < 2} onClick={() => onSave({ name, memberIds, status })}><Check size={14} /> Save group</button></div></div>
-    </section>
-  </div>;
+      <div className="modal-actions split">{onDelete ? <button className="button danger" disabled={action.busy} onClick={() => void action.run(onDelete)}><Trash2 size={14} /> Delete group</button> : <span />}<div><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={name.trim().length < 2 || action.busy} onClick={() => void action.run(() => onSave({ name, memberIds, status }))}><Check size={14} /> Save group</button></div></div>
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+  </Modal>;
 }

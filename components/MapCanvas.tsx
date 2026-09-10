@@ -70,6 +70,7 @@ type Props = {
   onAssociatePropertiesWithParcel: (propertyIds: string[], parcel: ParcelDetails) => void;
   onDraftBoundaryChange: (points: Coordinates[]) => void;
   onViewportChange: (viewport: MapViewport) => void;
+  onUseAddressList?: () => void;
 };
 
 function polygonFeature(points: Coordinates[]): Feature<Polygon> | null {
@@ -116,6 +117,7 @@ function mappedLocationFeatureCollection(
     if (key) parcelDwellingCounts.set(key, (parcelDwellingCounts.get(key) ?? 0) + 1);
   }
   for (const property of properties) {
+    if (!property.coordinates) continue;
     const visible = visibleOutcomes.has(property.currentOutcome);
     const selected = selectedPropertyId === property.id;
     const visited = property.currentOutcome !== "unvisited";
@@ -164,7 +166,7 @@ function mappedParcelFeatureCollection(parcels: ParcelFeatureCollection, propert
     features: parcels.features.map((feature) => {
       const key = parcelKey(feature.properties);
       const linked = grouped.get(key) ?? [];
-      const inferred = legacyProperties.filter((property) => geometryContainsPoint(feature.geometry, property.coordinates));
+      const inferred = legacyProperties.filter((property) => property.coordinates && geometryContainsPoint(feature.geometry, property.coordinates));
       const progress = parcelProgress([...linked, ...inferred]);
       return {
         ...feature,
@@ -187,7 +189,7 @@ function legacyParcelAssociations(parcels: ParcelFeatureCollection, properties: 
   const associations: Array<{ parcel: ParcelDetails; propertyIds: string[] }> = [];
   for (const feature of parcels.features) {
     const propertyIds = [...unlinked.values()]
-      .filter((property) => geometryContainsPoint(feature.geometry, property.coordinates))
+      .filter((property) => property.coordinates && geometryContainsPoint(feature.geometry, property.coordinates))
       .map((property) => property.id);
     if (!propertyIds.length) continue;
     associations.push({ parcel: feature.properties, propertyIds });
@@ -520,6 +522,7 @@ export function MapCanvas({
   onAssociatePropertiesWithParcel,
   onDraftBoundaryChange,
   onViewportChange,
+  onUseAddressList,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -687,7 +690,7 @@ export function MapCanvas({
             suggestedAddress: String(properties?.situsAddress || `${coordinates[1].toFixed(6)}, ${coordinates[0].toFixed(6)}`),
             buildingGeometry,
             legacyPropertyIds: propertiesRef.current
-              .filter((property) => !property.parcel && geometryContainsPoint(parcelFeature.geometry, property.coordinates))
+              .filter((property) => !property.parcel && property.coordinates && geometryContainsPoint(parcelFeature.geometry, property.coordinates))
               .map((property) => property.id),
             parcel: {
               id: Number(properties?.id),
@@ -799,7 +802,7 @@ export function MapCanvas({
         <div className="map-state"><LoaderCircle className="spin" size={22} /><strong>Loading the neighborhood map</strong><span>Your territory records are already available.</span></div>
       )}
       {mapStatus === "error" && (
-        <div className="map-state error"><AlertTriangle size={23} /><strong>The map tiles did not load</strong><span>Visit records still work. Check the map style URL or your connection.</span></div>
+        <div className="map-state error"><AlertTriangle size={23} /><strong>The map is unavailable</strong><span>Your saved locations and visit records can still be used in the address list.</span>{onUseAddressList && <button className="button primary" onClick={onUseAddressList}>Use address list</button>}</div>
       )}
       {addMode && (
         <div className="map-mode-banner"><MapPin size={15} /><span>Tap the next dwelling or entrance</span></div>

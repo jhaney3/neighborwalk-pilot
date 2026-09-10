@@ -15,9 +15,9 @@ export function LeaderView({ data, coverageByTerritory, membership, activeTerrit
   onSelectTerritory: (id: string) => void;
   onEditTerritory: (id: string) => void;
   onStartDrawing: () => void;
-  onAddTeam: (update: TeamUpdate) => string;
-  onUpdateTeam: (teamId: string, update: TeamUpdate) => void;
-  onDeleteTeam: (teamId: string) => void;
+  onAddTeam: (update: TeamUpdate) => Promise<unknown>;
+  onUpdateTeam: (teamId: string, update: TeamUpdate) => Promise<unknown>;
+  onDeleteTeam: (teamId: string) => Promise<unknown>;
 }) {
   const activeCoverage = coverageByTerritory[activeTerritory.id]
     ?? coverageForTerritory(data, activeTerritory.id);

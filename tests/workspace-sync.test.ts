@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { neighborWalkDataSchema, type NeighborWalkData, type PendingMutation } from "../lib/domain";
+import { deleteTeamRecord, deleteTerritoryRecord, neighborWalkDataSchema, type NeighborWalkData, type PendingMutation } from "../lib/domain";
 import { createSeedData } from "../lib/seed";
 import { mergePendingWorkspaceChanges } from "../lib/workspace-sync";
 
@@ -18,6 +18,40 @@ function connected(data: NeighborWalkData): NeighborWalkData {
 }
 
 describe("workspace synchronization", () => {
+  it("moves a territory without replacing concurrent encounters from another device", () => {
+    const seed = connected(createSeedData());
+    const source = seed.territories[0];
+    const destination = seed.territories.find((territory) => territory.id !== source.id && territory.eventId === source.eventId)!;
+    const lateVisit = { ...seed.visits[0], id: "late-remote-encounter", territoryId: source.id };
+    const remote = { ...seed, visits: [...seed.visits, lateVisit] };
+    const local = deleteTerritoryRecord(seed, source.id, destination.id);
+    local.sync.pending = [{ ...pending("territory", source.id), operation: "delete", destinationTerritoryId: destination.id }];
+    const merged = mergePendingWorkspaceChanges(remote, local);
+    expect(merged.visits.find((visit) => visit.id === lateVisit.id)?.territoryId).toBe(destination.id);
+    expect(merged.properties.filter((property) => property.territoryId === source.id)).toHaveLength(0);
+    expect(merged.visits).toHaveLength(remote.visits.length);
+  });
+
+  it("cleans up team assignments during reconciliation", () => {
+    const seed = connected(createSeedData());
+    const team = seed.teams[0];
+    seed.territories[0].assignedTeamId = team.id;
+    seed.followUps[0].assignedTeamId = team.id;
+    const local = deleteTeamRecord(seed, team.id);
+    local.sync.pending = [{ ...pending("team", team.id), operation: "delete" }];
+    const merged = mergePendingWorkspaceChanges(seed, local);
+    expect(merged.territories.some((territory) => territory.assignedTeamId === team.id)).toBe(false);
+    expect(merged.followUps.some((task) => task.assignedTeamId === team.id)).toBe(false);
+  });
+
+  it("refuses an unreconciled legacy bulk replacement without dropping its pending work", () => {
+    const seed = connected(createSeedData());
+    const local = { ...seed, visits: [], sync: { ...seed.sync, pending: [pending("data", seed.church.id)] } };
+    expect(() => mergePendingWorkspaceChanges(seed, local)).toThrow("supervised recovery");
+    expect(local.sync.pending).toHaveLength(1);
+    expect(seed.visits.length).toBeGreaterThan(0);
+  });
+
   it("layers an offline visit onto newer remote records without losing either device's work", () => {
     const seed = connected(createSeedData());
     const localProperty = seed.properties[0];

@@ -43,6 +43,7 @@ import {
   type Visit,
 } from "../lib/domain";
 import { ScriptureReader } from "./ScriptureReader";
+import { useAsyncAction } from "../lib/use-async-action";
 
 type VisitInput = {
   propertyId: string;
@@ -94,12 +95,13 @@ export function PropertyDrawer({
   onClose: () => void;
   onViewParcel?: () => void;
   onAddDwelling?: () => void;
-  onRecordVisit: (input: VisitInput) => void;
-  onUpdateProperty: (propertyId: string, patch: Pick<Property, "address" | "unit">) => void;
-  onDeleteProperty: (propertyId: string) => void;
-  onUpsertResident: (propertyId: string, input: ResidentInput, residentId?: string) => string;
-  onDeleteResident: (residentId: string) => void;
+  onRecordVisit: (input: VisitInput) => Promise<unknown>;
+  onUpdateProperty: (propertyId: string, patch: Pick<Property, "address" | "unit">) => Promise<unknown>;
+  onDeleteProperty: (propertyId: string) => Promise<unknown>;
+  onUpsertResident: (propertyId: string, input: ResidentInput, residentId?: string) => Promise<string>;
+  onDeleteResident: (residentId: string) => Promise<unknown>;
 }) {
+  const action = useAsyncAction();
   const [tab, setTab] = useState<"record" | "people" | "history">("record");
   const guideSteps = useMemo(() => [...(conversationGuide?.steps ?? [])].sort((first, second) => first.order - second.order), [conversationGuide]);
   const [workflowStage, setWorkflowStage] = useState<"record" | "guide" | "name">(
@@ -110,7 +112,7 @@ export function PropertyDrawer({
   const [workflowNotice, setWorkflowNotice] = useState("");
   const [outcome, setOutcome] = useState<Exclude<Outcome, "unvisited">>("conversation");
   const [note, setNote] = useState("");
-  const [followUpDate, setFollowUpDate] = useState(dateInputValue(dueDateFromNow(data.church.defaultFollowUpDays)));
+  const [followUpDate, setFollowUpDate] = useState(dateInputValue(dueDateFromNow(data.church.defaultFollowUpDays, data.church.timezone)));
   const [assignedTeamId, setAssignedTeamId] = useState(property.territoryId ? data.territories.find((territory) => territory.id === property.territoryId)?.assignedTeamId ?? "" : "");
   const [linkedResidentId, setLinkedResidentId] = useState("");
   const [editingAddress, setEditingAddress] = useState(property.address === "Confirm this address");
@@ -120,7 +122,7 @@ export function PropertyDrawer({
   const residents = data.residents.filter((resident) => resident.propertyId === property.id);
 
   const noteRemaining = data.church.noteCharacterLimit - note.length;
-  const canSave = address.trim().length > 2
+  const canSave = !action.busy && property.currentOutcome !== "do_not_visit" && address.trim().length > 2
     && noteRemaining >= 0
     && (outcome !== "follow_up" || Boolean(followUpDate));
 
@@ -149,28 +151,24 @@ export function PropertyDrawer({
 
   const saveVisit = () => {
     if (!canSave) return;
-    if (address.trim() !== property.address || unit.trim() !== (property.unit ?? "")) {
-      onUpdateProperty(property.id, { address, unit });
-    }
-    onRecordVisit({
-      propertyId: property.id,
-      outcome,
-      objectiveNote: note,
-      followUpDate: outcome === "follow_up" ? followUpDate : undefined,
-      assignedTeamId: outcome === "follow_up" && !linkedResidentId ? assignedTeamId || undefined : undefined,
-      residentId: outcome === "follow_up" ? linkedResidentId || undefined : undefined,
-    });
-    onClose();
+    void action.run(async () => {
+      if (address.trim() !== property.address || unit.trim() !== (property.unit ?? "")) await onUpdateProperty(property.id, { address, unit });
+      await onRecordVisit({ propertyId: property.id, outcome, objectiveNote: note,
+        followUpDate: outcome === "follow_up" ? followUpDate : undefined,
+        assignedTeamId: outcome === "follow_up" && !linkedResidentId ? assignedTeamId || undefined : undefined,
+        residentId: linkedResidentId || undefined });
+    }, onClose);
   };
-
   const markDoNotVisit = () => {
-    if (!window.confirm("Mark this location as do not revisit? This status stays visible even after ordinary visit records expire.")) return;
-    onRecordVisit({ propertyId: property.id, outcome: "do_not_visit" });
-    onClose();
+    if (window.confirm("Record a do-not-revisit request? Open visit tasks will be cancelled, and only a leader can lift the restriction with a reason.")) {
+      void action.run(() => onRecordVisit({ propertyId: property.id, outcome: "do_not_visit" }), onClose);
+    }
   };
 
   return (
     <aside className="property-drawer" aria-label={`Location details for ${property.address}`}>
+      {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+      {property.currentOutcome === "do_not_visit" && <p className="inline-notice">Do not visit this location. A church leader must review any restriction correction.</p>}
       <div className="drawer-handle" aria-hidden="true" />
       <div className="drawer-heading">
         <div className="property-symbol"><MapPin size={19} /></div>
@@ -307,8 +305,7 @@ export function PropertyDrawer({
           {canManage && property.visitCount === 0 && property.source !== "seed" && residents.length === 0 && (
             <button className="delete-location" onClick={() => {
               if (window.confirm("Remove this unvisited location from the territory?")) {
-                onDeleteProperty(property.id);
-                onClose();
+                void action.run(() => onDeleteProperty(property.id), onClose);
               }
             }}><Trash2 size={14} /> Remove unvisited location</button>
           )}
@@ -330,13 +327,14 @@ export function PropertyDrawer({
               resident={editingResident === "new" ? undefined : editingResident}
               volunteers={data.volunteers.filter((volunteer) => volunteer.active)}
               activeVolunteerId={activeVolunteerId}
+              pathwayEnabled={Boolean(data.church.pathwayEnabled)}
               autoFocusName={guidedPersonEntry}
               onCancel={() => {
                 if (guidedPersonEntry) finishGuidedPersonEntry("Name skipped — record what happened at this door.");
                 else setEditingResident(null);
               }}
-              onSave={(input) => {
-                const residentId = onUpsertResident(property.id, input, editingResident === "new" ? undefined : editingResident.id);
+              onSave={async (input) => {
+                const residentId = await onUpsertResident(property.id, input, editingResident === "new" ? undefined : editingResident.id);
                 if (editingResident === "new") setLinkedResidentId(residentId);
                 if (guidedPersonEntry) finishGuidedPersonEntry("Person saved — now record what happened at this door.");
                 else setEditingResident(null);
@@ -351,12 +349,12 @@ export function PropertyDrawer({
                     <span className="resident-avatar">{resident.name?.charAt(0).toUpperCase() || <UserRound size={17} />}</span>
                     <div>
                       <strong>{resident.name || "Name not provided"}</strong>
-                      <small>{faithStatusLabels[resident.faithStatus]}</small>
+                      {data.church.pathwayEnabled && <small>{faithStatusLabels[resident.faithStatus]}</small>}
                       {(resident.phone || resident.email) && <p><Phone size={12} /> {resident.preferredContact === "none" ? "Contact details saved" : `Prefers ${resident.preferredContact}`}</p>}
                     </div>
-                    {(canManage || resident.createdByVolunteerId === activeVolunteerId || resident.assignedVolunteerId === activeVolunteerId) && <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>}
-                    {(canManage || resident.createdByVolunteerId === activeVolunteerId) && <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
-                      if (window.confirm("Delete this person record? This cannot be undone.")) onDeleteResident(resident.id);
+                    {(canManage || resident.assignedVolunteerId === activeVolunteerId) && <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>}
+                    {(canManage || resident.assignedVolunteerId === activeVolunteerId) && <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
+                      if (window.confirm("Archive this person and their care records? History and restrictions are preserved on the server.")) void action.run(() => onDeleteResident(resident.id));
                     }}><Trash2 size={14} /></button>}
                   </article>
                 ))}
@@ -434,19 +432,21 @@ function NamePrompt({ onBack, onAddPerson, onSkip }: { onBack: () => void; onAdd
   );
 }
 
-function ResidentForm({ resident, volunteers, activeVolunteerId, autoFocusName = false, onCancel, onSave }: {
+function ResidentForm({ resident, volunteers, activeVolunteerId, pathwayEnabled, autoFocusName = false, onCancel, onSave }: {
   resident?: Resident;
   volunteers: NeighborWalkData["volunteers"];
   activeVolunteerId: string;
   autoFocusName?: boolean;
+  pathwayEnabled: boolean;
   onCancel: () => void;
-  onSave: (input: ResidentInput) => void;
+  onSave: (input: ResidentInput) => Promise<unknown>;
 }) {
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const action = useAsyncAction();
   const [name, setName] = useState(resident?.name ?? "");
   const [faithStatus, setFaithStatus] = useState(resident?.faithStatus ?? "not_discussed");
   const [discipleshipStage, setDiscipleshipStage] = useState(resident?.discipleshipStage ?? "new_connection");
-  const [assignedVolunteerId, setAssignedVolunteerId] = useState(resident?.assignedVolunteerId ?? activeVolunteerId);
+  const assignedVolunteerId = resident?.assignedVolunteerId ?? activeVolunteerId;
   const [status, setStatus] = useState(resident?.status ?? "active");
   const [phone, setPhone] = useState(resident?.phone ?? "");
   const [email, setEmail] = useState(resident?.email ?? "");
@@ -464,9 +464,9 @@ function ResidentForm({ resident, volunteers, activeVolunteerId, autoFocusName =
     <div className="resident-form">
       <div className="form-stack">
         <label className="form-field"><span>Name <small>Optional</small></span><input ref={nameInputRef} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Only if they choose to share it" /></label>
-        <label className="form-field"><span>Faith status <small>Self-described only</small></span><select value={faithStatus} onChange={(event) => setFaithStatus(event.target.value as Resident["faithStatus"])}>{faithStatusValues.map((value) => <option value={value} key={value}>{faithStatusLabels[value]}</option>)}</select></label>
-        {resident ? <label className="form-field"><span>Discipleship owner</span><select value={assignedVolunteerId} onChange={(event) => setAssignedVolunteerId(event.target.value)}>{volunteers.map((volunteer) => <option value={volunteer.id} key={volunteer.id}>{volunteer.name}</option>)}</select></label> : <div className="form-field person-owner-confirmation"><span>Discipleship owner</span><strong><UserRound size={15} /> {activeOwner?.name ?? "You"}</strong><small>You will own this relationship because you are adding it.</small></div>}
-        <label className="form-field"><span>Relationship stage</span><select value={discipleshipStage} onChange={(event) => setDiscipleshipStage(event.target.value as Resident["discipleshipStage"])}>{discipleshipStageValues.map((value) => <option value={value} key={value}>{discipleshipStageLabels[value]}</option>)}</select></label>
+        {pathwayEnabled && <label className="form-field"><span>Faith status <small>Self-described only</small></span><select value={faithStatus} onChange={(event) => setFaithStatus(event.target.value as Resident["faithStatus"])}>{faithStatusValues.map((value) => <option value={value} key={value}>{faithStatusLabels[value]}</option>)}</select></label>}
+        <p>Responsible person: {volunteers.find((v) => v.id === assignedVolunteerId)?.name ?? activeOwner?.name ?? "You"}. Arrange ownership changes through a care handoff in People.</p>
+        {pathwayEnabled && <label className="form-field"><span>Relationship stage</span><select value={discipleshipStage} onChange={(event) => setDiscipleshipStage(event.target.value as Resident["discipleshipStage"])}>{discipleshipStageValues.map((value) => <option value={value} key={value}>{discipleshipStageLabels[value]}</option>)}</select></label>}
       </div>
       <div className="contact-fields">
         <label className="form-field"><span>Phone <small>Optional</small></span><input inputMode="tel" autoComplete="off" maxLength={40} value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
@@ -474,8 +474,9 @@ function ResidentForm({ resident, volunteers, activeVolunteerId, autoFocusName =
         <label className="form-field"><span>Preferred contact</span><select value={preferredContact} onChange={(event) => setPreferredContact(event.target.value as Resident["preferredContact"])}><option value="none">No preference</option><option value="text">Text message</option><option value="call">Phone call</option><option value="email">Email</option></select></label>
       </div>
       <label className="form-field"><span>Tracking status</span><select value={status} onChange={(event) => setStatus(event.target.value as Resident["status"])}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
+      {action.error && <p role="alert" className="inline-error">{action.error}</p>}
       {!contactMethodValid && <p className="form-warning">Enter the phone number or email needed for the selected contact method.</p>}
-      <div className="modal-actions"><button className="button quiet" onClick={onCancel}>Cancel</button><button className="button primary" disabled={!canSave} onClick={() => onSave({
+      <div className="modal-actions"><button className="button quiet" onClick={onCancel}>Cancel</button><button className="button primary" disabled={!canSave || action.busy} onClick={() => void action.run(() => onSave({
         name: name.trim() || undefined,
         faithStatus,
         discipleshipStage,
@@ -487,7 +488,7 @@ function ResidentForm({ resident, volunteers, activeVolunteerId, autoFocusName =
         email: email.trim() || undefined,
         preferredContact,
         lastContactAt: resident?.lastContactAt,
-      })}><Save size={15} /> Save person</button></div>
+      }))}><Save size={15} /> Save person</button></div>
     </div>
   );
 }

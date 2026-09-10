@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { queuedCommandSchema } from "./command-schema";
+import { calendarDate, calendarDaysFromNow, DEFAULT_CHURCH_TIMEZONE, formatCalendarDate } from "./calendar";
 
-export const APP_SCHEMA_VERSION = 10;
+export const APP_SCHEMA_VERSION = 11;
 
 export const outcomeValues = [
   "unvisited",
@@ -200,9 +202,9 @@ const coordinatesSchema = z.tuple([
 const outcomeSchema = z.enum(outcomeValues);
 const followUpActivitySchema = z.object({
   id: z.string().min(1),
-  action: z.enum(["created", "rescheduled", "note", "completed", "cancelled"]),
+  action: z.enum(["created", "rescheduled", "note", "completed", "cancelled", "reassigned", "accepted", "declined"]),
   note: z.string().max(2000).optional(),
-  dueAt: z.string().datetime().optional(),
+  dueAt: z.union([z.string().date(), z.string().datetime()]).optional(),
   actorId: z.string().min(1),
   createdAt: z.string().datetime(),
 });
@@ -210,11 +212,15 @@ const followUpActivitySchema = z.object({
 const residentSchema = z.object({
   id: z.string().min(1),
   churchId: z.string().min(1),
-  propertyId: z.string().min(1),
+  propertyId: z.string().min(1).optional(),
   name: z.string().min(1).max(120).optional(),
   faithStatus: z.enum(faithStatusValues),
   discipleshipStage: z.enum(discipleshipStageValues),
   assignedVolunteerId: z.string().min(1),
+  pendingOwnerId: z.string().optional(),
+  handoffRequestedAt: z.string().datetime().optional(),
+  legacyCreatorAccess: z.boolean().optional(),
+  contactPermission: z.enum(["not_recorded", "requested", "do_not_contact"]).optional(),
   createdByVolunteerId: z.string().min(1),
   sharedWithVolunteerIds: z.array(z.string().min(1)).max(250),
   sharedWithTeamIds: z.array(z.string().min(1)).max(100),
@@ -274,6 +280,7 @@ export const neighborWalkDataSchema = z.object({
     retentionDays: z.number().int().min(30).max(3650),
     defaultFollowUpDays: z.number().int().min(1).max(90),
     noteCharacterLimit: z.number().int().min(80).max(2000),
+    pathwayEnabled: z.boolean().optional(),
   }),
   volunteers: z.array(z.object({
     id: z.string().min(1),
@@ -289,12 +296,18 @@ export const neighborWalkDataSchema = z.object({
     name: z.string().min(1).max(160),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime(),
-    status: z.enum(["scheduled", "active", "completed"]),
+    status: z.enum(["draft", "scheduled", "ready", "active", "completed", "cancelled", "archived"]),
+    timezone: z.string().optional(),
+    purpose: z.string().max(1000).optional(),
+    meetingPoint: z.string().max(300).optional(),
+    leaderContact: z.string().max(254).optional(),
+    guideId: z.string().optional(),
+    debrief: z.string().max(2000).optional(),
   })),
   territories: z.array(z.object({
     id: z.string().min(1),
     churchId: z.string().min(1),
-    eventId: z.string().min(1),
+    eventId: z.string().optional(),
     name: z.string().min(1).max(120),
     color: z.string().regex(/^#[0-9a-f]{6}$/i),
     center: coordinatesSchema,
@@ -305,7 +318,7 @@ export const neighborWalkDataSchema = z.object({
   teams: z.array(z.object({
     id: z.string().min(1),
     churchId: z.string().min(1),
-    eventId: z.string().min(1),
+    eventId: z.string().optional(),
     name: z.string().min(1).max(120),
     memberIds: z.array(z.string()),
     territoryIds: z.array(z.string()),
@@ -314,10 +327,10 @@ export const neighborWalkDataSchema = z.object({
   properties: z.array(z.object({
     id: z.string().min(1),
     churchId: z.string().min(1),
-    territoryId: z.string().min(1),
+    territoryId: z.string().optional(),
     address: z.string().min(1).max(240),
     unit: z.string().max(60).optional(),
-    coordinates: coordinatesSchema,
+    coordinates: coordinatesSchema.optional(),
     buildingGeometry: z.array(coordinatesSchema).optional(),
     parcel: z.object({
       id: z.number().int().positive().optional(),
@@ -329,14 +342,17 @@ export const neighborWalkDataSchema = z.object({
     visitCount: z.number().int().min(0),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
-    source: z.enum(["seed", "map", "import"]),
+    source: z.enum(["seed", "map", "import", "manual"]),
+    createdByVolunteerId: z.string().optional(),
   })),
   visits: z.array(z.object({
     id: z.string().min(1),
     churchId: z.string().min(1),
-    eventId: z.string().min(1),
-    territoryId: z.string().min(1),
-    propertyId: z.string().min(1),
+    eventId: z.string().optional(),
+    territoryId: z.string().optional(),
+    propertyId: z.string().optional(),
+    residentId: z.string().optional(),
+    context: z.enum(["door", "community_meal", "service", "referral", "other"]).optional(),
     volunteerId: z.string().min(1),
     outcome: outcomeSchema.exclude(["unvisited"]),
     objectiveNote: z.string().max(2000).optional(),
@@ -346,11 +362,15 @@ export const neighborWalkDataSchema = z.object({
   followUps: z.array(z.object({
     id: z.string().min(1),
     churchId: z.string().min(1),
-    propertyId: z.string().min(1),
+    propertyId: z.string().optional(),
     residentId: z.string().min(1).optional(),
     sourceVisitId: z.string().min(1).optional(),
     assignedTeamId: z.string().optional(),
-    dueAt: z.string().datetime(),
+    assignedVolunteerId: z.string().optional(),
+    eventId: z.string().optional(),
+    acceptance: z.enum(["pending", "accepted", "declined"]).optional(),
+    channel: z.enum(["visit", "call", "text", "email", "other"]).optional(),
+    dueAt: z.union([z.string().date(), z.string().datetime()]),
     status: z.enum(["scheduled", "completed", "cancelled"]),
     note: z.string().max(2000).optional(),
     completionNote: z.string().max(2000).optional(),
@@ -360,6 +380,17 @@ export const neighborWalkDataSchema = z.object({
     completedAt: z.string().datetime().optional(),
   })),
   residents: z.array(residentSchema),
+  assignments: z.array(z.object({
+    id: z.string(), churchId: z.string(), eventId: z.string(), territoryId: z.string(),
+    assignedTeamId: z.string().optional(), assignedVolunteerId: z.string().optional(),
+    status: z.enum(["assigned", "accepted", "completed", "declined", "cancelled"]),
+  })).optional(),
+  restrictions: z.array(z.object({
+    id: z.string(), churchId: z.string(), residentId: z.string().optional(), propertyId: z.string().optional(),
+    channel: z.enum(["all", "visit", "call", "text", "email"]), active: z.boolean(), reason: z.string(),
+    createdAt: z.string().datetime(), correctionReason: z.string().optional(),
+  })).optional(),
+  migrationIssues: z.array(z.object({ entityType: z.string(), entityId: z.string(), issue: z.string() })).optional(),
   personNotes: z.array(z.object({
     id: z.string().min(1),
     churchId: z.string().min(1),
@@ -382,15 +413,15 @@ export const neighborWalkDataSchema = z.object({
   audit: z.array(z.object({
     id: z.string().min(1),
     action: z.string().min(1),
-    entityType: z.enum(["property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "settings", "guide", "data"]),
+    entityType: z.enum(["event", "assignment", "restriction", "handoff", "property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "settings", "guide", "data"]),
     entityId: z.string().min(1),
     actorId: z.string().min(1),
     createdAt: z.string().datetime(),
     summary: z.string().min(1).max(500),
   })),
   preferences: z.object({
-    activeEventId: z.string().min(1),
-    activeTerritoryId: z.string().min(1),
+    activeEventId: z.string(),
+    activeTerritoryId: z.string(),
     activeVolunteerId: z.string().min(1),
     mapStyleUrl: z.string().url().refine(isSafeWebUrl, "Map style must use https (or localhost during development)"),
     mapStyleRevision: z.number().int().nonnegative(),
@@ -403,12 +434,18 @@ export const neighborWalkDataSchema = z.object({
     lastSyncedAt: z.string().datetime().optional(),
     pending: z.array(z.object({
       id: z.string().min(1),
-      entityType: z.enum(["property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "settings", "guide", "data"]),
+      entityType: z.enum(["event", "assignment", "restriction", "handoff", "property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "settings", "guide", "data"]),
       entityId: z.string().min(1),
       operation: z.enum(["upsert", "delete"]),
       changedAt: z.string().datetime(),
+      destinationTerritoryId: z.string().min(1).optional(),
     })),
     lastError: z.string().optional(),
+    commands: z.array(queuedCommandSchema).optional(),
+    recordVersions: z.record(z.string(), z.number().int().nonnegative()).optional(),
+    serverRevision: z.number().int().nonnegative().optional(),
+    warnings: z.array(z.string()).optional(),
+    legacyRecoveryRequired: z.boolean().optional(),
   }),
   updatedAt: z.string().datetime(),
 });
@@ -422,17 +459,16 @@ export function createId(prefix: string): string {
 
 export function dateInputValue(iso?: string): string {
   if (!iso) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
   return new Date(iso).toISOString().slice(0, 10);
 }
 
-export function dueDateFromNow(days: number): string {
-  const date = new Date();
-  date.setHours(17, 0, 0, 0);
-  date.setDate(date.getDate() + days);
-  return date.toISOString();
+export function dueDateFromNow(days: number, timezone = DEFAULT_CHURCH_TIMEZONE): string {
+  return calendarDaysFromNow(days, timezone);
 }
 
 export function formatDateTime(iso: string, options?: Intl.DateTimeFormatOptions): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return formatCalendarDate(iso, options ? { month: options.month, day: options.day, year: options.year } : undefined);
   return new Intl.DateTimeFormat("en-US", options ?? {
     month: "short",
     day: "numeric",
@@ -441,8 +477,8 @@ export function formatDateTime(iso: string, options?: Intl.DateTimeFormatOptions
   }).format(new Date(iso));
 }
 
-export function isFollowUpOverdue(followUp: FollowUp, now = new Date()): boolean {
-  return followUp.status === "scheduled" && new Date(followUp.dueAt).getTime() < now.getTime();
+export function isFollowUpOverdue(followUp: FollowUp, now = new Date(), timezone = DEFAULT_CHURCH_TIMEZONE): boolean {
+  return followUp.status === "scheduled" && calendarDate(followUp.dueAt, timezone) < calendarDate(now, timezone);
 }
 
 export function visitsForProperty(data: NeighborWalkData, propertyId: string): Visit[] {
@@ -552,11 +588,13 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
   });
   const keepVisitIds = new Set(keepVisits.map((visit) => visit.id));
   const keepFollowUps = data.followUps.filter(
-    (followUp) => followUp.status === "scheduled" || Boolean(followUp.sourceVisitId && keepVisitIds.has(followUp.sourceVisitId)),
+    (followUp) => followUp.status === "scheduled"
+      || Boolean(followUp.sourceVisitId && keepVisitIds.has(followUp.sourceVisitId))
+      || new Date(followUp.history.at(-1)?.createdAt ?? followUp.createdAt) >= cutoff,
   );
   const keepAudit = data.audit.filter((entry) => new Date(entry.createdAt) >= cutoff);
   const activeFollowUpResidentIds = new Set(
-    keepFollowUps.filter((followUp) => followUp.status === "scheduled").flatMap((followUp) => followUp.residentId ? [followUp.residentId] : []),
+    keepFollowUps.flatMap((followUp) => followUp.residentId ? [followUp.residentId] : []),
   );
   const keepResidents = data.residents.filter(
     (resident) => resident.status !== "archived"
@@ -581,7 +619,12 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
 /** Rebuild location outcomes without scanning and sorting every visit per property. */
 export function summarizePropertyVisits(properties: Property[], visits: Visit[]): Property[] {
   const summaries = new Map<string, { latest: Visit; count: number }>();
+  // Until restriction corrections have their own authorized command, ordinary
+  // visits and retention must never lift a recorded do-not-visit request.
+  const restrictedIds = new Set(properties.filter((property) => property.currentOutcome === "do_not_visit").map((property) => property.id));
   for (const visit of visits) {
+    if (!visit.propertyId) continue;
+    if (visit.outcome === "do_not_visit") restrictedIds.add(visit.propertyId);
     const summary = summaries.get(visit.propertyId);
     if (!summary) summaries.set(visit.propertyId, { latest: visit, count: 1 });
     else {
@@ -593,7 +636,7 @@ export function summarizePropertyVisits(properties: Property[], visits: Visit[])
     const summary = summaries.get(property.id);
     return {
       ...property,
-      currentOutcome: summary?.latest.outcome ?? "unvisited",
+      currentOutcome: restrictedIds.has(property.id) ? "do_not_visit" : summary?.latest.outcome ?? "unvisited",
       lastVisitedAt: summary?.latest.recordedAt,
       visitCount: summary?.count ?? 0,
     };

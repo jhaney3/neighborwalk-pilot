@@ -56,6 +56,7 @@ export function NeighborWalkRoot() {
 
   return (
     <NeighborWalkApp
+      key={session.user.id}
       supabaseUser={{
         id: session.user.id,
         email: session.user.email ?? "",

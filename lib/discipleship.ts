@@ -85,7 +85,7 @@ function personFromRow(row: PersonRow): Resident | null {
   return {
     id: row.id,
     churchId: row.church_id,
-    propertyId: row.property_id,
+    propertyId: row.property_id ?? undefined,
     name: row.name ?? undefined,
     faithStatus: row.faith_status as Resident["faithStatus"],
     discipleshipStage: row.discipleship_stage as Resident["discipleshipStage"],
@@ -281,6 +281,7 @@ export async function persistConnectedDiscipleship(
   for (const item of mutations.filter((mutation) => mutation.entityType === "person_follow_up" && mutation.operation === "upsert")) {
     const followUp = data.followUps.find((candidate) => candidate.id === item.entityId && candidate.residentId);
     if (!followUp?.residentId) continue;
+    if (!followUp.propertyId) throw new Error("Address-free tasks must use the transactional outreach API.");
     const insert: PersonFollowUpInsert = {
       id: followUp.id,
       church_id: churchId,

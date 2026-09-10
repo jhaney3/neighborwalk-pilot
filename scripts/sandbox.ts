@@ -131,6 +131,7 @@ async function seed() {
   }));
   // Synthetic rectangles exercise parcel loading without copying real addresses or geometry.
   for (const [index, property] of data.properties.entries()) {
+    if (!property.coordinates) continue;
     const [lng, lat] = property.coordinates;
     statements.push(`insert into public.parcels (county_fips, gislink, situs_address, property_class, land_use, is_residential, geometry)
       values ('17031', 'sandbox-${index}', ${literal(property.address)} #>> '{}', 'Synthetic test parcel', 'Test fixture', true,

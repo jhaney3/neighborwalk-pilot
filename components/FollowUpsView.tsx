@@ -1,281 +1,115 @@
 "use client";
 
-import { groupBy } from "../lib/collections";
-import { CalendarClock, Check, ClipboardCheck, Mail, Map as MapIcon, MessageCircle, Save, Phone, Trash2, UserRound, Users } from "lucide-react";
+import { CalendarClock, Check, ClipboardCheck, MapPin, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
-import { dateInputValue, faithStatusLabels, formatPhoneNumber, formatDateTime, isFollowUpOverdue, type FollowUp, type FollowUpCompletionInput, type NeighborWalkData, type Property, type Resident } from "../lib/domain";
-import { Modal, ViewHeading, EmptyState } from "./ui";
+import { calendarDate, calendarDaysFromNow, formatCalendarDate } from "../lib/calendar";
+import { dateInputValue, type FollowUp, type FollowUpCompletionInput, type NeighborWalkData } from "../lib/domain";
+import { useAsyncAction } from "../lib/use-async-action";
+import { EmptyState, Modal, ViewHeading } from "./ui";
 
-export function FollowUpsView({
-  data,
-  canManage,
-  activeVolunteerId,
-  initialPersonId,
-  onClearPersonFocus,
-  onOpenProperty,
-  onOpenPerson,
-  onAddPersonNote,
-  onComplete,
-  onReschedule,
-  onCancel,
-}: {
-  data: NeighborWalkData;
-  canManage: boolean;
-  activeVolunteerId: string;
-  initialPersonId?: string | null;
-  onClearPersonFocus: () => void;
-  onOpenProperty: (propertyId: string) => void;
-  onOpenPerson: (residentId: string) => void;
-  onAddPersonNote: (residentId: string, kind: "general", body: string) => string;
-  onComplete: (followUpId: string, input: FollowUpCompletionInput) => void;
-  onReschedule: (followUpId: string, date: string, note?: string) => void;
-  onCancel: (followUpId: string, note?: string) => void;
-}) {
-  const [filter, setFilter] = useState<"open" | "overdue" | "today" | "upcoming" | "completed" | "cancelled">("open");
+type Props = {
+  data: NeighborWalkData; canManage: boolean; activeVolunteerId: string;
+  initialPersonId?: string | null; onClearPersonFocus: () => void;
+  onOpenProperty: (id: string) => void; onOpenPerson: (id: string) => void;
+  onAddPersonNote: (id: string, kind: "general", body: string) => Promise<unknown>;
+  onComplete: (id: string, input: FollowUpCompletionInput) => Promise<unknown>;
+  onReschedule: (id: string, date: string, note?: string) => Promise<unknown>;
+  onCancel: (id: string, note?: string) => Promise<unknown>;
+  onAssign?: (id: string, volunteerId: string) => Promise<unknown>;
+  onAccept?: (id: string, acceptance: "accepted" | "declined") => Promise<unknown>;
+};
+type Filter = "open" | "overdue" | "today" | "upcoming" | "completed" | "cancelled";
+
+export function FollowUpsView(props: Props) {
+  const { data, canManage, activeVolunteerId, initialPersonId, onClearPersonFocus } = props;
+  const [filter, setFilter] = useState<Filter>("open");
+  const [owner, setOwner] = useState("mine");
   const [query, setQuery] = useState("");
-  const focusedPerson = data.residents.find((resident) => resident.id === initialPersonId);
-  const propertyMap = useMemo(() => new Map(data.properties.map((property) => [property.id, property])), [data.properties]);
-  const teamMap = useMemo(() => new Map(data.teams.map((team) => [team.id, team.name])), [data.teams]);
-  const residentMap = useMemo(() => {
-    const residents = groupBy(data.residents, (resident) => resident.propertyId);
-    for (const propertyResidents of residents.values()) {
-      propertyResidents.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  const today = calendarDate(new Date(), data.church.timezone);
+  const people = useMemo(() => new Map(data.residents.map((p) => [p.id, p])), [data.residents]);
+  const locations = useMemo(() => new Map(data.properties.map((p) => [p.id, p])), [data.properties]);
+  const tasks = data.followUps.filter((task) => {
+    if (initialPersonId && task.residentId !== initialPersonId) return false;
+    if (!initialPersonId && owner === "mine" && task.assignedVolunteerId !== activeVolunteerId) return false;
+    if (!initialPersonId && owner === "unassigned" && task.assignedVolunteerId) return false;
+    const date = calendarDate(task.dueAt, data.church.timezone);
+    if (["completed", "cancelled"].includes(filter)) { if (task.status !== filter) return false; }
+    else {
+      if (task.status !== "scheduled") return false;
+      if (filter === "overdue" && date >= today) return false;
+      if (filter === "today" && date !== today) return false;
+      if (filter === "upcoming" && date <= today) return false;
     }
-    return residents;
-  }, [data.residents]);
-  const peopleById = useMemo(() => new Map(data.residents.map((person) => [person.id, person])), [data.residents]);
-  const notesByPerson = useMemo(() => groupBy(data.personNotes, (note) => note.residentId), [data.personNotes]);
-  const volunteersById = useMemo(() => new Map(data.volunteers.map((person) => [person.id, person])), [data.volunteers]);
-  const peopleForTask = (task: FollowUp) => {
-    const person = task.residentId ? peopleById.get(task.residentId) : undefined;
-    return task.residentId ? person ? [person] : [] : residentMap.get(task.propertyId) ?? [];
-  };
-  const normalizedQuery = query.trim().toLowerCase();
-  const today = new Date().toISOString().slice(0, 10);
-  const tasks = data.followUps
-    .filter((followUp) => !initialPersonId || followUp.residentId === initialPersonId)
-    .filter((followUp) => {
-      const dueDate = followUp.dueAt.slice(0, 10);
-      if (filter === "completed") return followUp.status === "completed";
-      if (filter === "cancelled") return followUp.status === "cancelled";
-      if (followUp.status !== "scheduled") return false;
-      if (filter === "overdue") return isFollowUpOverdue(followUp) && dueDate !== today;
-      if (filter === "today") return dueDate === today;
-      if (filter === "upcoming") return dueDate > today;
-      return true;
-    })
-    .filter((followUp) => {
-      const property = propertyMap.get(followUp.propertyId);
-      if (!normalizedQuery) return true;
-      const relevantResidents = peopleForTask(followUp);
-      const residentText = relevantResidents.flatMap((resident) => [
-        resident.name,
-        resident.phone,
-        resident.email,
-        faithStatusLabels[resident.faithStatus],
-      ]).filter(Boolean).join(" ");
-      const noteText = followUp.residentId ? (notesByPerson.get(followUp.residentId) ?? []).map((note) => note.body).join(" ") : "";
-      return `${property?.address ?? ""} ${followUp.note ?? ""} ${residentText} ${noteText}`.toLowerCase().includes(normalizedQuery);
-    })
-    .sort((a, b) => filter === "completed" || filter === "cancelled"
-      ? b.createdAt.localeCompare(a.createdAt)
-      : a.dueAt.localeCompare(b.dueAt));
-
-  return (
-    <div className="content-view followups-view">
-      <ViewHeading eyebrow="Care continues" title="Follow-ups" description="Manage return visits and keep every next step clear." aside={<div className="heading-count"><CalendarClock size={18} /><strong>{data.followUps.filter((item) => item.status === "scheduled").length}</strong><span>open</span></div>} />
-      {focusedPerson && <div className="followup-person-focus"><UserRound size={15} /><span>Showing tasks for <strong>{focusedPerson.name || "this person"}</strong></span><button onClick={onClearPersonFocus}>Show all follow-ups</button></div>}
-      <div className="list-toolbar">
-        <div className="segmented-control" aria-label="Follow-up date filter">
-          {(["open", "overdue", "today", "upcoming", "completed", "cancelled"] as const).map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
-        </div>
-        <input className="search-field" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search address, person, or note" aria-label="Search follow-ups" />
-      </div>
-
-      {tasks.length ? (
-        <div className="followup-list">
-          {tasks.map((followUp) => {
-            const property = propertyMap.get(followUp.propertyId);
-            if (!property) return null;
-            const residents = followUp.residentId
-              ? data.residents.filter((resident) => resident.id === followUp.residentId)
-              : residentMap.get(property.id) ?? [];
-            const personNotes = followUp.residentId ? (notesByPerson.get(followUp.residentId) ?? []) : [];
-            const owner = followUp.residentId ? volunteersById.get(residents[0]?.assignedVolunteerId ?? "") : undefined;
-            const person = residents[0];
-            const canEdit = !followUp.residentId || canManage || person?.createdByVolunteerId === activeVolunteerId || person?.assignedVolunteerId === activeVolunteerId;
-            return <FollowUpCard key={followUp.id} followUp={followUp} property={property} residents={residents} personNotes={personNotes} ownerName={owner?.name} canEdit={canEdit} teams={data.teams} teamName={followUp.assignedTeamId ? teamMap.get(followUp.assignedTeamId) : undefined} noteLimit={data.church.noteCharacterLimit} onOpen={() => onOpenProperty(property.id)} onOpenPerson={onOpenPerson} onAddPersonNote={onAddPersonNote} onComplete={(input) => onComplete(followUp.id, input)} onReschedule={(date, note) => onReschedule(followUp.id, date, note)} onCancel={(note) => onCancel(followUp.id, note)} />;
-          })}
-        </div>
-      ) : (
-        <EmptyState icon={<ClipboardCheck size={25} />} title="Nothing in this view" copy={filter === "open" ? "New return visits will appear here." : "Try another filter or clear your search."} />
-      )}
+    return [people.get(task.residentId ?? "")?.name, locations.get(task.propertyId ?? "")?.address, task.note]
+      .join(" ").toLowerCase().includes(query.trim().toLowerCase());
+  }).sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+  const unassigned = data.followUps.filter((t) => t.status === "scheduled" && !t.assignedVolunteerId).length;
+  return <section className="content-view followups-view">
+    <ViewHeading eyebrow="Personal follow-through" title="Follow-ups" description={"A clear next step, a responsible person, and a date. Dates use " + data.church.timezone + "."} />
+    {initialPersonId && <div className="followup-person-focus"><UserRound size={18} /> Tasks for {people.get(initialPersonId)?.name ?? "this person"}<button onClick={onClearPersonFocus}>Show all</button></div>}
+    {canManage && unassigned > 0 && <p className="inline-notice">{unassigned} open tasks need an owner. <button onClick={() => { setOwner("unassigned"); setFilter("open"); }}>Review unassigned</button></p>}
+    <div className="list-toolbar">
+      <label>Responsibility<select value={owner} onChange={(e) => setOwner(e.target.value)} disabled={Boolean(initialPersonId)}><option value="mine">My tasks</option><option value="all">All I can access</option>{canManage && <option value="unassigned">Unassigned</option>}</select></label>
+      <label>Status<select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>{(["open", "overdue", "today", "upcoming", "completed", "cancelled"] as const).map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label>
+      <label>Search<input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Person, address, or next step" /></label>
     </div>
-  );
-}
-
-function FollowUpCard({ followUp, property, residents, personNotes, ownerName, canEdit, teams, teamName, noteLimit, onOpen, onOpenPerson, onAddPersonNote, onComplete, onReschedule, onCancel }: {
-  followUp: FollowUp;
-  property: Property;
-  residents: Resident[];
-  personNotes: NeighborWalkData["personNotes"];
-  ownerName?: string;
-  canEdit: boolean;
-  teams: NeighborWalkData["teams"];
-  teamName?: string;
-  noteLimit: number;
-  onOpen: () => void;
-  onOpenPerson: (residentId: string) => void;
-  onAddPersonNote: (residentId: string, kind: "general", body: string) => string;
-  onComplete: (input: FollowUpCompletionInput) => void;
-  onReschedule: (date: string, note?: string) => void;
-  onCancel: (note?: string) => void;
-}) {
-  const [editingDate, setEditingDate] = useState(false);
-  const [completing, setCompleting] = useState(false);
-  const [date, setDate] = useState(dateInputValue(followUp.dueAt));
-  const [rescheduleNote, setRescheduleNote] = useState("");
-  const overdue = isFollowUpOverdue(followUp) && followUp.dueAt.slice(0, 10) !== new Date().toISOString().slice(0, 10);
-  const validDate = Boolean(date) && date >= new Date().toISOString().slice(0, 10);
-  const statusLabel = followUp.status === "completed"
-    ? "Completed"
-    : followUp.status === "cancelled"
-      ? "Cancelled"
-      : overdue
-        ? "Overdue"
-        : followUp.dueAt.slice(0, 10) === new Date().toISOString().slice(0, 10)
-          ? "Today"
-          : "Scheduled";
-  return (
-    <article className={`followup-card ${followUp.status}${overdue ? " overdue" : ""}`}>
-      <header className="followup-card-header">
-        <div className="followup-date" aria-label={`${statusLabel}, ${formatDateTime(followUp.dueAt)}`}>
-          <span>{statusLabel}</span>
-          <div><strong>{formatDateTime(followUp.dueAt, { day: "numeric" })}</strong><small>{formatDateTime(followUp.dueAt, { month: "short" })}</small></div>
-          <em>{formatDateTime(followUp.dueAt, { weekday: "long" })}</em>
-        </div>
-        <div className="followup-card-title">
-          <div className="followup-card-meta"><span>{followUp.residentId ? <UserRound size={13} /> : <Users size={13} />} {followUp.residentId ? `${ownerName || "Person owner"} · private person task` : teamName || "Unassigned location task"}</span></div>
-          <h2>{property.address}{property.unit ? ` · ${property.unit}` : ""}</h2>
-        </div>
-      </header>
-      <div className="followup-card-body">
-        <section className="followup-brief" aria-label="Follow-up brief">
-          <span className="followup-section-label">Follow-up brief</span>
-          <p>{followUp.note || "A return visit was requested. No additional note was recorded."}</p>
-          {followUp.completionNote && <p className="completion-note"><Check size={13} /> {followUp.completionNote}</p>}
-          {followUp.history.length > 1 && <details className="followup-history"><summary>{followUp.history.length} updates</summary>{followUp.history.slice().reverse().map((activity) => <div key={activity.id}><strong>{activity.action.replaceAll("_", " ")}</strong><span>{activity.note || (activity.dueAt ? formatDateTime(activity.dueAt, { month: "short", day: "numeric" }) : "No note")}</span><small>{formatDateTime(activity.createdAt)}</small></div>)}</details>}
-        </section>
-        <FollowUpPeople residents={residents} personNotes={personNotes} noteLimit={noteLimit} linkedPersonId={followUp.residentId} onOpenPerson={onOpenPerson} onAddPersonNote={onAddPersonNote} />
-      </div>
-      {followUp.status !== "scheduled" || !canEdit ? (
-        <div className="followup-actions single"><button className="button quiet small" onClick={onOpen}><MapIcon size={14} /> View on map</button></div>
-      ) : editingDate ? (
-        <div className="inline-date-editor">
-          <input type="date" value={date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setDate(event.target.value)} aria-label="New follow-up date" />
-          <input value={rescheduleNote} maxLength={noteLimit} onChange={(event) => setRescheduleNote(event.target.value)} placeholder="Reason or note (optional)" aria-label="Reschedule note" />
-          <button className="button primary small" disabled={!validDate} onClick={() => { onReschedule(date, rescheduleNote); setEditingDate(false); }}><Save size={14} /> Save</button>
-          <button className="icon-text-button" onClick={() => setEditingDate(false)}>Cancel</button>
-        </div>
-      ) : (
-        <div className="followup-actions">
-          <div className="followup-actions-secondary">
-            <button className="button quiet small" onClick={onOpen}><MapIcon size={14} /> View on map</button>
-            <button className="button quiet small" onClick={() => setEditingDate(true)}><CalendarClock size={14} /> Reschedule</button>
-          </div>
-          <div className="followup-actions-outcome">
-            <button className="button primary small" onClick={() => setCompleting(true)}><Check size={15} /> Complete follow-up</button>
-            <button className="more-danger" onClick={() => {
-              const note = window.prompt("Optional cancellation note. Select Cancel to keep the follow-up open.");
-              if (note !== null && window.confirm("Cancel this follow-up? The visit record will remain.")) onCancel(note);
-            }} aria-label="Cancel follow-up"><Trash2 size={15} /></button>
-          </div>
-        </div>
-      )}
-      {completing && <CompleteFollowUpModal followUp={followUp} teams={teams} noteLimit={noteLimit} onClose={() => setCompleting(false)} onSave={(input) => { onComplete(input); setCompleting(false); }} />}
-    </article>
-  );
-}
-
-function FollowUpPeople({ residents, personNotes, noteLimit, linkedPersonId, onOpenPerson, onAddPersonNote }: {
-  residents: Resident[];
-  personNotes: NeighborWalkData["personNotes"];
-  noteLimit: number;
-  linkedPersonId?: string;
-  onOpenPerson: (residentId: string) => void;
-  onAddPersonNote: (residentId: string, kind: "general", body: string) => string;
-}) {
-  const [noteBody, setNoteBody] = useState("");
-  const sortedNotes = [...personNotes].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-  const noteValid = Boolean(linkedPersonId && noteBody.trim() && noteBody.length <= noteLimit);
-  return <section className="followup-people" aria-label="People recorded at this location">
-    <div className="followup-people-heading"><span><Users size={14} /> {linkedPersonId ? "Person context" : "People to contact"}</span><strong>{residents.length}</strong></div>
-    {residents.length ? <div className="followup-person-list">{residents.map((resident) => {
-      const smsNumber = resident.phone?.replace(/[^\d+]/g, "");
-      const displayPhone = resident.phone ? formatPhoneNumber(resident.phone) : undefined;
-      const canText = Boolean(smsNumber);
-      const canEmail = Boolean(resident.email);
-      return <article className="followup-person" key={resident.id}>
-        <span className="followup-person-avatar" aria-hidden="true">{resident.name?.trim().charAt(0).toUpperCase() || "?"}</span>
-        <div className="followup-person-copy">
-          <div><strong>{resident.name || "Name not provided"}</strong><span>{faithStatusLabels[resident.faithStatus]}</span></div>
-          {!canText && !canEmail ? <small><Phone size={12} /> No phone number or email saved</small> : null}
-        </div>
-        <div className="followup-contact-actions">
-          {canText && <a className={resident.preferredContact === "text" ? "preferred" : undefined} href={`sms:${smsNumber}`} aria-label={`Text ${resident.name || "this person"} at ${displayPhone}`}><MessageCircle size={14} /><span><small>{resident.preferredContact === "text" ? "Preferred text" : "Text"}</small><strong>{displayPhone}</strong></span></a>}
-          {canEmail && <a className={resident.preferredContact === "email" ? "preferred" : undefined} href={`mailto:${resident.email}`} aria-label={`Email ${resident.name || "this person"} at ${resident.email}`}><Mail size={14} /><span><small>{resident.preferredContact === "email" ? "Preferred email" : "Email"}</small><strong>{resident.email}</strong></span></a>}
-          <button onClick={() => onOpenPerson(resident.id)} aria-label={`Open ${resident.name || "person"} discipleship profile`}><UserRound size={14} /><span><small>Discipleship</small><strong>View profile</strong></span></button>
-        </div>
-      </article>;
-    })}</div> : <p className="followup-people-empty"><Phone size={13} /> No people are recorded at this location.</p>}
-    {linkedPersonId && <div className="followup-person-notes">
-      <div><strong>Person notes</strong><span>{sortedNotes.length}</span></div>
-      {sortedNotes.length ? <div className="followup-note-list">{sortedNotes.slice(0, 3).map((note) => <article key={note.id}><p>{note.body}</p><time>{formatDateTime(note.createdAt, { month: "short", day: "numeric", year: "numeric" })}</time></article>)}</div> : <p>No notes yet.</p>}
-      {sortedNotes.length > 3 && <button onClick={() => onOpenPerson(linkedPersonId)}>View all {sortedNotes.length} notes</button>}
-      <div className="followup-note-composer"><input value={noteBody} maxLength={noteLimit + 1} onChange={(event) => setNoteBody(event.target.value)} placeholder="Add a note to this person’s history" aria-label="Add person note" /><button className="button quiet small" disabled={!noteValid} onClick={() => { onAddPersonNote(linkedPersonId, "general", noteBody); setNoteBody(""); }}><MessageCircle size={13} /> Save note</button></div>
-    </div>}
+    {tasks.length ? <div className="followup-list">{tasks.map((task) => <TaskCard key={task.id} task={task} {...props} />)}</div>
+      : <EmptyState icon={<ClipboardCheck size={26} />} title="Nothing waiting in this view" copy="Try another filter. Plan a next step from a person’s profile or record a requested return visit during outreach." />}
   </section>;
 }
 
-function CompleteFollowUpModal({ followUp, teams, noteLimit, onClose, onSave }: {
-  followUp: FollowUp;
-  teams: NeighborWalkData["teams"];
-  noteLimit: number;
-  onClose: () => void;
-  onSave: (input: FollowUpCompletionInput) => void;
-}) {
-  const [completionNote, setCompletionNote] = useState("");
-  const [scheduleAnother, setScheduleAnother] = useState(false);
-  const [nextDate, setNextDate] = useState("");
-  const [nextNote, setNextNote] = useState("");
-  const [assignedTeamId, setAssignedTeamId] = useState(followUp.assignedTeamId ?? "");
-  const valid = completionNote.length <= noteLimit && nextNote.length <= noteLimit
-    && (!scheduleAnother || Boolean(nextDate) && nextDate >= new Date().toISOString().slice(0, 10) && (!followUp.residentId || Boolean(nextNote.trim())));
-  return <Modal title="Complete follow-up" description={followUp.residentId ? "Record what happened. Your note will also become part of this person’s history." : "Record the result and schedule the next step if needed."} onClose={onClose}>
-    <div className="form-stack">
-      <label className="form-field"><span>{followUp.residentId ? "Person note" : "Completion note"} <small>Optional</small></span><textarea rows={3} maxLength={noteLimit + 1} value={completionNote} onChange={(event) => setCompletionNote(event.target.value)} placeholder="Briefly record what happened or what was requested." />{followUp.residentId && <small>Saved in this person’s single note history.</small>}</label>
-      <label className={`toggle-row additional-followup-toggle${scheduleAnother ? " active" : ""}`}><input type="checkbox" checked={scheduleAnother} onChange={(event) => setScheduleAnother(event.target.checked)} /><span className="compact-toggle-label">Schedule an additional follow-up</span></label>
-      {scheduleAnother && <section className="additional-followup-panel" aria-label="Additional follow-up details">
-        <div className="additional-followup-heading">
-          <span><CalendarClock size={17} /></span>
-          <div><strong>Plan the next task</strong><small>Keep the relationship moving while the details are fresh.</small></div>
-        </div>
-        <div className="additional-followup-fields">
-          <div className="form-field additional-followup-field">
-            <label className="additional-followup-label" htmlFor="additional-followup-date"><i>1</i><span><strong>Due date</strong><small>When should this happen?</small></span></label>
-            <input id="additional-followup-date" type="date" min={new Date().toISOString().slice(0, 10)} value={nextDate} onChange={(event) => setNextDate(event.target.value)} />
-          </div>
-          {!followUp.residentId && <div className="form-field additional-followup-field">
-            <label className="additional-followup-label" htmlFor="additional-followup-group"><i>2</i><span><strong>Assign group</strong><small>Who should own the next visit?</small></span></label>
-            <select id="additional-followup-group" value={assignedTeamId} onChange={(event) => setAssignedTeamId(event.target.value)}><option value="">Unassigned</option>{teams.map((team) => <option value={team.id} key={team.id}>{team.name}</option>)}</select>
-          </div>}
-          <div className="form-field additional-followup-field full">
-            <label className="additional-followup-label" htmlFor="additional-followup-note"><i>{followUp.residentId ? "2" : "3"}</i><span><strong>What needs to happen?</strong><small>{followUp.residentId ? "Required for a person task." : "What should the next volunteer know? Optional."}</small></span></label>
-            <textarea id="additional-followup-note" rows={3} maxLength={noteLimit + 1} value={nextNote} onChange={(event) => setNextNote(event.target.value)} placeholder="Example: Bring service times and text before visiting." />
-          </div>
-        </div>
-      </section>}
+function TaskCard({ task, ...props }: Props & { task: FollowUp }) {
+  const { data, canManage, activeVolunteerId, onOpenPerson, onOpenProperty, onAssign, onAccept } = props;
+  const [editing, setEditing] = useState<"complete" | "reschedule" | "cancel" | null>(null);
+  const action = useAsyncAction();
+  const person = data.residents.find((p) => p.id === task.residentId);
+  const location = data.properties.find((p) => p.id === task.propertyId);
+  const owner = data.volunteers.find((v) => v.id === task.assignedVolunteerId);
+  const ownTask = task.assignedVolunteerId === activeVolunteerId;
+  const canEdit = canManage || ownTask;
+  const open = task.status === "scheduled";
+  const date = calendarDate(task.dueAt, data.church.timezone);
+  const overdue = open && date < calendarDate(new Date(), data.church.timezone);
+  return <article className={"followup-card" + (overdue ? " overdue" : "")}>
+    <div className="followup-main">
+      <div className="followup-heading"><h2>{person?.name || location?.address || "Personal next step"}</h2><span className="status-badge">{task.status}</span></div>
+      <p>{task.note || "Return visit requested"}</p>
+      <p className="task-meta"><CalendarClock size={16} /> {overdue ? "Overdue · " : ""}{formatCalendarDate(date)} · {task.channel ?? "visit"}</p>
+      <p className="task-meta"><UserRound size={16} /> {owner?.name ?? "Needs an owner"}{task.acceptance === "pending" ? " · Awaiting acceptance" : task.acceptance === "declined" ? " · Assignment declined" : ""}</p>
+      {task.completionNote && <p><strong>Completed:</strong> {task.completionNote}</p>}
+      <div className="care-next-actions">
+        {person && <button className="button quiet small" onClick={() => onOpenPerson(person.id)}><UserRound size={16} /> Person &amp; notes</button>}
+        {location && <button className="button quiet small" onClick={() => onOpenProperty(location.id)}><MapPin size={16} /> Location</button>}
+        {open && ownTask && task.acceptance === "pending" && onAccept && <><button className="button primary small" disabled={action.busy} onClick={() => void action.run(() => onAccept(task.id, "accepted"))}>Accept responsibility</button><button className="button quiet small" disabled={action.busy} onClick={() => void action.run(() => onAccept(task.id, "declined"))}>Decline</button></>}
+        {open && canEdit && task.acceptance !== "pending" && <><button className="button primary small" onClick={() => setEditing("complete")}><Check size={16} /> Complete</button><button className="button quiet small" onClick={() => setEditing("reschedule")}>Reschedule</button><button className="button quiet small" onClick={() => setEditing("cancel")}>Cancel task</button></>}
+      </div>
+      {open && canManage && onAssign && <label>Responsible person<select value={task.assignedVolunteerId ?? ""} disabled={action.busy} onChange={(e) => { const id = e.target.value; if (id) void action.run(() => onAssign(task.id, id)); }}><option value="" disabled>Choose an owner</option>{data.volunteers.filter((v) => v.active).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select><small>For a person-linked task, share the person’s profile or arrange a care handoff first.</small></label>}
+      {action.error && <p className="inline-error" role="alert">{action.error}</p>}
+      <details><summary>Task history ({task.history.length})</summary><ol className="task-history">{task.history.map((entry) => <li key={entry.id}><strong>{entry.action}</strong> · {data.volunteers.find((v) => v.id === entry.actorId)?.name ?? "Previous member"} · {new Intl.DateTimeFormat("en-US", { timeZone: data.church.timezone, dateStyle: "medium" }).format(new Date(entry.createdAt))}{entry.note && <p>{entry.note}</p>}</li>)}</ol></details>
     </div>
-    <div className="modal-actions"><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={!valid} onClick={() => onSave({ completionNote: completionNote.trim() || undefined, nextFollowUp: scheduleAnother ? { dueAt: new Date(`${nextDate}T17:00:00`).toISOString(), note: nextNote.trim() || undefined, assignedTeamId: followUp.residentId ? undefined : assignedTeamId || undefined } : undefined })}><Check size={15} /> Complete follow-up</button></div>
+    {editing && <TaskEditor task={task} mode={editing} {...props} onClose={() => setEditing(null)} />}
+  </article>;
+}
+
+function TaskEditor({ task, mode, data, onComplete, onReschedule, onCancel, onClose }: Props & { task: FollowUp; mode: "complete" | "reschedule" | "cancel"; onClose: () => void }) {
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState(dateInputValue(task.dueAt));
+  const [another, setAnother] = useState(false);
+  const [nextNote, setNextNote] = useState("");
+  const [nextDate, setNextDate] = useState(calendarDaysFromNow(data.church.defaultFollowUpDays, data.church.timezone));
+  const action = useAsyncAction();
+  return <Modal title={mode === "complete" ? "Complete this next step" : mode === "reschedule" ? "Reschedule follow-up" : "Cancel follow-up"} description="Keep notes brief, factual, and useful for the person responsible. Your form stays open if saving fails." onClose={action.busy ? () => undefined : onClose}>
+    <form className="form-stack" onSubmit={(e) => {
+      e.preventDefault();
+      void action.run(() => mode === "complete" ? onComplete(task.id, { completionNote: note.trim() || undefined,
+        nextFollowUp: another ? { dueAt: nextDate, note: nextNote.trim(), assignedTeamId: task.assignedTeamId } : undefined })
+        : mode === "reschedule" ? onReschedule(task.id, date, note.trim() || undefined) : onCancel(task.id, note.trim() || undefined), onClose);
+    }}>
+      {mode === "reschedule" && <label>New date<input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></label>}
+      <label>{mode === "complete" ? "What happened? (optional)" : "Reason (optional)"}<textarea value={note} maxLength={data.church.noteCharacterLimit} onChange={(e) => setNote(e.target.value)} rows={3} /></label>
+      {mode === "complete" && <><label className="checkbox-label"><input type="checkbox" checked={another} onChange={(e) => setAnother(e.target.checked)} /> Plan another next step</label>{another && <><label>Next step<input required value={nextNote} maxLength={data.church.noteCharacterLimit} onChange={(e) => setNextNote(e.target.value)} /></label><label>Next date<input type="date" required value={nextDate} onChange={(e) => setNextDate(e.target.value)} /></label></>}</>}
+      {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+      <div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Keep editing later</button><button className="button primary" disabled={action.busy}>{action.busy ? "Saving to device…" : mode === "complete" ? "Complete follow-up" : "Save change"}</button></div>
+    </form>
   </Modal>;
 }

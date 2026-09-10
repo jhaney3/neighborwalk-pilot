@@ -55,7 +55,7 @@ function mergeVisitSideEffects(
 ) {
   const affected = summarizePropertyVisits(
     properties.filter((property) => affectedPropertyIds.has(property.id)),
-    visits.filter((visit) => affectedPropertyIds.has(visit.propertyId)),
+    visits.filter((visit) => visit.propertyId && affectedPropertyIds.has(visit.propertyId)),
   );
   const byId = new Map(affected.map((property) => [property.id, property]));
   const nextProperties = properties.map((property) => {
@@ -71,7 +71,7 @@ function mergeVisitSideEffects(
     .filter((property) => affectedPropertyIds.has(property.id) && property.currentOutcome === "do_not_visit")
     .map((property) => property.id));
   const nextFollowUps = followUps.map((followUp) => (
-    doNotVisitProperties.has(followUp.propertyId) && followUp.status === "scheduled"
+    followUp.propertyId && doNotVisitProperties.has(followUp.propertyId) && followUp.status === "scheduled"
       ? { ...followUp, status: "cancelled" as const }
       : followUp
   ));
@@ -83,11 +83,11 @@ export function mergePendingWorkspaceChanges(remote: NeighborWalkData, local: Ne
   const mutations = latestMutations(local.sync.pending);
   if (!mutations.length) return remote;
   if (mutations.some((item) => item.entityType === "data")) {
-    return { ...local, sync: { ...local.sync, mode: "connected" } };
+    throw new Error("This device has a legacy bulk change that needs supervised recovery. Export its pending work before continuing; no shared records have been replaced.");
   }
 
   let properties = applyEntityMutations(remote.properties, local.properties, mutations, "property");
-  const visits = applyEntityMutations(remote.visits, local.visits, mutations, "visit")
+  let visits = applyEntityMutations(remote.visits, local.visits, mutations, "visit")
     .sort((left, right) => right.recordedAt.localeCompare(left.recordedAt));
   let followUps = applyEntityMutations(remote.followUps, local.followUps, mutations, "follow_up");
   followUps = applyEntityMutations(followUps, local.followUps, mutations, "person_follow_up");
@@ -96,7 +96,7 @@ export function mergePendingWorkspaceChanges(remote: NeighborWalkData, local: Ne
   const personNotes = applyEntityMutations(remote.personNotes, local.personNotes, mutations, "person_note")
     .filter((note) => residentIds.has(note.residentId))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-  const territories = applyEntityMutations(remote.territories, local.territories, mutations, "territory");
+  let territories = applyEntityMutations(remote.territories, local.territories, mutations, "territory");
   const guide = applyEntityMutations(remote.guide, local.guide, mutations, "guide")
     .sort((left, right) => left.order - right.order);
 
@@ -112,7 +112,7 @@ export function mergePendingWorkspaceChanges(remote: NeighborWalkData, local: Ne
   if (affectedPropertyIds.size) {
     const mergedFollowUps = new Map(followUps.map((followUp) => [followUp.id, followUp]));
     for (const followUp of local.followUps) {
-      if (affectedPropertyIds.has(followUp.propertyId)) mergedFollowUps.set(followUp.id, followUp);
+      if (followUp.propertyId && affectedPropertyIds.has(followUp.propertyId)) mergedFollowUps.set(followUp.id, followUp);
     }
     const sideEffects = mergeVisitSideEffects(properties, visits, [...mergedFollowUps.values()], affectedPropertyIds);
     properties = sideEffects.properties;
@@ -120,8 +120,21 @@ export function mergePendingWorkspaceChanges(remote: NeighborWalkData, local: Ne
   }
 
   let teams = applyEntityMutations(remote.teams, local.teams, mutations, "team");
+  const deletedTeamIds = new Set(mutations.filter((item) => item.entityType === "team" && item.operation === "delete").map((item) => item.entityId));
+  territories = territories.map((territory) => territory.assignedTeamId && deletedTeamIds.has(territory.assignedTeamId)
+    ? { ...territory, assignedTeamId: undefined } : territory);
+  followUps = followUps.map((task) => task.assignedTeamId && deletedTeamIds.has(task.assignedTeamId)
+    ? { ...task, assignedTeamId: undefined } : task);
   for (const item of mutations) {
     if (item.entityType !== "territory") continue;
+    if (item.operation === "delete") {
+      const destination = item.destinationTerritoryId;
+      if (!destination || !territories.some((territory) => territory.id === destination)) {
+        throw new Error("The destination for a pending territory move is unavailable. The change needs review; no records were discarded.");
+      }
+      properties = properties.map((property) => property.territoryId === item.entityId ? { ...property, territoryId: destination } : property);
+      visits = visits.map((visit) => visit.territoryId === item.entityId ? { ...visit, territoryId: destination } : visit);
+    }
     teams = teams.map((team) => ({
       ...team,
       territoryIds: team.territoryIds.filter((territoryId) => territoryId !== item.entityId),

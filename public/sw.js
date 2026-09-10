@@ -1,84 +1,58 @@
 const CACHE_SCOPE = new URL(self.location.href).searchParams.has("sandbox") ? "-sandbox" : "";
-const APP_CACHE = `neighborwalk-app-v16${CACHE_SCOPE}`;
-const MAP_CACHE = `neighborwalk-map-v2${CACHE_SCOPE}`;
+const APP_CACHE = `neighborwalk-app-v17${CACHE_SCOPE}`;
 const CORE = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
-const MAP_CACHE_LIMIT = 180;
 const STATIC_DESTINATIONS = new Set(["style", "script", "worker", "image", "font", "manifest"]);
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(APP_CACHE).then((cache) => cache.addAll(CORE)).then(() => self.skipWaiting()));
+  // Do not replace the running app while a volunteer has unsent work.
+  // The browser activates this worker after existing clients have closed.
+  event.waitUntil(caches.open(APP_CACHE).then((cache) => cache.addAll(CORE)));
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => ![APP_CACHE, MAP_CACHE].includes(key)).map((key) => caches.delete(key))))
-      .then(() => self.clients.claim()),
-  );
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) =>
+    (key.startsWith("neighborwalk-app-") || key.startsWith("neighborwalk-map-"))
+    && (CACHE_SCOPE ? key.endsWith("-sandbox") : !key.endsWith("-sandbox"))
+    && key !== APP_CACHE
+  ).map((key) => caches.delete(key)))));
 });
 
-async function trimCache(cacheName, limit) {
-  const cache = await caches.open(cacheName);
-  const keys = await cache.keys();
-  if (keys.length <= limit) return;
-  await Promise.all(keys.slice(0, keys.length - limit).map((key) => cache.delete(key)));
-}
-
-async function networkFirst(request) {
+async function navigation(request) {
   const cache = await caches.open(APP_CACHE);
   try {
     const response = await fetch(request);
     if (response.ok) await cache.put(request, response.clone());
     return response;
   } catch {
-    return (await cache.match(request)) || (await cache.match("/")) || new Response("NeighborWalk is offline.", { status: 503 });
+    return await cache.match(request) || await cache.match("/") ||
+      new Response("NeighborWalk is offline. Reconnect to prepare this device.", { status: 503 });
   }
 }
 
-async function staleWhileRevalidate(request) {
+async function staticAsset(request) {
   const cache = await caches.open(APP_CACHE);
   const cached = await cache.match(request);
-  const network = fetch(request).then(async (response) => {
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
     if (response.ok) await cache.put(request, response.clone());
     return response;
-  }).catch(() => cached);
-  return cached || network;
-}
-
-async function cacheMapResource(request) {
-  const cache = await caches.open(MAP_CACHE);
-  const cached = await cache.match(request);
-  const network = fetch(request).then(async (response) => {
-    if (response.ok || response.type === "opaque") {
-      await cache.put(request, response.clone());
-      void trimCache(MAP_CACHE, MAP_CACHE_LIMIT);
-    }
-    return response;
-  }).catch(() => cached || new Response("Map data is unavailable offline.", { status: 503 }));
-  if (cached) {
-    void network;
-    return cached;
+  } catch {
+    return new Response("This resource is not prepared offline.", { status: 503 });
   }
-  return network;
 }
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.pathname.startsWith("/api/")
-    || url.pathname.startsWith("/v1/")) return;
+  // Authentication, API data, external maps, and token-bearing URLs are never
+  // stored here. Offline church records live in account-scoped IndexedDB.
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")
+    || url.pathname.startsWith("/auth/") || url.pathname.startsWith("/invite/")) return;
   if (request.mode === "navigate") {
-    event.respondWith(networkFirst(request));
+    if (!url.search) event.respondWith(navigation(request));
     return;
   }
-  const isCacheableMapResource = url.hostname === "tiles.openfreemap.org"
-    || (url.hostname === "api.maptiler.com" && !url.pathname.startsWith("/geocoding/"));
-  if (isCacheableMapResource) {
-    event.respondWith(cacheMapResource(request));
-    return;
-  }
-  if (url.origin === self.location.origin && STATIC_DESTINATIONS.has(request.destination)) {
-    event.respondWith(staleWhileRevalidate(request));
-  }
+  if (STATIC_DESTINATIONS.has(request.destination)) event.respondWith(staticAsset(request));
 });

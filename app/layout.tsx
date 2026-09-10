@@ -3,6 +3,7 @@ import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 import { isProductionApp } from "../lib/environment";
+import { InstallPromptCapture } from "../components/InstallPromptCapture";
 
 const PRODUCTION_ORIGIN = "https://neighborwalk-pilot.vercel.app";
 
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body suppressHydrationWarning className={`${archivo.variable} ${plexMono.variable}`}>
+        <InstallPromptCapture />
         {!isProductionApp && <div className="sandbox-banner" role="status">Test workspace · Changes stay separate from production</div>}
         {children}
       </body>

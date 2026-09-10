@@ -132,11 +132,15 @@ export function conversationGuideTeam(
     ?? memberships[0];
 }
 
-export function readLocalGuideLibrary(churchId: string, legacySteps: GuideStep[]): GuideLibraryState {
+function guideStorageKey(churchId: string, userId?: string) {
+  return `${LOCAL_GUIDE_LIBRARY_KEY}:${JSON.stringify([userId ?? "demo", churchId])}`;
+}
+
+export function readLocalGuideLibrary(churchId: string, legacySteps: GuideStep[], userId?: string): GuideLibraryState {
   try {
-    const parsed = localGuideLibrarySchema.safeParse(JSON.parse(window.localStorage.getItem(LOCAL_GUIDE_LIBRARY_KEY) ?? "null"));
-    if (parsed.success && parsed.data.guides.some((guide) => guide.churchId === churchId)) {
-      const guides = parsed.data.guides.filter((guide) => guide.churchId === churchId);
+    const parsed = localGuideLibrarySchema.safeParse(JSON.parse(window.localStorage.getItem(guideStorageKey(churchId, userId)) ?? "null"));
+    if (parsed.success) {
+      const guides = parsed.data.guides.filter((guide) => guide.churchId === churchId && (guide.scope === "church" || guide.ownerUserId === userId));
       return {
         guides,
         favoriteGuideId: guides.some((guide) => guide.id === parsed.data.favoriteGuideId)
@@ -151,12 +155,13 @@ export function readLocalGuideLibrary(churchId: string, legacySteps: GuideStep[]
   } catch {
     // A malformed device cache should not prevent the field app from opening.
   }
+  if (userId) return { guides: [], teamGuideDefaults: {} };
   const fallback = legacyConversationGuide(churchId, legacySteps);
   return { guides: [fallback], favoriteGuideId: fallback.id, teamGuideDefaults: {} };
 }
 
-export function writeLocalGuideLibrary(state: GuideLibraryState) {
-  window.localStorage.setItem(LOCAL_GUIDE_LIBRARY_KEY, JSON.stringify(state));
+export function writeLocalGuideLibrary(state: GuideLibraryState, churchId = state.guides[0]?.churchId ?? "demo", userId?: string) {
+  window.localStorage.setItem(guideStorageKey(churchId, userId), JSON.stringify(state));
 }
 
 function canonicalIsoTimestamp(value: string): string | null {
