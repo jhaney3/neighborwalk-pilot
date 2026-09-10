@@ -35,6 +35,7 @@ import { EncounterComposer } from "../components/EncounterComposer";
 import { OutreachView } from "../components/OutreachView";
 import { RecoveryView } from "../components/RecoveryView";
 import { DataHealthView } from "../components/DataHealthView";
+import { indexCurrentRecords } from "../lib/record-aliases";
 import { MapCanvas, type MapSearchTarget } from "../components/MapCanvas";
 import { PropertyDrawer } from "../components/PropertyDrawer";
 import { AddressList } from "../components/AddressList";
@@ -135,7 +136,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     filter === "all" ? Object.keys(outcomeMeta) as Outcome[] : [filter],
   ), [filter]);
   const territories = data?.territories ?? EMPTY_TERRITORIES;
-  const properties = data?.properties ?? EMPTY_PROPERTIES;
+  const properties = useMemo(() => data?.properties.filter((property) => !property.mergedIntoId) ?? EMPTY_PROPERTIES, [data?.properties]);
   const activeTerritoryId = activeTerritory?.id;
   const territoryProperties = useMemo(() => properties.filter((property) => property.territoryId === activeTerritoryId), [properties, activeTerritoryId]);
   const territoryParcelResults = useTerritoryParcels(route.view === "map" && outreachDisplay === "map" ? territories : EMPTY_TERRITORIES);
@@ -154,6 +155,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     const normalizedQuery = query.trim().toLowerCase();
     if (!data || normalizedQuery.length < 2) return [];
     return data.properties
+      .filter((property) => !property.mergedIntoId)
       .filter((property) => `${property.address} ${property.unit ?? ""}`.toLowerCase().includes(normalizedQuery))
       .slice(0, 4)
       .map((property) => ({
@@ -226,7 +228,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   const coverage = coverageByTerritory[activeTerritory.id]
     ?? coverageForTerritory(data, activeTerritory.id);
   const coverageLabel = coverage.basis === "residential_parcels" ? "residential covered" : "mapped covered";
-  const selectedProperty = data.properties.find((property) => property.id === propertySelection) ?? null;
+  const selectedProperty = indexCurrentRecords(data.properties).get(propertySelection ?? "") ?? null;
   const selectedVisits = selectedProperty ? visitsForProperty(data, selectedProperty.id) : [];
   const selectedFollowUp = selectedProperty ? data.followUps.find((followUp) => followUp.propertyId === selectedProperty.id && followUp.status === "scheduled") : undefined;
   const selectedPropertyDwellings = selectedProperty?.parcel
@@ -396,7 +398,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
         </aside>
 
         <section className="workspace">
-          {view === "data" && (canManage && data.sync.mode === "connected" ? <DataHealthView data={data} online={online} onRun={actions.runAdministration} onExport={actions.exportChurchRecords} onAuthenticate={actions.reauthenticateAdmin} onPending={actions.getAdministrationPending} onReviewPending={actions.reviewAdministrationPending} onPreviewRetention={actions.getRetentionPreview} onRefresh={actions.syncNow} onOpenPerson={(id) => navigate("people", id)} onOpenLocation={(id) => navigate("map", id)} /> : <section className="content-view"><h1>Leader administration</h1><p>A connected church leader account is required. The sample does not import or archive real church records.</p></section>)}
+          {view === "data" && (canManage && data.sync.mode === "connected" ? <DataHealthView data={data} online={online} onRun={actions.runAdministration} onExport={actions.exportChurchRecords} onAuthenticate={actions.reauthenticateAdmin} onPending={actions.getAdministrationPending} onReviewPending={actions.reviewAdministrationPending} onPreviewRetention={actions.getRetentionPreview} onPreviewDuplicates={actions.getDuplicatePreview} onRefresh={actions.syncNow} onOpenPerson={(id) => navigate("people", id)} onOpenLocation={(id) => navigate("map", id)} /> : <section className="content-view"><h1>Leader administration</h1><p>A connected church leader account is required. The sample does not import or archive real church records.</p></section>)}
           {["today", "outreach"].includes(view) && <EncounterComposer data={data} outingId={view === "outreach" ? route.id : undefined} onSave={async (input) => { await actions.recordVisit(input); setToast("Encounter saved on this device"); }} />}
           {view === "recovery" && <RecoveryView data={data} online={online} onPreview={actions.previewRecovery} onResolve={actions.resolveRecovery} onExport={actions.downloadDeviceRecovery} onAuthoredExport={actions.downloadAuthoredDeviceRecovery} onArchives={actions.listDeviceArchives} onDownloadArchive={actions.downloadDeviceArchive} onSync={actions.syncNow} />}
           {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={() => navigate("people")} />}

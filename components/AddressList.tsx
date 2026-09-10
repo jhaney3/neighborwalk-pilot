@@ -15,7 +15,7 @@ export function AddressList({ data, onOpen, onAdd }: {
   const [address, setAddress] = useState("");
   const [unit, setUnit] = useState("");
   const action = useAsyncAction();
-  const locations = data.properties.filter((p) => (!territory || p.territoryId === territory)
+  const locations = data.properties.filter((p) => !p.mergedIntoId && (!territory || p.territoryId === territory)
     && (p.address + " " + (p.unit ?? "")).toLowerCase().includes(query.toLowerCase())).sort((a, b) => a.address.localeCompare(b.address, undefined, { numeric: true }));
   return <section className="address-list content-view" aria-label="Outreach address list">
     <div className="view-heading"><div><p className="eyebrow">A map is optional</p><h1>Address list</h1><p>Open a location to record a visit. Saved addresses and restrictions remain available offline.</p></div><button className="button primary" onClick={() => setAdding(true)}><Plus size={16} /> Add address manually</button></div>

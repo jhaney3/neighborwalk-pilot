@@ -131,6 +131,80 @@ test("a reviewed person move follows open tasks and records its reason in histor
   expect(Number(result)).toBe(1);
 });
 
+test("reviewed duplicate people and locations retain history and resolve original links", async ({ context, page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const fixture = randomUUID();
+  const firstLocation = "browser_merge_" + fixture + "_a";
+  const secondLocation = "browser_merge_" + fixture + "_b";
+  // Only new generated fictional locations in the fixed local church are seeded.
+  execFileSync("psql", [database, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-c",
+    `insert into public.outreach_locations(church_id,id,address,unit,source) values ('00000000-0000-4000-8000-000000000001','${firstLocation}','Fictional duplicate ${fixture}','A','manual'),('00000000-0000-4000-8000-000000000001','${secondLocation}','Fictional duplicate ${fixture}','A','manual');`], { stdio: "pipe" });
+  await isolate(context); await signIn(page);
+  const label = prefix + " duplicate person";
+  const ids: string[] = [];
+  for (const phone of ["555-0101", "555-0102"]) {
+    await page.goto(origin + "/app/people");
+    await page.getByRole("button", { name: "Add person", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: "Name or useful identifying description", exact: true }).fill(label);
+    await dialog.getByRole("textbox", { name: "Phone (optional)", exact: true }).fill(phone);
+    await dialog.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true }).selectOption(firstLocation);
+    await dialog.getByRole("button", { name: "Save person", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(/\/app\/people\/[^/]+$/);
+    ids.push(decodeURIComponent(new URL(page.url()).pathname.split("/").at(-1)!));
+    if (ids.length === 1) {
+      await page.getByRole("textbox", { name: "Care note", exact: true }).fill("Fictional original duplicate history " + fixture);
+      await page.getByRole("button", { name: "Save note", exact: true }).click();
+      await expect(page.locator(".person-profile").getByText("Fictional original duplicate history " + fixture, { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Plan follow-up", exact: true }).click();
+      await page.getByRole("textbox", { name: "What needs to happen?", exact: true }).fill("Fictional duplicate next step " + fixture);
+      await page.getByRole("button", { name: "Add follow-up", exact: true }).click();
+    }
+    await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
+  }
+  await page.goto(origin + "/app/data");
+  const review = page.getByRole("region", { name: "Combine reviewed duplicates", exact: true });
+  await expect(review).toBeVisible();
+  for (const kind of ["people", "locations"] as const) {
+    await review.getByRole("combobox", { name: "Duplicate kind", exact: true }).selectOption(kind);
+    await review.getByRole("combobox", { name: "Original to preserve as history", exact: true }).selectOption(kind === "people" ? ids[0] : firstLocation);
+    await review.getByRole("combobox", { name: "Record to keep current", exact: true }).selectOption(kind === "people" ? ids[1] : secondLocation);
+    await review.getByRole("button", { name: "Preview exact combination", exact: true }).click();
+    await expect(review.getByRole("table")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    const combine = review.getByRole("button", { name: "Combine exactly the reviewed records", exact: true });
+    await expect(combine).toBeDisabled();
+    await review.getByRole("textbox", { name: "Why are these the same person or location?", exact: true }).fill("Reviewed the same fictional identity or dwelling.");
+    await review.getByRole("checkbox").check();
+    await expect(combine).toBeDisabled();
+    await review.getByRole("textbox", { name: kind === "people" ? "Type COMBINE SAME PERSON" : "Type COMBINE SAME LOCATION", exact: true }).fill(kind === "people" ? "COMBINE SAME PERSON" : "COMBINE SAME LOCATION");
+    await combine.click();
+    await expect(review.getByText(/Reviewed duplicates combined\. Original history/)).toBeVisible();
+  }
+  await page.goto(origin + "/app/people/" + ids[0]);
+  await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
+  await expect(page.locator(".person-profile").getByText("Fictional original duplicate history " + fixture, { exact: true })).toBeVisible();
+  await expect(page.getByText("Duplicate profiles combined after review", { exact: true })).toBeVisible();
+  await page.getByText("Preserved original profiles (1)", { exact: true }).click();
+  await expect(page.getByText("555-0101", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit profile", exact: true }).click();
+  const editor = page.getByRole("dialog");
+  await expect(editor.getByRole("textbox", { name: "Phone (optional)", exact: true })).toHaveValue("555-0102");
+  await expect(editor.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true })).toHaveValue(secondLocation);
+  await expect(editor.locator(`option[value="${firstLocation}"]`)).toHaveCount(0);
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.goto(origin + "/app/followups?person=" + ids[0]);
+  await expect(page.locator(".followup-main > p").filter({ hasText: "Fictional duplicate next step " + fixture })).toBeVisible();
+  const aggregate = execFileSync("psql", [database, "-X", "-A", "-t", "-c",
+    `select count(*) from public.outreach_tasks t join public.discipleship_people p on p.church_id=t.church_id and p.id=t.person_id where p.property_id='${secondLocation}' and p.merged_into_id is null and t.location_id=p.property_id and t.status='scheduled';`], { encoding: "utf8" }).trim();
+  expect(Number(aggregate)).toBe(1);
+  await page.goto(origin + "/app/people/unavailable-" + fixture);
+  await expect(page.getByText("This person is unavailable", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back to people", exact: true }).click();
+  await expect(page).toHaveURL(origin + "/app/people");
+});
+
 test("cold offline guide, 100 durable encounters, close/reopen and exactly-once reconnect", async ({ context, page }) => {
   await isolate(context);
   await signIn(page);

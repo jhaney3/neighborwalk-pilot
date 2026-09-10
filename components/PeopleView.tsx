@@ -2,6 +2,7 @@
 
 import { groupBy } from "../lib/collections";
 import { personTimeline } from "../lib/person-timeline";
+import { indexCurrentRecords, recordFamilyIds } from "../lib/record-aliases";
 import { ContactRestrictions } from "./ContactRestrictions";
 import { contactRestricted, type RestrictionActions } from "../lib/contact-restrictions";
 import { useAsyncAction } from "../lib/use-async-action";
@@ -123,21 +124,23 @@ export function PeopleView({
   const [editor, setEditor] = useState<PersonEditorState>(null);
 
   const volunteers = useMemo(() => new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer])), [data.volunteers]);
-  const properties = useMemo(() => new Map(data.properties.map((property) => [property.id, property])), [data.properties]);
+  const properties = useMemo(() => indexCurrentRecords(data.properties), [data.properties]);
+  const people = useMemo(() => indexCurrentRecords(data.residents), [data.residents]);
   const notesByResident = useMemo(() => {
-    const grouped = groupBy(data.personNotes, (note) => note.residentId);
+    const grouped = groupBy(data.personNotes, (note) => people.get(note.residentId)?.id);
     for (const notes of grouped.values()) notes.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     return grouped;
-  }, [data.personNotes]);
+  }, [data.personNotes, people]);
   const followUpsByResident = useMemo(() => {
-    const grouped = groupBy(data.followUps, (followUp) => followUp.residentId);
+    const grouped = groupBy(data.followUps, (followUp) => people.get(followUp.residentId ?? "")?.id);
     for (const followUps of grouped.values()) followUps.sort((left, right) => left.dueAt.localeCompare(right.dueAt));
     return grouped;
-  }, [data.followUps]);
+  }, [data.followUps, people]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return data.residents
+      .filter((resident) => !resident.mergedIntoId)
       .filter((resident) => status === "all" || resident.status === status)
       .filter((resident) => stage === "all" || resident.discipleshipStage === stage)
       .filter((resident) => owner === "all" || resident.assignedVolunteerId === activeVolunteerId)
@@ -158,9 +161,9 @@ export function PeopleView({
       });
   }, [activeVolunteerId, data.residents, followUpsByResident, notesByResident, owner, properties, query, sort, stage, status, volunteers]);
 
-  const selected = data.residents.find((resident) => resident.id === selectedId);
+  const selected = people.get(selectedId ?? "");
   const mine = data.residents.filter((resident) => resident.assignedVolunteerId === activeVolunteerId && resident.status === "active").length;
-  const due = data.residents.filter((resident) => ["overdue", "soon"].includes(dueState(followUpsByResident.get(resident.id)?.find((followUp) => followUp.status === "scheduled"), data.church.timezone))).length;
+  const due = data.residents.filter((resident) => !resident.mergedIntoId && ["overdue", "soon"].includes(dueState(followUpsByResident.get(resident.id)?.find((followUp) => followUp.status === "scheduled"), data.church.timezone))).length;
 
   const saveResident = async (propertyId: string | undefined, input: ResidentInput) => {
     const editing = editor && editor !== "new" ? editor : undefined;
@@ -189,7 +192,7 @@ export function PeopleView({
         <button className="button primary people-new-button" onClick={() => setEditor("new")}><Plus size={15} /> Add person</button>
       </div>
 
-      <div className={`people-workbench${selected ? " has-profile" : ""}`}>
+      <div className={`people-workbench${selectedId ? " has-profile" : ""}`}>
         <section className="people-directory" aria-label="People directory">
           <div className="people-directory-label"><span>{filtered.length} {filtered.length === 1 ? "person" : "people"}</span><small>{owner === "mine" ? "Assigned to you" : canManage ? "All people you may oversee" : "Private and shared with you"}</small></div>
           <div className="people-directory-list">
@@ -200,7 +203,7 @@ export function PeopleView({
               const nextFollowUp = followUpsByResident.get(resident.id)?.find((followUp) => followUp.status === "scheduled");
               const nextStepState = dueState(nextFollowUp, data.church.timezone);
               return (
-                <button className={`person-list-card${selectedId === resident.id ? " active" : ""}`} key={resident.id} onClick={() => setSelectedId(resident.id)}>
+                <button className={`person-list-card${selected?.id === resident.id ? " active" : ""}`} key={resident.id} onClick={() => setSelectedId(resident.id)}>
                   <span className="person-list-avatar">{personInitials(resident.name)}</span>
                   <span className="person-list-copy">
                     <span><strong>{resident.name || "Name not provided"}</strong><em className={`person-status-dot ${resident.status}`} title={resident.status} /></span>
@@ -237,7 +240,7 @@ export function PeopleView({
             onDeleteNote={onDeletePersonNote}
             restrictionActions={restrictionActions}
           />
-        ) : <div className="people-profile-empty"><CircleUserRound size={32} /><strong>Select a person</strong><span>Their follow-up plan and complete note history will appear here.</span></div>}
+        ) : <div className="people-profile-empty" role={selectedId ? "status" : undefined}><CircleUserRound size={32} /><strong>{selectedId ? "This person is unavailable" : "Select a person"}</strong><span>{selectedId ? "This record may be archived, outside your current access, or not prepared on this device. Connect and refresh, or ask your leader for help." : "Their follow-up plan and complete note history will appear here."}</span>{selectedId && <button className="button quiet" onClick={() => setSelectedId(null)}>Back to people</button>}</div>}
       </div>
 
       {editor && <Modal title={editor === "new" ? "Add a person" : `Edit ${editor.name || "person"}`} description="Keep only details that help you care for this person well." wide onClose={() => setEditor(null)}><PersonEditor resident={editor === "new" ? undefined : editor} data={data} activeVolunteerId={activeVolunteerId} onCancel={() => setEditor(null)} onSave={saveResident} onDelete={editor !== "new" && (canManage || editor.assignedVolunteerId === activeVolunteerId) ? async () => { await onDeleteResident(editor.id); setSelectedId(null); setEditor(null); } : undefined} /></Modal>}
@@ -267,10 +270,12 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
   const action = useAsyncAction();
   const handoffQueued = data.sync.commands?.some((q) => q.command.operations.some((op) => op.entityType === "handoff" && op.entityId === resident.id));
   const noContact = resident.contactPermission === "do_not_contact" || data.restrictions?.some((r) => r.active && r.residentId === resident.id && r.channel === "all");
-  const property = data.properties.find((item) => item.id === resident.propertyId);
+  const property = indexCurrentRecords(data.properties).get(resident.propertyId ?? "");
   const owner = data.volunteers.find((volunteer) => volunteer.id === resident.assignedVolunteerId);
   const timeline = personTimeline(data, resident.id);
-  const personFollowUps = data.followUps.filter((followUp) => followUp.residentId === resident.id).sort((left, right) => left.dueAt.localeCompare(right.dueAt));
+  const family = recordFamilyIds(data.residents, resident.id);
+  const originalProfiles = data.residents.filter((person) => person.id !== resident.id && family.has(person.id));
+  const personFollowUps = data.followUps.filter((followUp) => Boolean(followUp.residentId && family.has(followUp.residentId))).sort((left, right) => left.dueAt.localeCompare(right.dueAt));
   const openFollowUps = personFollowUps.filter((followUp) => followUp.status === "scheduled");
   const nextFollowUp = openFollowUps[0];
   const nextState = dueState(nextFollowUp, data.church.timezone);
@@ -325,6 +330,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
       </div>
 
       <ContactRestrictions data={data} residentId={resident.id} canManage={canManage} actions={restrictionActions} />
+      {originalProfiles.length > 0 && <details className="today-card"><summary>Preserved original profiles ({originalProfiles.length})</summary><p>These are historical details from reviewed duplicate records, not current contact instructions. Notes, conversations, and completed tasks retain their original links and appear in the history below.</p>{originalProfiles.map((original) => <section key={original.id}><h3>{original.name || "Historical unnamed person"}</h3><dl><div><dt>Original record</dt><dd>{original.id}</dd></div><div><dt>Historical phone</dt><dd>{original.phone || "Not recorded"}</dd></div><div><dt>Historical email</dt><dd>{original.email || "Not recorded"}</dd></div><div><dt>Combined after review</dt><dd>{original.mergedAt ? new Date(original.mergedAt).toLocaleDateString() : "See audit history"}</dd></div>{data.church.pathwayEnabled && <><div><dt>Historical faith context</dt><dd>{faithStatusLabels[original.faithStatus]}</dd></div><div><dt>Historical pathway</dt><dd>{discipleshipStageLabels[original.discipleshipStage]}</dd></div></>}</dl></section>)}</details>}
       <section className="person-notes-section">
         <div className="person-notes-heading"><div><span className="profile-section-label">Notes</span><h3>One clear history</h3></div><span>{timeline.length} activity entries</span></div>
         <div className="person-note-composer">
@@ -397,7 +403,7 @@ function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onD
   }}>
     <div className="person-editor-grid">
       <label>Name or useful identifying description<input value={name} required={!resident} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="First name or a respectful description" /></label>
-      <label>Home or meeting location (optional)<select value={propertyId} onChange={(e) => { setPropertyId(e.target.value); setReviewedMove(false); }}><option value="">No address provided</option>{data.properties.map((p) => <option key={p.id} value={p.id}>{p.address}{p.unit ? " · " + p.unit : ""}</option>)}</select></label>
+      <label>Home or meeting location (optional)<select value={propertyId} onChange={(e) => { setPropertyId(e.target.value); setReviewedMove(false); }}><option value="">No address provided</option>{data.properties.filter((p) => !p.mergedIntoId).map((p) => <option key={p.id} value={p.id}>{p.address}{p.unit ? " · " + p.unit : ""}</option>)}</select></label>
       <label>Phone (optional)<input type="tel" autoComplete="off" value={phone} maxLength={40} minLength={3} onChange={(e) => setPhone(e.target.value)} /></label>
       <label>Email (optional)<input type="email" autoComplete="off" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} /></label>
       <label>Preferred contact<select value={preferredContact} onChange={(e) => setPreferredContact(e.target.value as Resident["preferredContact"])}><option value="none">Not discussed</option><option value="call">Phone call</option><option value="text">Text message</option><option value="email">Email</option></select></label>

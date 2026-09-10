@@ -50,7 +50,7 @@ export function LeaderView(props: Props) {
       <div className="territory-grid">{data.territories.map((territory) => <article key={territory.id} className="territory-card" style={{ "--territory-color": territory.color } as React.CSSProperties}>
         <button className="territory-card-select" onClick={() => props.onSelectTerritory(territory.id)}>
           <span className="territory-card-map"><MapPinned size={22} /></span>
-          <span className="territory-card-copy"><strong>{territory.name}</strong><small>{territory.kind === "list" ? "Address list" : "Map area"} · {data.properties.filter((property) => property.territoryId === territory.id).length} saved locations</small></span>
+          <span className="territory-card-copy"><strong>{territory.name}</strong><small>{territory.kind === "list" ? "Address list" : "Map area"} · {data.properties.filter((property) => !property.mergedIntoId && property.territoryId === territory.id).length} saved locations</small></span>
         </button>
         <button className="territory-card-edit" onClick={() => props.onEditTerritory(territory.id)} aria-label={`Edit ${territory.name}`}><Edit3 size={18} /></button>
       </article>)}</div>

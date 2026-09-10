@@ -64,7 +64,7 @@ import { authoredRecovery } from "./device-recovery";
 import { recordEncounter, type EncounterInput } from "./encounters";
 import { requireCalendarDate } from "./calendar";
 import { addContactRestriction, liftContactRestriction, type RestrictionInput } from "./contact-restrictions";
-import { previewRetention, submitAdministration, type AdminInput } from "./administration";
+import { previewDuplicates, previewRetention, submitAdministration, type AdminInput, type DuplicateKind } from "./administration";
 import { exportCsv, type ImportKind } from "./csv-exchange";
 import { assignFollowUp as assignTask, changeFollowUp, createFollowUp, respondToFollowUp } from "./follow-ups";
 import { isProductionApp, storageKey } from "./environment";
@@ -1263,6 +1263,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     if (pending) await finishAdministration(scope, String(pending.request.id), { reviewedWithoutResubmitting: true, note: "Leader reviewed shared records; original request preserved in device history." });
   }, [requireAdminScope]);
   const getRetentionPreview = useCallback(() => previewRetention(requireAdminScope()), [requireAdminScope]);
+  const getDuplicatePreview = useCallback((kind: DuplicateKind, source: string, target: string) => previewDuplicates(requireAdminScope(), kind, source, target), [requireAdminScope]);
 
   const authorizeRecoveryExport = useCallback(async (scope: StorageScope) => {
     const client = getSupabaseBrowserClient();
@@ -1433,6 +1434,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       downloadAuthoredDeviceRecovery,
       reviewAdministrationPending,
       getRetentionPreview,
+      getDuplicatePreview,
     },
   };
 }

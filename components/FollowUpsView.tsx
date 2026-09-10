@@ -7,6 +7,7 @@ import { dateInputValue, type FollowUp, type FollowUpCompletionInput, type Neigh
 import { useAsyncAction } from "../lib/use-async-action";
 import { taskMatchesScope, type FollowUpScope } from "../lib/follow-up-filters";
 import { contactRestricted } from "../lib/contact-restrictions";
+import { indexCurrentRecords } from "../lib/record-aliases";
 import { EmptyState, Modal, ViewHeading } from "./ui";
 
 type Props = {
@@ -30,11 +31,11 @@ export function FollowUpsView(props: Props) {
   const [owner, setOwner] = useState<FollowUpScope>(props.initialScope ?? "mine");
   const [query, setQuery] = useState("");
   const today = calendarDate(new Date(), data.church.timezone);
-  const people = useMemo(() => new Map(data.residents.map((p) => [p.id, p])), [data.residents]);
-  const locations = useMemo(() => new Map(data.properties.map((p) => [p.id, p])), [data.properties]);
+  const people = useMemo(() => indexCurrentRecords(data.residents), [data.residents]);
+  const locations = useMemo(() => indexCurrentRecords(data.properties), [data.properties]);
   const tasks = data.followUps.filter((task) => {
     if (props.focusedTaskId) return task.id === props.focusedTaskId;
-    if (initialPersonId && task.residentId !== initialPersonId) return false;
+    if (initialPersonId && (!people.has(initialPersonId) || people.get(task.residentId ?? "")?.id !== people.get(initialPersonId)?.id)) return false;
     if (!initialPersonId && !taskMatchesScope(task, owner, data, activeVolunteerId)) return false;
     const date = calendarDate(task.dueAt, data.church.timezone);
     if (["completed", "cancelled"].includes(filter)) { if (task.status !== filter) return false; }
@@ -67,8 +68,8 @@ function TaskCard({ task, ...props }: Props & { task: FollowUp }) {
   const { data, canManage, activeVolunteerId, onOpenPerson, onOpenProperty, onAssign, onAccept } = props;
   const [editing, setEditing] = useState<"complete" | "reschedule" | "cancel" | null>(null);
   const action = useAsyncAction();
-  const person = data.residents.find((p) => p.id === task.residentId);
-  const location = data.properties.find((p) => p.id === task.propertyId);
+  const person = indexCurrentRecords(data.residents).get(task.residentId ?? "");
+  const location = indexCurrentRecords(data.properties).get(task.propertyId ?? "");
   const owner = data.volunteers.find((v) => v.id === task.assignedVolunteerId);
   const ownTask = task.assignedVolunteerId === activeVolunteerId;
   const canEdit = canManage || ownTask;

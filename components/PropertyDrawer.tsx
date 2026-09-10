@@ -131,7 +131,7 @@ export function PropertyDrawer({
   const [address, setAddress] = useState(property.address);
   const [unit, setUnit] = useState(property.unit ?? "");
   const [editingResident, setEditingResident] = useState<Resident | "new" | null>(null);
-  const residents = data.residents.filter((resident) => resident.propertyId === property.id);
+  const residents = data.residents.filter((resident) => !resident.mergedIntoId && resident.propertyId === property.id);
 
   const noteRemaining = data.church.noteCharacterLimit - note.length;
   const canSave = !action.busy && property.currentOutcome !== "do_not_visit" && address.trim().length > 2

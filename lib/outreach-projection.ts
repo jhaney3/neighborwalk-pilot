@@ -1,16 +1,19 @@
 import type { NeighborWalkData, Visit } from "./domain";
+import { indexCurrentRecords } from "./record-aliases";
 
 /** Derived displays never become the authority for contact restrictions.
  * Historical do-not-visit encounters remain history after an approved lift. */
 export function projectOutreachWorkspace(data: NeighborWalkData, pendingRestrictedLocations = new Set<string>()): NeighborWalkData {
   const summaries = new Map<string, { count: number; latest: Visit; latestOrdinary?: Visit }>();
+  const locations = indexCurrentRecords(data.properties);
   for (const visit of data.visits) {
-    if (!visit.propertyId) continue;
-    const summary = summaries.get(visit.propertyId) ?? { count: 0, latest: visit };
+    const propertyId = visit.propertyId ? locations.get(visit.propertyId)?.id : undefined;
+    if (!propertyId) continue;
+    const summary = summaries.get(propertyId) ?? { count: 0, latest: visit };
     summary.count += 1;
     if (visit.recordedAt > summary.latest.recordedAt) summary.latest = visit;
     if (visit.outcome !== "do_not_visit" && (!summary.latestOrdinary || visit.recordedAt > summary.latestOrdinary.recordedAt)) summary.latestOrdinary = visit;
-    summaries.set(visit.propertyId, summary);
+    summaries.set(propertyId, summary);
   }
   const restrictedLocations = new Set(pendingRestrictedLocations);
   for (const restriction of data.restrictions ?? []) if (restriction.active && restriction.propertyId && ["all", "visit"].includes(restriction.channel)) restrictedLocations.add(restriction.propertyId);

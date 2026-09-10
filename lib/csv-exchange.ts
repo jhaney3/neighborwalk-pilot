@@ -99,10 +99,10 @@ export function csvImportOperations(preview: CsvPreview, selectedLines: number[]
 }
 export function exportCsv(data: NeighborWalkData, kind: ImportKind | "tasks") {
   if (kind === "people") return csvDocument(["id", "name", "phone", "email", "preferred_contact", "contact_permission", "restricted_channels", "location_visit_restricted", "tracking_status", "owner", "location_id"],
-    data.residents.map((p) => [p.id, p.name, p.phone, p.email, p.preferredContact, p.contactPermission,
+    data.residents.filter((p) => !p.mergedIntoId).map((p) => [p.id, p.name, p.phone, p.email, p.preferredContact, p.contactPermission,
       (data.restrictions ?? []).filter((r) => r.active && r.residentId === p.id).map((r) => r.channel).join(" | "),
       data.properties.some((l) => l.id === p.propertyId && l.currentOutcome === "do_not_visit"), p.status, data.volunteers.find((v) => v.id === p.assignedVolunteerId)?.name, p.propertyId]));
-  if (kind === "locations") return csvDocument(["id", "address", "unit", "list_id", "visit_restricted"], data.properties.map((p) => [p.id, p.address, p.unit, p.territoryId, p.currentOutcome === "do_not_visit"]));
+  if (kind === "locations") return csvDocument(["id", "address", "unit", "list_id", "visit_restricted"], data.properties.filter((p) => !p.mergedIntoId).map((p) => [p.id, p.address, p.unit, p.territoryId, p.currentOutcome === "do_not_visit"]));
   return csvDocument(["id", "person_id", "location_id", "owner", "due_date", "status", "channel", "acceptance"], data.followUps.map((t) => [t.id, t.residentId, t.propertyId,
     data.volunteers.find((v) => v.id === t.assignedVolunteerId)?.name, calendarDate(t.dueAt, data.church.timezone), t.status, t.channel, t.acceptance]));
 }

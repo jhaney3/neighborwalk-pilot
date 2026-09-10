@@ -5,6 +5,12 @@
 .contact-restrictions li { padding: 12px 0; border-bottom: 1px solid #d5dfd9; }
 .data-health-view { font-size: 16px; line-height: 1.6; }
 .data-health-view .form-stack { max-width: 640px; margin: 16px 0; }
+.data-health-view fieldset.form-stack { min-width: 0; border: 1px solid #d5dfd9; border-radius: 10px; padding: 16px; }
+.data-health-view fieldset.form-stack legend { padding: 0 6px; }
+.data-health-view fieldset.form-stack label { min-width: 0; }
+.data-health-view fieldset.form-stack select { width: 100%; min-width: 0; }
+.people-profile-empty strong { font-size: 18px; }
+.people-profile-empty span { font-size: 15px; line-height: 1.6; }
 .data-health-view .form-field { display: grid; gap: 8px; margin: 20px 0; }
 .data-health-view input:not([type="checkbox"]), .data-health-view select { min-height: 44px; font-size: 16px; }
 .data-preview-table { overflow-x: auto; margin: 24px 0; }

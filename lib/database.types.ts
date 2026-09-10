@@ -362,6 +362,8 @@ export type Database = {
           last_contact_at: string | null
           legacy_creator_access: boolean
           legacy_property_id: string | null
+          merged_at: string | null
+          merged_into_id: string | null
           name: string | null
           next_step: string | null
           next_step_due_at: string | null
@@ -390,6 +392,8 @@ export type Database = {
           last_contact_at?: string | null
           legacy_creator_access?: boolean
           legacy_property_id?: string | null
+          merged_at?: string | null
+          merged_into_id?: string | null
           name?: string | null
           next_step?: string | null
           next_step_due_at?: string | null
@@ -418,6 +422,8 @@ export type Database = {
           last_contact_at?: string | null
           legacy_creator_access?: boolean
           legacy_property_id?: string | null
+          merged_at?: string | null
+          merged_into_id?: string | null
           name?: string | null
           next_step?: string | null
           next_step_due_at?: string | null
@@ -432,6 +438,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "discipleship_merge_tenant_fk"
+            columns: ["merged_into_id", "church_id"]
+            isOneToOne: false
+            referencedRelation: "discipleship_people"
+            referencedColumns: ["id", "church_id"]
+          },
           {
             foreignKeyName: "discipleship_pending_owner_church_fkey"
             columns: ["church_id", "pending_owner_id"]
@@ -737,6 +750,8 @@ export type Database = {
           latitude: number | null
           legacy_territory_id: string | null
           longitude: number | null
+          merged_at: string | null
+          merged_into_id: string | null
           parcel_reference: Json | null
           source: string
           territory_id: string | null
@@ -755,6 +770,8 @@ export type Database = {
           latitude?: number | null
           legacy_territory_id?: string | null
           longitude?: number | null
+          merged_at?: string | null
+          merged_into_id?: string | null
           parcel_reference?: Json | null
           source?: string
           territory_id?: string | null
@@ -773,6 +790,8 @@ export type Database = {
           latitude?: number | null
           legacy_territory_id?: string | null
           longitude?: number | null
+          merged_at?: string | null
+          merged_into_id?: string | null
           parcel_reference?: Json | null
           source?: string
           territory_id?: string | null
@@ -781,6 +800,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "outreach_location_merge_tenant_fk"
+            columns: ["church_id", "merged_into_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_locations"
+            referencedColumns: ["church_id", "id"]
+          },
           {
             foreignKeyName: "outreach_locations_church_id_created_by_fkey"
             columns: ["church_id", "created_by"]
@@ -920,6 +946,8 @@ export type Database = {
           created_by: string | null
           id: string
           location_id: string | null
+          origin_location_id: string | null
+          origin_person_id: string | null
           person_id: string | null
           reason: string
           version: number
@@ -935,6 +963,8 @@ export type Database = {
           created_by?: string | null
           id: string
           location_id?: string | null
+          origin_location_id?: string | null
+          origin_person_id?: string | null
           person_id?: string | null
           reason: string
           version?: number
@@ -950,11 +980,27 @@ export type Database = {
           created_by?: string | null
           id?: string
           location_id?: string | null
+          origin_location_id?: string | null
+          origin_person_id?: string | null
           person_id?: string | null
           reason?: string
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "outreach_restriction_origin_location_fk"
+            columns: ["church_id", "origin_location_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_locations"
+            referencedColumns: ["church_id", "id"]
+          },
+          {
+            foreignKeyName: "outreach_restriction_origin_person_fk"
+            columns: ["origin_person_id", "church_id"]
+            isOneToOne: false
+            referencedRelation: "discipleship_people"
+            referencedColumns: ["id", "church_id"]
+          },
           {
             foreignKeyName: "outreach_restrictions_church_id_corrected_by_fkey"
             columns: ["church_id", "corrected_by"]

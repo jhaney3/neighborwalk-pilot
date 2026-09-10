@@ -4,14 +4,17 @@ import { useState } from "react";
 import type { NeighborWalkData } from "../lib/domain";
 import type { RestrictionActions, RestrictionInput } from "../lib/contact-restrictions";
 import { useAsyncAction } from "../lib/use-async-action";
+import { recordFamilyIds } from "../lib/record-aliases";
 import { Modal } from "./ui";
 
 export function ContactRestrictions({ data, residentId, propertyId, canManage, actions }: { data: NeighborWalkData; residentId?: string; propertyId?: string; canManage: boolean; actions: RestrictionActions }) {
   const [editing, setEditing] = useState<string | null>(null);
-  const restrictions = (data.restrictions ?? []).filter((r) => residentId ? r.residentId === residentId : r.propertyId === propertyId);
+  const family = residentId ? recordFamilyIds(data.residents, residentId) : recordFamilyIds(data.properties, propertyId ?? "");
+  const restrictions = (data.restrictions ?? []).filter((r) => residentId ? Boolean(r.residentId && family.has(r.residentId)) : Boolean(r.propertyId && family.has(r.propertyId)));
   return <section className="contact-restrictions today-card"><h3><ShieldCheck size={19} /> {residentId ? "Contact preferences & restrictions" : "Visit restrictions"}</h3>
     <p>{residentId ? "Pausing care tracking does not mean do not contact. Record the neighbor’s request here; restrictions take priority over scheduled tasks." : "Respect a no-visit request even when a phone has older task data. Restrictions remain separate from visit history."}</p>
     {!restrictions.some((r) => r.active) && <p>No active restriction is recorded here. That is not permission to contact someone.</p>}
+    {restrictions.some((r) => r.originResidentId || r.originPropertyId) && <p>Requests preserved from combined records remain independent. Lifting one does not lift any other active restriction.</p>}
     <ul>{restrictions.map((r) => <li key={r.id}><strong>{r.channel === "all" ? "All contact" : r.channel} · {r.active ? "Restricted" : "Lifted after review"}</strong><p>{r.reason}</p>{r.correctionReason && <p>Review: {r.correctionReason}</p>}{r.active && canManage && <button className="button quiet small" onClick={() => setEditing(r.id)}>Review correction</button>}</li>)}</ul>
     <button className="button quiet" onClick={() => setEditing("new")}>Record a contact restriction</button>
     {editing && <RestrictionForm key={editing} data={data} residentId={residentId} propertyId={propertyId} correctionId={editing === "new" ? undefined : editing} actions={actions} onClose={() => setEditing(null)} />}

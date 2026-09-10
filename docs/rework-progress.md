@@ -120,6 +120,17 @@ Restore rehearsal completed in `neighborwalk_rehearsal_20260909`, a separate loc
 - The new browser scenario passed: create a fictional person and task, choose another location, verify reason/acknowledgement requirements, save, view the reason in history and confirm the open task's location in the database. The previous nine scenarios are not being described as newly rerun by this targeted check.
 - Full verification passed 159 unit tests / 33 files, lint, types and optimized build. All five database suites and the fourteen-migration private preservation rehearsal passed. The combined ten-scenario hosted browser run is pending this checkpoint's push.
 
+### September 10 — reviewed duplicates and preserved historical identity
+
+- The ten-scenario hosted run `34457473063` passed at audited-move checkpoint `0146c36`.
+- Added leader-only, recently authenticated previews and exact-token/revision duplicate combinations for people and locations. Each requires a factual reason, acknowledgement, and typed confirmation. Sharing, pending handoffs, responsibility, apartment-unit differences, and mismatched current links block unsafe combinations.
+- Source records remain read-only aliases with original details. Historical notes, encounters, and resolved tasks retain their original links and timestamps; current people/tasks move only as reviewed. Active restrictions keep independent IDs and origin links, including conservative preservation of a legacy blanket no-contact flag.
+- Old person/location links resolve to the current record. Directories, selectors, maps, coverage, and current CSV exports exclude historical aliases. Original contact values still participate in import duplicate detection; accessible-record JSON retains them. Person history joins only the permitted canonical family, and later accepted handoffs update access to that whole family.
+- The complete regression run found and fixed a function-name-qualified parameter in the preceding audited-move wrapper. This illustrates why record-preservation checks alone are not workflow verification.
+- All six database suites and the fifteen-migration private preservation rehearsal passed: 35 unchanged original rows, two preserved people, 83 locations/encounters, seven tasks, three explicitly flagged unowned historical tasks, and two staged relationship constraints validated inside the rollback. Local database advisors reported no warning/error issues.
+- Lint, types, all 165 unit tests / 34 files, and the optimized build passed. The complete eleven-scenario local browser run passed, including duplicate person/location combinations, offline replay, access removal, and cross-tab protection. The final rebuilt duplicate scenario also passed at 390-pixel width, including both preview tables without horizontal page overflow, original-person navigation, and an unavailable deep link with a working return to People.
+- Usage and preservation/incorrect-combination limitations are documented in [reviewed duplicates](duplicate-review.md). No production database mutation or rework deployment occurred.
+
 ## External launch gates — do not claim these are implemented or verified
 
 - Current Vercel team is Hobby. [Its terms restrict that plan to personal, noncommercial use](https://vercel.com/docs/plans/hobby). Commercial-compatible hosting requires an owner-approved billing change or hosting decision.

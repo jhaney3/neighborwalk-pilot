@@ -8,7 +8,15 @@ import { finishAdministration, pendingAdministration, preserveAdministration, ty
 export const retentionPlanSchema = z.object({ cutoff: z.string(), token: z.string(), revision: z.number(), taskCount: z.number(), encounterCount: z.number(),
   tasks: z.array(z.object({ id: z.string(), version: z.number() })), encounters: z.array(z.object({ id: z.string(), version: z.number() })) });
 export type RetentionPlan = z.infer<typeof retentionPlanSchema>;
-export type AdminInput = { action: "record_export" | "import" | "retention_archive" | "review_migration_issue"; expectedRevision: number } & Record<string, unknown>;
+const reviewedRecords = z.array(z.object({ id: z.string(), version: z.number().int().positive() }));
+export const duplicatePlanSchema = z.object({
+  kind: z.enum(["people", "locations"]), revision: z.number().int(), token: z.string().regex(/^[a-f0-9]{64}$/),
+  source: z.record(z.string(), z.unknown()), target: z.record(z.string(), z.unknown()), blockers: z.array(z.string()),
+  effects: z.object({ people: reviewedRecords, locationAliases: reviewedRecords, tasks: reviewedRecords, restrictions: reviewedRecords, tasksToCancel: reviewedRecords }),
+});
+export type DuplicatePlan = z.infer<typeof duplicatePlanSchema>;
+export type DuplicateKind = DuplicatePlan["kind"];
+export type AdminInput = { action: "record_export" | "import" | "retention_archive" | "review_migration_issue" | "duplicate_merge"; expectedRevision: number } & Record<string, unknown>;
 
 export async function submitAdministration(scope: StorageScope, input: AdminInput | null) {
   const client = getSupabaseBrowserClient();
@@ -31,4 +39,14 @@ export async function previewRetention(scope: StorageScope): Promise<RetentionPl
   const { data, error } = await client.rpc("outreach_admin_action", { request: { schemaVersion: 1, churchId: scope.churchId, id: createId("preview"), action: "retention_preview" } });
   if (error) throw apiError(error);
   return retentionPlanSchema.parse(data);
+}
+
+export async function previewDuplicates(scope: StorageScope, kind: DuplicateKind, sourceId: string, targetId: string): Promise<DuplicatePlan> {
+  const client = getSupabaseBrowserClient();
+  if (!client || !navigator.onLine) throw new Error("Connect and confirm your sign-in to review duplicates.");
+  const { data, error } = await client.rpc("outreach_admin_action", { request: {
+    schemaVersion: 1, churchId: scope.churchId, id: createId("preview"), action: "duplicate_preview", kind, sourceId, targetId,
+  } });
+  if (error) throw apiError(error);
+  return duplicatePlanSchema.parse(data);
 }

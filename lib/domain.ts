@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { queuedCommandSchema } from "./command-schema";
+import { recordFamilyIds } from "./record-aliases";
 import { calendarDate, calendarDaysFromNow, DEFAULT_CHURCH_TIMEZONE, formatCalendarDate } from "./calendar";
 
 export const APP_SCHEMA_VERSION = 11;
@@ -212,6 +213,8 @@ const followUpActivitySchema = z.object({
 
 const residentSchema = z.object({
   id: z.string().min(1),
+  mergedIntoId: z.string().min(1).optional(),
+  mergedAt: z.string().datetime().optional(),
   churchId: z.string().min(1),
   propertyId: z.string().min(1).optional(),
   name: z.string().min(1).max(120).optional(),
@@ -328,6 +331,8 @@ export const neighborWalkDataSchema = z.object({
   })),
   properties: z.array(z.object({
     id: z.string().min(1),
+    mergedIntoId: z.string().min(1).optional(),
+    mergedAt: z.string().datetime().optional(),
     churchId: z.string().min(1),
     territoryId: z.string().optional(),
     address: z.string().min(1).max(240),
@@ -389,6 +394,7 @@ export const neighborWalkDataSchema = z.object({
   })).optional(),
   restrictions: z.array(z.object({
     id: z.string(), churchId: z.string(), residentId: z.string().optional(), propertyId: z.string().optional(),
+    originResidentId: z.string().optional(), originPropertyId: z.string().optional(),
     channel: z.enum(["all", "visit", "call", "text", "email"]), active: z.boolean(), reason: z.string(),
     createdAt: z.string().datetime(), correctionReason: z.string().optional(), correctedAt: z.string().datetime().optional(),
   })).optional(),
@@ -485,8 +491,9 @@ export function isFollowUpOverdue(followUp: FollowUp, now = new Date(), timezone
 }
 
 export function visitsForProperty(data: NeighborWalkData, propertyId: string): Visit[] {
+  const family = recordFamilyIds(data.properties, propertyId);
   return data.visits
-    .filter((visit) => visit.propertyId === propertyId)
+    .filter((visit) => Boolean(visit.propertyId && family.has(visit.propertyId)))
     .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
 }
 
