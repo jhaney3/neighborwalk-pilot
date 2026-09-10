@@ -25,8 +25,8 @@ Historical fields and access must be preserved during additive migration. Creato
 | --- | --- | --- |
 | 0 — Product decisions and preservation | Core preservation complete; external decisions open | Production checkpoint published; scoped backup restored and compared; commercial hosting/operator details still needed |
 | 1 — Safer baseline | Implemented and CI-verified; production verification incomplete | Patched dependencies, regression coverage, scoped storage and clean-install/database/browser CI jobs; final release and production verification remain |
-| 2 — Durable domain, permissions and migration | Implemented locally in substantial part; not released | Twelve additive migrations; restored-record fields/relationships compared and staged FKs validated in rehearsal; fresh cutover backup, legacy-device reconciliation, staging/cutover and remaining failure matrix still required |
-| 3 — Coherent church workflow | Implemented locally in substantial part; not complete | Routed outings, non-map field flow, community encounters, people/tasks, restrictions/history and leader access review; offline/mobile/accessibility matrix and remaining correction workflows remain |
+| 2 — Durable domain, permissions and migration | Implemented locally in substantial part; not released | Sixteen additive migrations; restored-record fields/relationships compared and staged FKs validated in rehearsal; fresh cutover backup, legacy-device reconciliation, staging/cutover, guide concurrency/pagination and remaining failure/scale matrix still required |
+| 3 — Coherent church workflow | Implemented locally in substantial part; not complete | Routed outings, non-map field flow, community encounters, people/tasks, restrictions, reviewed moves/duplicates/encounter corrections and permitted history; actual-phone/accessibility matrix and remaining integration work remain |
 | 4 — Website and controlled pilot | Implemented locally in part; not ready for enrollment | Public site, CSV exchange, admin review, leader setup guide and opt-in reminder implementation; provider activation, operations, owner details, commercial hosting and external pilot gates remain |
 | 5 — Evidence-led growth | Deferred by approved sequencing | Select experiments after core/pilot evidence |
 
@@ -151,6 +151,23 @@ Restore rehearsal completed in `neighborwalk_rehearsal_20260909`, a separate loc
 - The updated local encrypted capture restored 53 tables / 12,335 records with matching row digests, columns/RLS policies and extension versions into `nw_restore_20260910104149_f25ce745`. All seven permission/workflow suites passed against that restored copy. Counts are fictional local records, not production.
 - [Encounter corrections](encounter-corrections.md) documents permissions, privacy and preserved responsibilities. The outdated [production checklist](production-checklist.md) now separates verified branch work from fresh backup/cutover, legal/operator/hosting/provider, actual-device and church-pilot gates. The reference-only Scripture compatibility endpoint was rechecked: it already returns 410 without a provider call; it is not a remaining live ESV proxy.
 - No production database mutation or rework deployment occurred. Local migration history still represents the pre-rework baseline because additive SQL is iterated directly; fresh hosted CI applies the complete checked-in sequence. Do not squash the tested additive sequence into a duplicate generated migration or mistake this local history for production's history.
+
+### September 10 — usable field guides and prepared pilot material
+
+- Encounter-correction checkpoint `5992450` passed hosted CI `34467603301`, including all twelve browser scenarios.
+- Connected each guide's existing coaching and reminder fields to both the editor and fieldwork reader. Guide source labels now describe the guide actually selected, including fallback after an unavailable outing/group guide. Saving/deleting prevents edits or dismissal during the operation; backend guide concurrency and retry safety remain separate work.
+- Guide steps and location-drawer tabs now use labelled panels, roving focus and orientation-appropriate arrow/Home/End keyboard navigation. Phone controls have larger tap targets, readable supporting text and contained horizontal step navigation. Inspected the final 390-pixel fieldwork screenshot with coaching, suggested words and reminders visible.
+- Lint, types and all 181 unit tests / 37 files passed. The optimized build and final guide plus 100-command cold-offline browser scenarios passed. All thirteen local browser scenarios passed together before the final guide-source-label and step-bar containment refinements; the complete hosted run for this checkpoint is still pending its push.
+- Prepared the [church pilot kit](church-pilot-kit.md): leader/volunteer orientation, a focused demonstration, respectful weekly review, proposed content-free evaluation and explicit stop/offboarding boundaries. No interviews, completed church pilots, approved pricing, support operation or permanent-erasure workflow are implied by this material.
+- No production database mutation or rework deployment occurred.
+
+## Remaining engineering and operating work
+
+- Guide library: complete bounded reads with no silent malformed/truncated omission, concurrency/idempotency and canonical revision integration; avoid stale guide overwrites or duplicate creates after an interrupted response. Field guide selection and labels now use outing → assigned-group default → personal favorite → church fallback; preserve that deliberate precedence.
+- Person archival/paused/tracking-state semantics and supervised correction/erasure/offboarding; distinguish soft archive from permanent deletion and preserve independent restrictions/backups as required by approved policy.
+- First-church/verified-first-leader provisioning with empty normalized records, live sign-in/delivery, operator runbooks and privacy-safe monitoring/alerts. [Church pilot kit](church-pilot-kit.md) prepares sessions and evaluation; it does not implement or verify those operational services.
+- Production-shaped scale and the remaining failure matrix: real account switch/session revocation, while-open offline authorization expiry, concurrent archive/conflict recovery and service-worker build transitions with pending clients; actual supported phones, 200%/screen reader and printing.
+- Fresh complete production backup, off-site/key custody, hosted-history reconciliation, isolated staging, device cutover and exact production app/schema verification. No database password or new paid-provider authority has been supplied.
 
 ## External launch gates — do not claim these are implemented or verified
 

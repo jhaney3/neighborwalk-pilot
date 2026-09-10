@@ -114,10 +114,21 @@ export function preferredConversationGuide(
   favoriteGuideId?: string,
   teamDefaultGuideId?: string,
 ) {
-  return guides.find((guide) => guide.id === teamDefaultGuideId && guide.scope === "church")
-    ?? guides.find((guide) => guide.id === favoriteGuideId)
-    ?? guides.find((guide) => guide.scope === "church")
-    ?? guides[0];
+  return resolveFieldGuide(guides, { favoriteGuideId, teamDefaultGuideId }).guide;
+}
+
+/** The label comes from the guide actually available, never from a stale ID.
+ * Outings/groups may select church guides, not a private member's library. */
+export function resolveFieldGuide(guides: ConversationGuide[], options: { outingGuideId?: string; teamDefaultGuideId?: string; favoriteGuideId?: string }) {
+  const outing = guides.find((guide) => guide.id === options.outingGuideId && guide.scope === "church");
+  if (outing) return { guide: outing, source: "outing" as const };
+  const group = guides.find((guide) => guide.id === options.teamDefaultGuideId && guide.scope === "church");
+  if (group) return { guide: group, source: "group" as const };
+  const favorite = guides.find((guide) => guide.id === options.favoriteGuideId);
+  if (favorite) return { guide: favorite, source: "favorite" as const };
+  const church = guides.find((guide) => guide.scope === "church");
+  if (church) return { guide: church, source: "church" as const };
+  return guides[0] ? { guide: guides[0], source: "personal" as const } : { guide: undefined, source: undefined };
 }
 
 export function conversationGuideTeam(

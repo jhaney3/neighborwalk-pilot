@@ -24,7 +24,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   dateInputValue,
   discipleshipStageLabels,
@@ -44,6 +44,8 @@ import {
   type Visit,
 } from "../lib/domain";
 import { ScriptureReader } from "./ScriptureReader";
+import { GuideCoaching } from "./GuideCoaching";
+import { navigateTabs } from "../lib/tab-navigation";
 import { ContactRestrictions } from "./ContactRestrictions";
 import type { RestrictionActions } from "../lib/contact-restrictions";
 import { useAsyncAction } from "../lib/use-async-action";
@@ -116,6 +118,9 @@ export function PropertyDrawer({
   }, []);
   const requestClose = () => { if (!action.busy && !drawer.current?.querySelector('[aria-busy="true"]')) onClose(); };
   const [tab, setTab] = useState<"record" | "people" | "history">("record");
+  const tabsId = useId();
+  const sections = ["record", "people", "history"] as const;
+  const panelProps = { role: "tabpanel", id: `${tabsId}-panel`, "aria-labelledby": `${tabsId}-${tab}`, tabIndex: 0 };
   const guideSteps = useMemo(() => [...(conversationGuide?.steps ?? [])].sort((first, second) => first.order - second.order), [conversationGuide]);
   const [workflowStage, setWorkflowStage] = useState<"record" | "guide" | "name">(
     startGuided && guideSteps.length ? "guide" : "record",
@@ -222,14 +227,14 @@ export function PropertyDrawer({
         <div className="drawer-followup-banner"><CalendarClock size={16} /><span><strong>Return visit scheduled</strong>{formatDateTime(openFollowUp.dueAt, { weekday: "short", month: "short", day: "numeric" })}</span></div>
       )}
 
-      <div className="drawer-tabs" role="tablist" aria-label="Location record sections">
-        <button role="tab" aria-selected={tab === "record"} className={tab === "record" ? "active" : ""} onClick={() => setTab("record")}><ClipboardList size={15} /> Record visit</button>
-        <button role="tab" aria-selected={tab === "people"} className={tab === "people" ? "active" : ""} onClick={() => setTab("people")}><Users size={15} /> People <span>{residents.length}</span></button>
-        <button role="tab" aria-selected={tab === "history"} className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}><History size={15} /> History <span>{visits.length}</span></button>
+      <div className="drawer-tabs" role="tablist" tabIndex={-1} aria-label="Location record sections" onKeyDown={(event) => navigateTabs(event, (index) => setTab(sections[index]))}>
+        <button role="tab" id={`${tabsId}-record`} aria-controls={`${tabsId}-panel`} tabIndex={tab === "record" ? 0 : -1} aria-selected={tab === "record"} className={tab === "record" ? "active" : ""} onClick={() => setTab("record")} onFocus={() => setTab("record")}><ClipboardList size={15} /> Record visit</button>
+        <button role="tab" id={`${tabsId}-people`} aria-controls={`${tabsId}-panel`} tabIndex={tab === "people" ? 0 : -1} aria-selected={tab === "people"} className={tab === "people" ? "active" : ""} onClick={() => setTab("people")} onFocus={() => setTab("people")}><Users size={15} /> People <span>{residents.length}</span></button>
+        <button role="tab" id={`${tabsId}-history`} aria-controls={`${tabsId}-panel`} tabIndex={tab === "history" ? 0 : -1} aria-selected={tab === "history"} className={tab === "history" ? "active" : ""} onClick={() => setTab("history")} onFocus={() => setTab("history")}><History size={15} /> History <span>{visits.length}</span></button>
       </div>
 
       {tab === "record" ? (
-        <div className="drawer-record" role="tabpanel">
+        <div className="drawer-record" {...panelProps}>
           {workflowStage === "guide" && guideSteps.length ? (
             <GuidedConversation
               guideTitle={conversationGuide?.title ?? "Conversation guide"}
@@ -326,7 +331,7 @@ export function PropertyDrawer({
           )}
         </div>
       ) : tab === "history" ? (
-        <div className="history-list" role="tabpanel">
+        <div className="history-list" {...panelProps}>
           {visits.length ? visits.map((visit) => (
             <VisitHistoryItem visit={visit} volunteerName={volunteerNames.get(visit.volunteerId) ?? "Volunteer"} key={visit.id} />
           )) : (
@@ -334,7 +339,7 @@ export function PropertyDrawer({
           )}
         </div>
       ) : (
-        <div className="people-panel" role="tabpanel">
+        <div className="people-panel" {...panelProps}>
           {editingResident ? (
             <ResidentForm
               resident={editingResident === "new" ? undefined : editingResident}
@@ -382,7 +387,7 @@ export function PropertyDrawer({
   );
 }
 
-function GuidedConversation({ guideTitle, guideContext, steps, index, onChangeIndex, onFinish, onRecordWithoutGuide }: {
+function GuidedConversation({ guideTitle, guideContext, steps, index: requestedIndex, onChangeIndex, onFinish, onRecordWithoutGuide }: {
   guideTitle: string;
   guideContext?: string;
   steps: NeighborWalkData["guide"];
@@ -391,6 +396,7 @@ function GuidedConversation({ guideTitle, guideContext, steps, index, onChangeIn
   onFinish: () => void;
   onRecordWithoutGuide: () => void;
 }) {
+  const index = Math.min(requestedIndex, Math.max(0, steps.length - 1));
   const step = steps[index];
   if (!step) return null;
   const finalStep = index === steps.length - 1;
@@ -413,11 +419,13 @@ function GuidedConversation({ guideTitle, guideContext, steps, index, onChangeIn
           ><span>{itemIndex + 1}</span></button>
         ))}
       </div>
+      <GuideCoaching step={step} />
       {step.sampleWords && <div className="doorstep-script-card">
         <span><MessageCircle size={18} /> Words you can use</span>
         <blockquote>“{step.sampleWords}”</blockquote>
       </div>}
       <ScriptureReader references={step.scriptureReferences} theme="light" />
+      <GuideCoaching step={step} reminder />
       <button className="skip-to-wrap" type="button" onClick={onFinish}>Conversation is wrapping up</button>
       <div className="doorstep-guide-actions">
         <button className="button quiet" type="button" disabled={index === 0} onClick={() => onChangeIndex(Math.max(0, index - 1))}>Previous</button>

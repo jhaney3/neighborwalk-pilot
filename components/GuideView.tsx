@@ -1,11 +1,22 @@
 "use client";
 
 import { AlertTriangle, ArrowRight, BookOpenText, Check, ChevronDown, ChevronRight, ChevronUp, Church, Copy, Edit3, LockKeyhole, MessageCircle, Plus, Save, Star, Trash2, UserRound, Users } from "lucide-react";
-import { useState } from "react";
+import { useId, useState, useSyncExternalStore } from "react";
 import { createId, type ConversationGuide, type ConversationGuideInput, type GuideStep, type NeighborWalkData } from "../lib/domain";
 import { makeBlankGuideStep, validGuideInput } from "../lib/conversation-guides";
 import { ScriptureReader } from "./ScriptureReader";
+import { GuideCoaching } from "./GuideCoaching";
+import { navigateTabs } from "../lib/tab-navigation";
 import { Modal, ViewHeading, EmptyState } from "./ui";
+
+const guideCompactQuery = "(max-width: 820px)";
+const subscribeGuideLayout = (onChange: () => void) => {
+  const query = window.matchMedia(guideCompactQuery);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+};
+const compactGuideLayout = () => window.matchMedia(guideCompactQuery).matches;
+const serverGuideLayout = () => false;
 
 export function GuideView({
   guides,
@@ -44,6 +55,9 @@ export function GuideView({
 }) {
   const [selectedGuideId, setSelectedGuideId] = useState(effectiveGuideId ?? favoriteGuideId ?? guides[0]?.id ?? "");
   const [index, setIndex] = useState(0);
+  const tabsId = useId();
+  const compactLayout = useSyncExternalStore(subscribeGuideLayout, compactGuideLayout, serverGuideLayout);
+  const tabsOrientation = compactLayout ? "horizontal" : "vertical";
   const [editor, setEditor] = useState<{ guide?: ConversationGuide; scope: ConversationGuide["scope"]; copy?: boolean } | null>(null);
   const [message, setMessage] = useState("");
   const [messageError, setMessageError] = useState(false);
@@ -52,7 +66,8 @@ export function GuideView({
     ?? guides.find((guide) => guide.id === favoriteGuideId)
     ?? guides[0];
   const steps = selectedGuide?.steps ?? [];
-  const step = steps[index] ?? steps[0];
+  const activeStepIndex = Math.min(index, Math.max(0, steps.length - 1));
+  const step = steps[activeStepIndex];
   const canUseBuiltInActions = (guide: ConversationGuide) => guide.id !== "legacy_church_guide" || allowBuiltInManagement;
   const canEditSelected = Boolean(selectedGuide && canUseBuiltInActions(selectedGuide) && (selectedGuide.scope === "personal" || canManage));
   const churchGuides = guides.filter((guide) => guide.scope === "church" && canUseBuiltInActions(guide));
@@ -153,20 +168,22 @@ export function GuideView({
           </div>
         </section>
         <div className="guide-layout">
-          <div className="guide-step-list" role="tablist" aria-label={`${selectedGuide.title} steps`}>
+          <div className="guide-step-list" role="tablist" tabIndex={-1} aria-orientation={tabsOrientation} aria-label={`${selectedGuide.title} steps`} onKeyDown={(event) => navigateTabs(event, setIndex, tabsOrientation)}>
             {steps.map((item, itemIndex) => (
-              <button key={item.id} className={itemIndex === index ? "active" : ""} onClick={() => setIndex(itemIndex)} role="tab" aria-selected={itemIndex === index}>
+              <button key={item.id} id={`${tabsId}-${itemIndex}`} aria-label={`Step ${itemIndex + 1}: ${item.title}`} aria-controls={`${tabsId}-panel`} tabIndex={itemIndex === activeStepIndex ? 0 : -1} className={itemIndex === activeStepIndex ? "active" : ""} onClick={() => setIndex(itemIndex)} onFocus={() => setIndex(itemIndex)} role="tab" aria-selected={itemIndex === activeStepIndex}>
                 <span>{itemIndex + 1}</span><div><small>{item.eyebrow}</small><strong>{item.title}</strong></div><ChevronRight size={16} />
               </button>
             ))}
           </div>
-          <article className="guide-card" role="tabpanel">
-            <div className="guide-progress"><span style={{ width: `${((index + 1) / steps.length) * 100}%` }} /></div>
-            <p className="eyebrow">Step {index + 1} of {steps.length} · {step.eyebrow}</p>
+          <article className="guide-card" role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={`${tabsId}-${activeStepIndex}`} tabIndex={0}>
+            <div className="guide-progress"><span style={{ width: `${((activeStepIndex + 1) / steps.length) * 100}%` }} /></div>
+            <p className="eyebrow">Step {activeStepIndex + 1} of {steps.length} · {step.eyebrow}</p>
             <h2>{step.title}</h2>
+            <GuideCoaching step={step} />
             {step.sampleWords && <blockquote><MessageCircle size={20} /><p>“{step.sampleWords}”</p></blockquote>}
             <ScriptureReader references={step.scriptureReferences} />
-            <div className="guide-actions"><button className="button inverted" disabled={index === 0} onClick={() => setIndex((current) => Math.max(0, current - 1))}>Previous</button><button className="button amber" disabled={index === steps.length - 1} onClick={() => setIndex((current) => Math.min(steps.length - 1, current + 1))}>Next step <ArrowRight size={15} /></button></div>
+            <GuideCoaching step={step} reminder />
+            <div className="guide-actions"><button className="button inverted" disabled={activeStepIndex === 0} onClick={() => setIndex(Math.max(0, activeStepIndex - 1))}>Previous</button><button className="button amber" disabled={activeStepIndex === steps.length - 1} onClick={() => setIndex(Math.min(steps.length - 1, activeStepIndex + 1))}>Next step <ArrowRight size={15} /></button></div>
           </article>
         </div>
       </> : <EmptyState icon={<BookOpenText size={25} />} title="Build your first guide" copy="Personal guides stay private. Church guides are published by leaders for everyone." />}
@@ -261,8 +278,9 @@ function GuideComposer({ guide, scope, copy = false, onClose, onSave, onDelete }
     wide
     title={copy ? "Make a private copy" : guide ? "Edit conversation guide" : scope === "church" ? "Create a church guide" : "Create a personal guide"}
     description={scope === "church" ? "Everyone in the church can use this guide. Only leaders can change it." : "Only you can see and use this guide."}
-    onClose={onClose}
+    onClose={saving || deleting ? () => undefined : onClose}
   >
+    <fieldset className="guide-form-controls" disabled={saving || deleting}><legend className="sr-only">Guide contents</legend>
     <div className={`guide-composer-privacy ${scope}`}>
       {scope === "church" ? <Church size={17} /> : <LockKeyhole size={17} />}
       <span><strong>{scope === "church" ? "Church-wide" : "Only me"}</strong>{scope === "church" ? "Published to every volunteer in this church workspace." : "Private to your signed-in account, including across your devices."}</span>
@@ -278,8 +296,10 @@ function GuideComposer({ guide, scope, copy = false, onClose, onSave, onDelete }
         <div className="guide-composer-step-fields">
           <label className="form-field"><span>Stage label</span><input maxLength={80} value={step.eyebrow} onChange={(event) => updateStep(stepIndex, { eyebrow: event.target.value })} placeholder="Share clearly" /></label>
           <label className="form-field"><span>Step title</span><input maxLength={120} value={step.title} onChange={(event) => updateStep(stepIndex, { title: event.target.value })} placeholder="Explain the good news" /></label>
+          <label className="form-field full"><span>Coaching before speaking <small>Optional</small></span><textarea maxLength={800} rows={3} value={step.coaching} onChange={(event) => updateStep(stepIndex, { coaching: event.target.value })} placeholder="A practical cue for listening respectfully." /></label>
           <label className="form-field full"><span>Words or testimony notes <small>Optional when scripture is added</small></span><textarea maxLength={1600} rows={4} value={step.sampleWords} onChange={(event) => updateStep(stepIndex, { sampleWords: event.target.value })} placeholder="Write the words you want available at the door. This can be a prompt, your testimony, or a transition." /></label>
           <label className="form-field full"><span>Scripture references <small>Separate with commas</small></span><input maxLength={1200} value={step.scriptureReferences.join(", ")} onChange={(event) => updateStep(stepIndex, { scriptureReferences: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} placeholder="Romans 3:23, Romans 6:23" /></label>
+          <label className="form-field full"><span>Closing reminder <small>Optional</small></span><textarea maxLength={800} rows={3} value={step.reminder} onChange={(event) => updateStep(stepIndex, { reminder: event.target.value })} placeholder="Respect their answer and agree an owned next step only if requested." /></label>
         </div>
       </section>)}
     </div>
@@ -290,5 +310,6 @@ function GuideComposer({ guide, scope, copy = false, onClose, onSave, onDelete }
       {onDelete ? <button className="button danger" disabled={saving || deleting} onClick={() => confirmDelete ? void remove() : setConfirmDelete(true)}>{confirmDelete ? "Delete guide" : "Delete"}</button> : <span />}
       <div><button className="button quiet" disabled={saving || deleting} onClick={onClose}>Cancel</button><button className="button primary" disabled={!valid || saving || deleting} onClick={() => void save()}><Save size={15} /> {saving ? "Saving…" : scope === "church" ? "Publish guide" : "Save private guide"}</button></div>
     </div>
+    </fieldset>
   </Modal>;
 }

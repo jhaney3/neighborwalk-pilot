@@ -272,6 +272,60 @@ test("reviewed duplicate people and locations retain history and resolve origina
   await expect(page).toHaveURL(origin + "/app/people");
 });
 
+test("guide coaching and reminders reach fieldwork with keyboard-accessible steps and location tabs", async ({ context, page }) => {
+  await isolate(context); await signIn(page, "volunteer");
+  const fixture = randomUUID(); const title = "Fictional guide " + fixture;
+  const locationId = "browser_guide_" + fixture;
+  execFileSync("psql", [database, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-c",
+    `insert into public.outreach_locations(church_id,id,address,source) values ('00000000-0000-4000-8000-000000000001','${locationId}','Fictional Guide Location ${fixture}','manual');`], { stdio: "pipe" });
+  await page.goto(origin + "/app/guides");
+  await page.getByRole("button", { name: "New personal guide", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox", { name: "Guide name", exact: true }).fill(title);
+  const first = dialog.locator(".guide-composer-step").first();
+  await first.getByRole("textbox", { name: "Step title", exact: true }).fill("Fictional listen first");
+  await first.getByRole("textbox", { name: /Coaching before speaking/ }).fill("Fictional coaching: ask permission and listen.");
+  await first.getByRole("textbox", { name: /Words or testimony notes/ }).fill("Fictional words for a respectful greeting.");
+  await first.getByRole("textbox", { name: /Closing reminder/ }).fill("Fictional reminder: respect their answer.");
+  await dialog.getByRole("button", { name: "Add another step", exact: true }).click();
+  const second = dialog.locator(".guide-composer-step").nth(1);
+  await second.getByRole("textbox", { name: "Step title", exact: true }).fill("Fictional agree next step");
+  await second.getByRole("textbox", { name: /Words or testimony notes/ }).fill("Fictional words to agree personal follow-through.");
+  await dialog.getByRole("button", { name: "Save private guide", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const firstTab = page.getByRole("tab", { name: "Step 1: Fictional listen first", exact: true });
+  const secondTab = page.getByRole("tab", { name: "Step 2: Fictional agree next step", exact: true });
+  const panel = page.getByRole("tabpanel");
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(page.getByRole("tablist")).toHaveAttribute("aria-orientation", width === 390 ? "horizontal" : "vertical");
+    await firstTab.focus();
+    await firstTab.press(width === 390 ? "ArrowRight" : "ArrowDown");
+    await expect(secondTab).toBeFocused(); await expect(secondTab).toHaveAttribute("aria-selected", "true");
+    await expect(panel).toHaveAttribute("aria-labelledby", (await secondTab.getAttribute("id"))!);
+    await secondTab.press("Home"); await expect(firstTab).toBeFocused();
+    await expect(panel.getByText("Fictional coaching: ask permission and listen.", { exact: true })).toBeVisible();
+    await expect(panel.getByText("Fictional reminder: respect their answer.", { exact: true })).toBeVisible();
+    await firstTab.press("Tab"); await expect(panel).toBeFocused();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  }
+  await page.getByRole("button", { name: "Set as favorite", exact: true }).click();
+  await expect(page.getByText(/Favorite guide saved\./)).toBeVisible();
+  await page.goto(origin + "/app/locations/" + locationId);
+  const drawer = page.getByRole("dialog");
+  const record = drawer.getByRole("tab", { name: "Record visit", exact: true });
+  await record.focus(); await record.press("End");
+  const history = drawer.getByRole("tab", { name: /^History/ });
+  await expect(history).toBeFocused(); await expect(history).toHaveAttribute("aria-selected", "true");
+  await history.press("Tab"); await expect(drawer.getByRole("tabpanel")).toBeFocused();
+  await history.focus(); await history.press("ArrowRight"); await expect(record).toBeFocused();
+  await drawer.locator(".guided-entry-card").click();
+  await expect(drawer.getByText("Fictional coaching: ask permission and listen.", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("Fictional reminder: respect their answer.", { exact: true })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("guide-mobile.png") });
+  await page.keyboard.press("Escape"); await expect(drawer).toBeHidden();
+});
+
 test("cold offline guide, 100 durable encounters, close/reopen and exactly-once reconnect", async ({ context, page }) => {
   await isolate(context);
   await signIn(page);
