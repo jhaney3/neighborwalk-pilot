@@ -91,11 +91,13 @@ describe("durable outreach commands", () => {
     const task = createFollowUp({ id: "open-task", churchId: base.church.id, residentId: person.id, propertyId: "old-place", dueAt: "2026-10-01" }, base.preferences.activeVolunteerId, new Date().toISOString());
     base.residents = [person]; base.followUps = [task, { ...task, id: "closed-task", status: "completed" }];
     base.sync.recordVersions = { [versionKey("resident", person.id)]: 2, [versionKey("follow_up", task.id)]: 5, [versionKey("follow_up", "closed-task")]: 4 };
-    const moved = stageWorkspaceChange(base, { ...base, residents: [{ ...person, propertyId: "new-place" }] }, scope);
+    const moved = stageWorkspaceChange(base, { ...base, residents: [{ ...person, propertyId: "new-place" }] }, scope, [], { [versionKey("resident", person.id)]: "Neighbor corrected the meeting address." });
     expect(moved.sync.commands![0].command.operations.map((op) => op.entityType)).toEqual(["resident"]);
+    expect(moved.sync.commands![0].command.operations[0].reason).toBe("Neighbor corrected the meeting address.");
     expect(moved.followUps.map((task) => task.propertyId)).toEqual(["new-place", "old-place"]);
     expect(moved.sync.recordVersions![versionKey("follow_up", task.id)]).toBe(6);
     const updated = stageWorkspaceChange(moved, { ...moved, followUps: moved.followUps.map((task) => task.id === "open-task" ? { ...task, dueAt: "2026-10-02" } : task) }, scope);
+    expect(updated.sync.commands![0]).toEqual(moved.sync.commands![0]);
     expect(updated.sync.commands![1].command.operations[0]).toMatchObject({ entityType: "follow_up", expectedVersion: 6, record: { propertyId: "new-place" } });
     const replayed = reconcileOutreachWorkspace(base, updated);
     expect(replayed.followUps.find((task) => task.id === "open-task")).toMatchObject({ propertyId: "new-place", dueAt: "2026-10-02" });

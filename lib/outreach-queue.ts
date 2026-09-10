@@ -45,7 +45,7 @@ export function commandPending(commands: QueuedCommand[]): PendingMutation[] {
   })));
 }
 
-export function stageWorkspaceChange(previous: NeighborWalkData, next: NeighborWalkData, scope: StorageScope, extraOperations: CommandOperation[] = []): NeighborWalkData {
+export function stageWorkspaceChange(previous: NeighborWalkData, next: NeighborWalkData, scope: StorageScope, extraOperations: CommandOperation[] = [], reasons: Record<string, string> = {}): NeighborWalkData {
   if (previous.sync.legacyRecoveryRequired) throw new Error("Export and review this device’s legacy pending work before making more changes. Nothing was discarded.");
   if (previous.church.id !== scope.churchId || next.church.id !== scope.churchId) throw new Error("The change belongs to a different church.");
   const versions = { ...previous.sync.recordVersions };
@@ -91,7 +91,7 @@ export function stageWorkspaceChange(previous: NeighborWalkData, next: NeighborW
   // JSON cloning freezes the exact wire payload. A retry never re-reads edited
   // UI state under an old command ID, and undefined values cannot hash differently.
   const command = outreachCommandSchema.parse(JSON.parse(JSON.stringify({ schemaVersion: 1, id: createId("command"), ...scope,
-    createdAt: new Date().toISOString(), operations })));
+    createdAt: new Date().toISOString(), operations: operations.map((op) => ({ ...op, reason: reasons[versionKey(op.entityType, op.entityId)] ?? op.reason })) })));
   for (const op of command.operations) versions[versionKey(op.entityType, op.entityId)] = op.expectedVersion + 1;
   const commands: QueuedCommand[] = [...(previous.sync.commands ?? []), { command, state: "queued" }];
   return neighborWalkDataSchema.parse({ ...next, sync: { ...next.sync, commands, pending: commandPending(commands), recordVersions: versions } });

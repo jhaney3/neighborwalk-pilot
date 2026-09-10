@@ -11,6 +11,7 @@ export const commandOperationSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   record: z.record(z.string(), z.unknown()).optional(),
   destinationTerritoryId: z.string().optional(),
+  reason: z.string().trim().min(3).max(500).optional(),
 });
 export const outreachCommandSchema = z.object({
   schemaVersion: z.literal(1),

@@ -371,6 +371,7 @@ function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onD
 }) {
   const [propertyId, setPropertyId] = useState(resident?.propertyId ?? "");
   const [reviewedMove, setReviewedMove] = useState(false);
+  const [moveReason, setMoveReason] = useState("");
   const [name, setName] = useState(resident?.name ?? "");
   const [faithStatus, setFaithStatus] = useState(resident?.faithStatus ?? "not_discussed");
   const [discipleshipStage, setDiscipleshipStage] = useState(resident?.discipleshipStage ?? "new_connection");
@@ -389,10 +390,10 @@ function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onD
   const movingTasks = resident ? data.followUps.filter((task) => task.residentId === resident.id && task.status === "scheduled").length : 0;
   return <form className="person-editor-form form-stack" aria-busy={action.busy} onSubmit={(event) => {
     event.preventDefault();
-    if (moving && !reviewedMove) return;
+    if (moving && (!reviewedMove || moveReason.trim().length < 3)) return;
     void action.run(() => onSave(propertyId || undefined, { name: name.trim() || undefined, faithStatus, discipleshipStage, assignedVolunteerId,
       sharedWithVolunteerIds: sharedWithVolunteerIds.filter((id) => id !== assignedVolunteerId), sharedWithTeamIds, status, phone: phone.trim() || undefined,
-      email: email.trim() || undefined, preferredContact, contactPermission, lastContactAt: resident?.lastContactAt }));
+      email: email.trim() || undefined, preferredContact, contactPermission, lastContactAt: resident?.lastContactAt, changeReason: moving ? moveReason.trim() : undefined }));
   }}>
     <div className="person-editor-grid">
       <label>Name or useful identifying description<input value={name} required={!resident} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="First name or a respectful description" /></label>
@@ -404,7 +405,7 @@ function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onD
       <label>Tracking status<select value={status} onChange={(e) => setStatus(e.target.value as Resident["status"])}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
       {data.church.pathwayEnabled && <><label>Self-described faith (optional)<select value={faithStatus} onChange={(e) => setFaithStatus(e.target.value as Resident["faithStatus"])}>{faithStatusValues.map((v) => <option key={v} value={v}>{faithStatusLabels[v]}</option>)}</select></label><label>Relationship stage<select value={discipleshipStage} onChange={(e) => setDiscipleshipStage(e.target.value as DiscipleshipStage)}>{discipleshipStageValues.map((v) => <option key={v} value={v}>{discipleshipStageLabels[v]}</option>)}</select></label></>}
     </div>
-    {moving && <section className="inline-notice"><h3>Review this person’s location change</h3><p>{movingTasks} open next {movingTasks === 1 ? "step follows" : "steps follow"} the person to the selected location. Historical encounters and completed or cancelled tasks keep their original location. Location-specific restrictions stay with the original location; person-specific restrictions stay with the person.</p><label><input type="checkbox" required checked={reviewedMove} onChange={(event) => setReviewedMove(event.target.checked)} /> I have reviewed this location change and its open next steps.</label></section>}
+    {moving && <section className="inline-notice"><h3>Review this person’s location change</h3><p>{movingTasks} open next {movingTasks === 1 ? "step follows" : "steps follow"} the person to the selected location. Historical encounters and completed or cancelled tasks keep their original location. Location-specific restrictions stay with the original location; person-specific restrictions stay with the person.</p><label>Reason for the location change<textarea required minLength={3} maxLength={500} value={moveReason} onChange={(event) => setMoveReason(event.target.value)} placeholder="For example: the neighbor corrected their meeting address." /></label><label><input type="checkbox" required checked={reviewedMove} onChange={(event) => setReviewedMove(event.target.checked)} /> I have reviewed this location change and its open next steps.</label></section>}
     <p><strong>Responsible person:</strong> {data.volunteers.find((v) => v.id === assignedVolunteerId)?.name ?? "You"}. Ownership changes through an accepted care handoff.</p>
     <details className="person-sharing-section"><summary>Who can see this profile?</summary>
       <p>The responsible person and church leaders can see it. Share only with people helping with care. Historical creator access, if present, is shown on the profile and ends at an accepted handoff.</p>
@@ -413,6 +414,6 @@ function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onD
     </details>
     {!contactValid && <p className="inline-error">Enter the phone number or email for the selected contact method.</p>}
     {action.error && <p className="inline-error" role="alert">{action.error}</p>}
-    <div className="modal-actions split"><div>{onDelete && <button type="button" className="button danger" disabled={action.busy} onClick={() => { if (window.confirm("Archive this person and their care records? Open tasks will be cancelled. The server preserves history and restrictions; this is not permanent erasure.")) void action.run(onDelete); }}>Archive person &amp; care records</button>}</div><div><button type="button" className="button quiet" disabled={action.busy} onClick={onCancel}>Cancel</button><button className="button primary" disabled={action.busy || !contactValid || (moving && !reviewedMove)}>{action.busy ? "Saving to device…" : "Save person"}</button></div></div>
+    <div className="modal-actions split"><div>{onDelete && <button type="button" className="button danger" disabled={action.busy} onClick={() => { if (window.confirm("Archive this person and their care records? Open tasks will be cancelled. The server preserves history and restrictions; this is not permanent erasure.")) void action.run(onDelete); }}>Archive person &amp; care records</button>}</div><div><button type="button" className="button quiet" disabled={action.busy} onClick={onCancel}>Cancel</button><button className="button primary" disabled={action.busy || !contactValid || (moving && (!reviewedMove || moveReason.trim().length < 3))}>{action.busy ? "Saving to device…" : "Save person"}</button></div></div>
   </form>;
 }

@@ -93,6 +93,44 @@ test("email reminders require explicit self opt-in and can be turned off without
   await expect(page.getByText("You have not opted in.", { exact: true })).toBeVisible();
 });
 
+test("a reviewed person move follows open tasks and records its reason in history", async ({ context, page }) => {
+  await isolate(context); await signIn(page);
+  await page.goto(origin + "/app/people");
+  await page.getByRole("button", { name: "Add person", exact: true }).click();
+  let dialog = page.getByRole("dialog");
+  const label = prefix + " moving person";
+  await dialog.getByRole("textbox", { name: "Name or useful identifying description", exact: true }).fill(label);
+  const place = dialog.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true });
+  const options = await place.locator("option").evaluateAll((items) => items.map((item) => (item as HTMLOptionElement).value).filter(Boolean));
+  expect(options.length).toBeGreaterThan(1);
+  await place.selectOption(options[0]);
+  await dialog.getByRole("button", { name: "Save person", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "Plan follow-up", exact: true }).click();
+  await page.getByRole("textbox", { name: "What needs to happen?", exact: true }).fill("Fictional next step for a reviewed move");
+  await page.getByRole("button", { name: "Add follow-up", exact: true }).click();
+  await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
+  await page.getByRole("button", { name: "Edit profile", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true }).selectOption(options[1]);
+  await expect(dialog.getByText(/1 open next step follows/)).toBeVisible();
+  const save = dialog.getByRole("button", { name: "Save person", exact: true });
+  await expect(save).toBeDisabled();
+  const reason = "Neighbor corrected the meeting address.";
+  await dialog.getByRole("textbox", { name: "Reason for the location change", exact: true }).fill(reason);
+  await expect(save).toBeDisabled();
+  await dialog.getByRole("checkbox", { name: "I have reviewed this location change and its open next steps.", exact: true }).check();
+  await save.click(); await expect(dialog).toBeHidden();
+  await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
+  await expect(page.getByText("Location changed after review", { exact: true })).toBeVisible();
+  await expect(page.getByText(reason, { exact: true })).toBeVisible();
+  // Only the specifically generated fictional person's aggregate is read.
+  if (!/^Fictional browser rehearsal [a-f0-9-]+ moving person$/.test(label)) throw new Error("Invalid fixture label");
+  const result = execFileSync("psql", [database, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+    "select count(*) from public.outreach_tasks t join public.discipleship_people p on p.id=t.person_id and p.church_id=t.church_id where p.name='" + label + "' and t.status='scheduled' and t.location_id=p.property_id and exists(select 1 from public.outreach_audit a where a.entity_id=p.id and a.action='resident.location_changed' and a.details->>'openTasksMoved'='1');"], { encoding: "utf8" }).trim();
+  expect(Number(result)).toBe(1);
+});
+
 test("cold offline guide, 100 durable encounters, close/reopen and exactly-once reconnect", async ({ context, page }) => {
   await isolate(context);
   await signIn(page);

@@ -344,7 +344,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     }
   }, [preparationAttempt]);
 
-  const updateData = useCallback(async (updater: (current: NeighborWalkData) => NeighborWalkData, extraOperations?: (current: NeighborWalkData) => CommandOperation[]) => {
+  const updateData = useCallback(async (updater: (current: NeighborWalkData) => NeighborWalkData, extraOperations?: (current: NeighborWalkData) => CommandOperation[], reasons?: Record<string, string>) => {
     if (recoveryInFlightRef.current) throw new Error("Wait for the reviewed operation to finish before saving another change.");
     const store = storeRef.current;
     if (!store) throw new Error("Open an authorized church workspace before saving.");
@@ -356,7 +356,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         if (changed === current && !extraOperations) return current;
         const updated = { ...changed, updatedAt: new Date().toISOString() };
         const scope = storageScopeRef.current;
-        return scope ? stageWorkspaceChange(current, updated, scope, extraOperations?.(current)) : updated;
+        return scope ? stageWorkspaceChange(current, updated, scope, extraOperations?.(current), reasons) : updated;
       });
       setStorageError(null);
       return next;
@@ -629,6 +629,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       if (propertyId && !property) throw new Error("Choose an available location or leave the address blank.");
       const existing = residentId ? current.residents.find((resident) => resident.id === residentId) : undefined;
       if (residentId && !existing) throw new Error("This person is no longer available. Refresh before continuing.");
+      if (existing && existing.propertyId !== propertyId && (input.changeReason?.trim().length ?? 0) < 3) throw new Error("Record a brief reason for this location change.");
       if (!existing && !input.name?.trim()) throw new Error("Add a name or useful identifying description. Use an anonymous encounter if no person record is needed.");
       const now = new Date().toISOString();
       const id = existing?.id ?? requestedId;
@@ -660,7 +661,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           ? current.residents.map((item) => item.id === id ? resident : item)
           : [...current.residents, resident],
       }, "resident", id, existing ? "resident.updated" : "resident.created", `Person record ${existing ? "updated" : "added"}${property ? ` at ${property.address}` : ""}`);
-    });
+    }, undefined, input.changeReason?.trim() ? { [versionKey("resident", requestedId)]: input.changeReason.trim() } : undefined);
     return requestedId;
   }, [updateData]);
 

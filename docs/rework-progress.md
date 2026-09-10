@@ -112,6 +112,14 @@ Restore rehearsal completed in `neighborwalk_rehearsal_20260909`, a separate loc
 - The private-person test initially used the wrong actor because the production creator-protection trigger correctly assigns new records to auth.uid(); the fixture now creates it as a distinct account and verifies access denial. No real records were involved.
 - Added [email activation and operations guidance](email-reminders.md) and safe example environment settings. No provider resource, production secret, scheduler, DNS record, external email or production database change was made. Real delivery, scheduled invocation and monitoring are explicitly unverified owner/provider gates.
 
+### September 10 — audited person-location changes
+
+- Reminder checkpoint `33ed6a9` passed hosted CI `34456436379`, including all nine browser scenarios. No provider or production activation was performed.
+- A person-location move now requires an explicit acknowledgement and a 3–500 character reason. The reason travels in immutable command metadata, not an editable profile field. The server preserves previous/current location IDs and versions, actor and open-task count in the permission-filtered profile audit and appends a factual activity to each moved open task.
+- Resolved task locations, historical encounters and location restrictions are not moved. Replaying a receipt cannot duplicate the activity. Legacy queued moves lacking a reason must be reviewed; their payload is not silently rewritten.
+- The new browser scenario passed: create a fictional person and task, choose another location, verify reason/acknowledgement requirements, save, view the reason in history and confirm the open task's location in the database. The previous nine scenarios are not being described as newly rerun by this targeted check.
+- Full verification passed 159 unit tests / 33 files, lint, types and optimized build. All five database suites and the fourteen-migration private preservation rehearsal passed. The combined ten-scenario hosted browser run is pending this checkpoint's push.
+
 ## External launch gates — do not claim these are implemented or verified
 
 - Current Vercel team is Hobby. [Its terms restrict that plan to personal, noncommercial use](https://vercel.com/docs/plans/hobby). Commercial-compatible hosting requires an owner-approved billing change or hosting decision.

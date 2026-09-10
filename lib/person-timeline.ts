@@ -14,6 +14,8 @@ export function personTimeline(data: NeighborWalkData, personId: string): Person
     { id: "restriction:" + r.id, at: r.createdAt, title: "Restriction recorded · " + r.channel, body: r.reason },
     ...(r.correctedAt ? [{ id: "correction:" + r.id, at: r.correctedAt, title: "Restriction lifted after review · " + r.channel, body: r.correctionReason }] : []),
   ]);
-  const changes = data.audit.filter((a) => a.entityId === personId && ["handoff", "resident"].includes(a.entityType)).map((a) => ({ id: "change:" + a.id, at: a.createdAt, title: a.entityType === "handoff" ? a.action.replace("handoff.", "Care handoff · ") : "Profile updated", actorId: a.actorId }));
+  const changes = data.audit.filter((a) => a.entityId === personId && ["handoff", "resident"].includes(a.entityType)).map((a) => ({ id: "change:" + a.id, at: a.createdAt,
+    title: a.entityType === "handoff" ? a.action.replace("handoff.", "Care handoff · ") : a.action === "resident.location_changed" ? "Location changed after review" : "Profile updated",
+    body: a.action === "resident.location_changed" && typeof a.details?.reason === "string" ? a.details.reason : undefined, actorId: a.actorId }));
   return [...notes, ...encounters, ...tasks, ...restrictions, ...changes].sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
 }

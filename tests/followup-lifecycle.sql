@@ -57,10 +57,16 @@ do $$ declare r jsonb; person_record jsonb; begin
  perform public.outreach_apply_command(pg_temp.task_command('create-moving-task','moving-task',0,r));
  perform public.outreach_apply_command(pg_temp.task_command('create-closed-moving-task','closed-moving-task',0,r));
  perform public.outreach_apply_command(pg_temp.task_command('complete-before-person-move','closed-moving-task',1,r||'{"status":"completed"}'));
- perform public.outreach_apply_command(jsonb_set(pg_temp.task_command('move-person','moving-person',1,person_record||'{"propertyId":"task-location-b"}'),'{operations,0,entityType}','"resident"'));
+ perform pg_temp.task_denied(jsonb_set(pg_temp.task_command('move-person-unreviewed','moving-person',1,person_record||'{"propertyId":"task-location-b"}'),'{operations,0,entityType}','"resident"'));
+ perform public.outreach_apply_command(jsonb_set(jsonb_set(pg_temp.task_command('move-person','moving-person',1,person_record||'{"propertyId":"task-location-b"}'),'{operations,0,entityType}','"resident"'),'{operations,0,reason}','"Neighbor corrected the meeting address."'));
+ perform public.outreach_apply_command(jsonb_set(jsonb_set(pg_temp.task_command('move-person','moving-person',1,person_record||'{"propertyId":"task-location-b"}'),'{operations,0,entityType}','"resident"'),'{operations,0,reason}','"Neighbor corrected the meeting address."'));
  if not exists(select 1 from public.outreach_tasks where id='moving-task' and location_id='task-location-b' and version=2)
    or not exists(select 1 from public.outreach_tasks where id='closed-moving-task' and location_id='task-location-a' and version=2)
    then raise exception 'Person move did not preserve closed history and increment the open task version exactly once'; end if;
+ if (select count(*) from public.outreach_task_activity where task_id='moving-task')<>2
+   or not exists(select 1 from public.outreach_audit where entity_id='moving-person' and action='resident.location_changed'
+     and details->>'previousLocationId'='task-location-a' and details->>'locationId'='task-location-b' and details->>'reason'='Neighbor corrected the meeting address.' and details->>'openTasksMoved'='1')
+   then raise exception 'Person move reason/history was omitted or duplicated by receipt retry'; end if;
  perform public.outreach_apply_command(pg_temp.task_command('edit-after-person-move','moving-task',2,r||'{"propertyId":"task-location-b","dueAt":"2026-09-17"}'));
  if not exists(select 1 from public.outreach_tasks where id='moving-task' and location_id='task-location-b' and version=3 and due_date='2026-09-17')
    then raise exception 'Follow-up after a person move did not use the predicted server version'; end if;

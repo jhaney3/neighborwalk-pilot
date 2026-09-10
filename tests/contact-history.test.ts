@@ -20,4 +20,11 @@ describe("contact restrictions and permitted history", () => {
     expect(JSON.stringify(personTimeline(data, person.id))).not.toContain("Must not appear");
     expect(personTimeline(data, "unavailable-person")).toEqual([]);
   });
+  it("shows the authorized move reason in the person's history", () => {
+    const data = createSeedData(); const person = data.residents[0];
+    data.audit = [{ id: "move", action: "resident.location_changed", entityType: "resident", entityId: person.id,
+      actorId: person.assignedVolunteerId, createdAt: "2026-09-10T12:00:00Z", summary: "Location changed", details: { reason: "Neighbor corrected the meeting address." } }];
+    expect(personTimeline(data, person.id)).toContainEqual(expect.objectContaining({ title: "Location changed after review", body: "Neighbor corrected the meeting address." }));
+    expect(personTimeline(data, "unavailable-person")).toEqual([]);
+  });
 });

@@ -146,7 +146,7 @@ export const faithStatusLabels: Record<FaithStatus, string> = {
 
 export type Resident = NeighborWalkData["residents"][number];
 
-export type ResidentInput = Omit<Resident, "id" | "churchId" | "propertyId" | "createdByVolunteerId" | "createdAt" | "updatedAt">;
+export type ResidentInput = Omit<Resident, "id" | "churchId" | "propertyId" | "createdByVolunteerId" | "createdAt" | "updatedAt"> & { changeReason?: string };
 
 export type PersonNote = NeighborWalkData["personNotes"][number];
 
