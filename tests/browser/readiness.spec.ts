@@ -56,20 +56,21 @@ function recorded(label: string) {
   return Number(execFileSync("psql", [database, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
     "select count(*) from public.outreach_encounters where objective_note like '" + label + "%';"], { encoding: "utf8" }).trim());
 }
-async function queued(page: Page) {
-  return page.evaluate(async () => {
+async function queued(page: Page, accountId?: string) {
+  return page.evaluate(async (requestedAccount) => {
     const request = indexedDB.open("neighborwalk:sandbox:http://127.0.0.1:54321", 1);
     const db = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
     try {
       const store = db.transaction("app_state").objectStore("app_state");
       const keysRequest = store.getAllKeys();
       const keys = await new Promise<IDBValidKey[]>((resolve, reject) => { keysRequest.onsuccess = () => resolve(keysRequest.result); keysRequest.onerror = () => reject(keysRequest.error); });
-      const key = keys.find((key) => typeof key === "string" && key.startsWith('["account",'));
+      const key = keys.find((key) => typeof key === "string" && key.startsWith('["account",')
+        && (!requestedAccount || JSON.parse(key)[1] === requestedAccount));
       if (!key) return -1;
       const dataRequest = db.transaction("app_state").objectStore("app_state").get(key);
       return await new Promise<number>((resolve, reject) => { dataRequest.onsuccess = () => resolve(dataRequest.result?.sync?.commands?.length ?? -1); dataRequest.onerror = () => reject(dataRequest.error); });
     } finally { db.close(); }
-  });
+  }, accountId);
 }
 
 test("email reminders require explicit self opt-in and can be turned off without changing church records", async ({ context, page }) => {
@@ -432,6 +433,83 @@ test("expired access token can explicitly reopen a recently prepared offline wor
   await setDisconnected(context, false);
   await expect.poll(() => queued(reopened), { timeout: 120_000 }).toBe(0);
   expect(recorded(prefix + " expired")).toBe(1);
+});
+
+test("actual session revocation and account switching preserve authored work without giving another account its queue", async ({ browser, context, page }) => {
+  await isolate(context); await signIn(page, "volunteer");
+  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  // Return identifiers only, never the access/refresh tokens. Delete exactly
+  // this local fictional session, the same state change made by Auth sign-out.
+  const session = await page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem("neighborwalk-auth:sandbox:http://127.0.0.1:54321")!);
+    const payload = JSON.parse(atob(stored.access_token.split(".")[1].replaceAll("-", "+").replaceAll("_", "/")));
+    return { id: payload.session_id, user: payload.sub, expiresAt: payload.exp };
+  });
+  if (![session.id, session.user].every((id) => typeof id === "string" && /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id))) throw new Error("Invalid fictional session identifiers");
+  expect(session.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1000) + 60);
+  const other = await browser.newContext();
+  try {
+    await isolate(other); const otherPage = await other.newPage(); await signIn(otherPage, "volunteer");
+    await setDisconnected(context, true);
+    await encounter(page, prefix + " revoked /one");
+    expect(await queued(page)).toBe(1); expect(recorded(prefix + " revoked")).toBe(0);
+    const removed = execFileSync("psql", [database, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+      "with removed as (delete from auth.sessions s using auth.users u where s.id='" + session.id + "' and s.user_id='" + session.user + "' and u.id=s.user_id and u.email='volunteer@neighborwalk.test' returning s.id) select count(*) from removed;"], { encoding: "utf8" }).trim();
+    expect(Number(removed)).toBe(1);
+    await encounter(otherPage, prefix + " surviving /one");
+    await expect.poll(() => queued(otherPage), { timeout: 60_000 }).toBe(0);
+    expect(recorded(prefix + " surviving")).toBe(1);
+    await setDisconnected(context, false);
+    await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible({ timeout: 60_000 });
+    expect(await queued(page)).toBe(1); expect(recorded(prefix + " revoked")).toBe(0);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-supabase-workspace:sandbox:http://127.0.0.1:54321")!).verifiedAt)).toBe("");
+    await setDisconnected(context, true); await page.reload();
+    await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Hello,/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
+    expect(await queued(page)).toBe(1);
+    await setDisconnected(context, false);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Sign out or use a different account", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Pick up where care left off." })).toBeVisible();
+    await signIn(page, "leader");
+    const otherAccount = await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-auth:sandbox:http://127.0.0.1:54321")!).user.id as string);
+    expect(otherAccount).not.toBe(session.user);
+    expect(await queued(page, otherAccount)).toBe(0);
+    expect(await queued(page, session.user)).toBe(1);
+    expect(recorded(prefix + " revoked")).toBe(0);
+    await page.goto(origin + "/app/recovery");
+    await expect(page.getByRole("heading", { name: "No queued transactions on this device", exact: true })).toBeVisible();
+    await expect(page.getByText(prefix + " revoked /one", { exact: false })).toHaveCount(0);
+    await page.goto(origin + "/app/settings");
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Pick up where care left off." })).toBeVisible();
+    await signIn(page, "volunteer");
+    await expect.poll(() => queued(page, session.user), { timeout: 60_000 }).toBe(0);
+    expect(recorded(prefix + " revoked")).toBe(1);
+    expect(recorded(prefix + " surviving")).toBe(1);
+  } finally { await other.close(); }
+});
+
+test("an already open offline workspace locks after its authorization window without clearing queued work", async ({ context, page }) => {
+  await isolate(context); await signIn(page);
+  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await setDisconnected(context, true);
+  await encounter(page, prefix + " window /one");
+  expect(await queued(page)).toBe(1); expect(recorded(prefix + " window")).toBe(0);
+  // Only browser time changes. Timers run normally; focus checks the existing
+  // in-memory authorization, without replacing the cache or a server response.
+  await page.clock.setFixedTime(new Date(Date.now() + 25 * 60 * 60 * 1000));
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible();
+  await expect(page.getByText(/This device needs an online membership check/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Hello,/ })).toHaveCount(0);
+  expect(await queued(page)).toBe(1); expect(recorded(prefix + " window")).toBe(0);
+  await page.clock.setFixedTime(new Date());
+  await setDisconnected(context, false); await page.reload();
+  await expect(page.getByRole("heading", { name: /Hello,/ })).toBeVisible();
+  await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
+  expect(recorded(prefix + " window")).toBe(1);
 });
 
 test("known access denial locks the cache and prevents a later offline reopen", async ({ context, page }) => {

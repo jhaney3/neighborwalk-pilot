@@ -4,6 +4,9 @@ insert into auth.users(id,email,email_confirmed_at) values
  ('50000000-0000-4000-8000-000000000011','reminder-leader@neighborwalk.test',now()),
  ('50000000-0000-4000-8000-000000000012','reminder-volunteer@neighborwalk.test',now()),
  ('50000000-0000-4000-8000-000000000013','reminder-unverified@neighborwalk.test',null);
+-- Live, fictional sessions for interactive JWT fixtures; all are rolled back.
+insert into auth.sessions(id,user_id,created_at,updated_at)
+ select id,id,now(),now() from auth.users where id::text like '50000000-%';
 insert into public.churches(id,name,created_by,timezone) values
  ('50000000-0000-4000-8000-000000000001','Fictional Reminder Church','50000000-0000-4000-8000-000000000011',
    (select name from pg_timezone_names where name like 'Etc/GMT%' and extract(hour from now() at time zone name)=12 limit 1)),
@@ -14,7 +17,7 @@ insert into public.church_memberships(church_id,user_id,role,active) values
  ('50000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000013','volunteer',true);
 insert into public.outreach_tasks(church_id,id,owner_id,due_date,note) values
  ('50000000-0000-4000-8000-000000000001','reminder-task','50000000-0000-4000-8000-000000000012','2020-01-01','PRIVATE FICTIONAL CARE NOTE MUST NOT ENTER EMAIL');
-select set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000012","session_id":"50000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
 set local role authenticated;
 do $$ declare result jsonb; begin
  result:=public.outreach_reminder_preference('50000000-0000-4000-8000-000000000001');
@@ -24,7 +27,7 @@ do $$ declare result jsonb; begin
  begin perform public.outreach_reminder_worker('claim'); raise exception 'Member may run service worker'; exception when insufficient_privilege then null; end;
  begin perform * from private.outreach_reminder_preferences; raise exception 'Member may read private recipients'; exception when insufficient_privilege then null; end;
 end $$;
-select set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000013","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000013","session_id":"50000000-0000-4000-8000-000000000013","role":"authenticated","is_anonymous":false}',true);
 do $$ begin
  begin perform public.outreach_reminder_preference('50000000-0000-4000-8000-000000000001',true); raise exception 'Unverified address enrolled'; exception when invalid_parameter_value then null; end;
 end $$;
@@ -69,7 +72,7 @@ do $$ begin
   or not exists(select 1 from private.outreach_reminder_preferences where id='50000000-0000-4000-8000-000000000021' and not enabled and suppressed_at is not null)
   or (select count(*) from private.outreach_reminder_events where id='evt_fictional_bounce')<>1 then raise exception 'Out-of-order bounce/deduplication/suppression failed'; end if;
 end $$;
-select set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000012","session_id":"50000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
 set local role authenticated;
 do $$ begin
  begin perform public.outreach_reminder_preference('50000000-0000-4000-8000-000000000001',true); raise exception 'Bounce suppression was bypassed'; exception when invalid_parameter_value then null; end;
@@ -124,10 +127,10 @@ do $$ declare church uuid:='50000000-0000-4000-8000-000000000001'; member uuid:=
  if exists(select 1 from private.outreach_reminder_preferences where user_id='50000000-0000-4000-8000-000000000011') then raise exception 'Leader was enrolled by another member'; end if;
  -- The real creator trigger assigns new people to auth.uid(), even for a
  -- privileged fixture insert. Create this private record as the other actor.
- perform set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
+ perform set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000011","session_id":"50000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
  insert into public.discipleship_people(id,church_id,created_by,assigned_to,name,faith_status,discipleship_stage,status,preferred_contact)
  values('reminder-private-person',church,'50000000-0000-4000-8000-000000000011','50000000-0000-4000-8000-000000000011','Fictional private person','not_discussed','new_connection','active','none');
- perform set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
+ perform set_config('request.jwt.claims','{"sub":"50000000-0000-4000-8000-000000000012","session_id":"50000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
  update public.outreach_tasks set status='scheduled',due_date=current_date,person_id='reminder-private-person' where church_id=church;
  if private.outreach_reminder_eligible(church,member,current_date) then raise exception 'Inaccessible person task eligible'; end if;
  update public.discipleship_people set shared_user_ids=array[member] where id='reminder-private-person';

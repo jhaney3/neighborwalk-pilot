@@ -141,7 +141,11 @@ async function seed(rehearsal = false) {
   add("person_note", data.personNotes);
   add("follow_up", data.followUps.map((t) => ({ ...t, dueAt: calendarDate(t.dueAt, data.church.timezone) })));
   add("assignment", (data.assignments ?? []).map((a) => ({ ...a, status: "assigned" })));
-  statements.push(`select set_config('request.jwt.claims',${literal({ sub: leader.id, role: "authenticated", is_anonymous: false })}::text,true);`, "set local role authenticated;");
+  // A short-lived synthetic session is local-only and removed in the same
+  // transaction after seeding; do not weaken production authorization for fixtures.
+  const seedSessionId = crypto.randomUUID();
+  statements.push(`insert into auth.sessions(id,user_id,not_after) values('${seedSessionId}','${leader.id}',now()+interval '5 minutes');`);
+  statements.push(`select set_config('request.jwt.claims',${literal({ sub: leader.id, session_id: seedSessionId, role: "authenticated", is_anonymous: false })}::text,true);`, "set local role authenticated;");
   for (let offset = 0; offset < operations.length; offset += 60) statements.push(`select public.outreach_apply_command(${literal({
     id: "fictional-seed-" + offset, schemaVersion: 1, churchId, userId: leader.id, createdAt: new Date().toISOString(), operations: operations.slice(offset, offset + 60),
   })});`);
@@ -159,6 +163,7 @@ async function seed(rehearsal = false) {
       values ('17031', 'sandbox-${index}', ${literal(property.address)} #>> '{}', 'Synthetic test parcel', 'Test fixture', true,
       extensions.st_multi(extensions.st_makeenvelope(${lng - 0.00015}, ${lat - 0.00012}, ${lng + 0.00015}, ${lat + 0.00012}, 4326))) on conflict do nothing;`);
   }
+  statements.push(`delete from auth.sessions where id='${seedSessionId}' and user_id='${leader.id}';`);
   statements.push(rehearsal ? "rollback;" : "commit;");
   sql(statements.join("\n"));
   console.log(rehearsal ? "PASS: fresh normalized fixture seed. All church records rolled back; existing sandbox records preserved."

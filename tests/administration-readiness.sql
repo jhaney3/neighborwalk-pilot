@@ -5,6 +5,9 @@ insert into auth.users(id,email) values
  ('20000000-0000-4000-8000-000000000012','admin-volunteer@neighborwalk.test');
 insert into auth.sessions(id,user_id,created_at,updated_at) values
  ('20000000-0000-4000-8000-000000000021','20000000-0000-4000-8000-000000000011',now(),now());
+-- Live, fictional sessions for interactive JWT fixtures; all are rolled back.
+insert into auth.sessions(id,user_id,created_at,updated_at)
+ select id,id,now(),now() from auth.users where id::text like '20000000-%';
 insert into public.churches(id,name,created_by,retention_days) values
  ('20000000-0000-4000-8000-000000000001','Fictional Administration Church','20000000-0000-4000-8000-000000000011',180);
 insert into public.church_memberships(church_id,user_id,role,active) values
@@ -63,7 +66,7 @@ do $$ declare request jsonb; result jsonb; plan jsonb; begin
   perform public.outreach_admin_action(pg_temp.admin_request('review_migration_issue','review-issue')||'{"entityType":"property","entityId":"admin-location","issue":"test_review_issue","reason":"Fictional record links checked"}');
   if not exists(select 1 from public.outreach_migration_issues where entity_id='admin-location' and resolved_by=auth.uid() and resolution_note='Fictional record links checked' and resolved_at is not null) then raise exception 'Review reason or actor was not preserved'; end if;
 end $$;
-select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"20000000-0000-4000-8000-000000000012","session_id":"20000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
 do $$ begin
  perform pg_temp.admin_denied(pg_temp.admin_request('record_export','volunteer-export')||'{"kind":"people"}','42501');
 end $$;

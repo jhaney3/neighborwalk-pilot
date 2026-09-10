@@ -6,6 +6,9 @@ insert into auth.users(id,email) values
   ('10000000-0000-4000-8000-000000000011','readiness-a@neighborwalk.test'),
   ('10000000-0000-4000-8000-000000000012','readiness-b@neighborwalk.test'),
   ('10000000-0000-4000-8000-000000000013','readiness-volunteer@neighborwalk.test');
+-- Live, fictional sessions for interactive JWT fixtures; all are rolled back.
+insert into auth.sessions(id,user_id,created_at,updated_at)
+ select id,id,now(),now() from auth.users where id::text like '10000000-%';
 insert into public.churches(id,name,created_by) values
   ('10000000-0000-4000-8000-000000000001','Readiness Church A','10000000-0000-4000-8000-000000000011'),
   ('10000000-0000-4000-8000-000000000002','Readiness Church B','10000000-0000-4000-8000-000000000012');
@@ -19,7 +22,7 @@ from generate_series(1,1001) i;
 insert into public.outreach_outings(church_id,id,name,starts_at,ends_at)
 values ('10000000-0000-4000-8000-000000000002','private-b','Other church outing',now(),now()+interval '1 hour');
 
-select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000011","session_id":"10000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
 set local role authenticated;
 do $$ declare first_count integer; next_count integer; cursor_id text; tab text; begin
   if has_table_privilege('authenticated','public.workspace_snapshots','UPDATE') then raise exception 'Legacy snapshot replacement remains possible'; end if;
@@ -106,7 +109,7 @@ do $$ declare event_record jsonb; begin
     {"entityType":"territory","entityId":"bad-boundary","operation":"upsert","expectedVersion":0,"record":{"name":"Invalid boundary","kind":"map","center":[0,0],"color":"#286c59","boundary":[[null,0],[1,1],[2,2]]}}
   ]'),'22023');
 end $$;
-select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000013","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000013","session_id":"10000000-0000-4000-8000-000000000013","role":"authenticated","is_anonymous":false}',true);
 do $$ begin
   perform pg_temp.expect_denied(pg_temp.command('volunteer-outing','[{"entityType":"event","entityId":"unauthorized","operation":"upsert","expectedVersion":0,"record":{}}]'),'42501');
   perform public.outreach_apply_command(pg_temp.command('accept-own-area','[
@@ -133,7 +136,7 @@ do $$ begin
     {"entityType":"restriction","entityId":"restriction_restricted-visit","operation":"upsert","expectedVersion":1,"record":{"active":false,"correctionReason":"Not authorized"}}
   ]'),'42501');
 end $$;
-select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000011","session_id":"10000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
 do $$ begin
   perform public.outreach_apply_command(pg_temp.command('accept-handoff','[
     {"entityType":"handoff","entityId":"handoff-person","operation":"upsert","expectedVersion":2,"record":{"action":"accept"}}
@@ -146,12 +149,12 @@ do $$ begin
   if (select active from public.outreach_restrictions where id='restriction_restricted-visit') then raise exception 'Reviewed correction did not lift restriction'; end if;
   if (select status from public.outreach_tasks where id='restricted-task') <> 'cancelled' then raise exception 'Correction resurrected a historical task'; end if;
 end $$;
-select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000013","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000013","session_id":"10000000-0000-4000-8000-000000000013","role":"authenticated","is_anonymous":false}',true);
 do $$ begin
   if exists(select 1 from public.discipleship_people where id='handoff-person') then raise exception 'Former creator retained implicit access after accepted handoff'; end if;
   if exists(select 1 from public.outreach_tasks where id='handoff-task') then raise exception 'Former owner retained implicit task access'; end if;
 end $$;
-select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000011","session_id":"10000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
 do $$ begin
   perform public.outreach_apply_command(pg_temp.command('community-encounter','[
     {"entityType":"visit","entityId":"community-anonymous","operation":"upsert","expectedVersion":0,"record":{"context":"community_meal","outcome":"conversation","recordedAt":"2026-09-10T01:00:00Z","deviceId":"test-device"}}

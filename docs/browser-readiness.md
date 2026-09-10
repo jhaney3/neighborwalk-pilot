@@ -34,8 +34,13 @@ Fictional browser encounters remain in the local fixture church with a generated
 | Leader-to-volunteer task responsibility | Assignment, decline, acceptance and completion matched server state; completion was unavailable before acceptance |
 | Email reminder self-service | Unconfigured delivery blocked enrollment; with a fictional availability response, real local RPC opt-in persisted across reload and opt-out persisted across a second reload; no email was sent |
 | Person-location correction | Required reason and impact acknowledgement; open task followed the person; audit reason appeared in permitted history and database association matched |
+| Reviewed duplicate people/locations | Reasoned, recently authenticated previews; source aliases, original history and stronger restrictions preserved; phone-sized review and old links verified |
+| Encounter correction after lost response | One appended review, unchanged original outcome/links and open responsibility; reviewed history, derived last contact and note categories connected |
+| Field guide content and keyboard navigation | Coaching, suggested words and reminders displayed; responsive tab orientation, arrows/Home/End, labelled panels and phone-sized controls verified |
+| Actual session revocation / account switch | Unexpired token denied; another device stayed authorized; original queue remained private to its author and recovered once after fresh sign-in |
+| While-open offline authorization expiry | Advancing browser time beyond 24 hours locked visible records without clearing the queue; successful online check resumed exactly-once sharing |
 
-The original three-scenario browser suite passed in hosted CI run `34450072005`. Runs `34452002846` and `34453143023` found a request escaping simulated disconnection during tab replacement. The test now combines CDP offline state, a persistent request-abort boundary and an explicit per-tab fetch transport failure boundary (service-worker-controlled pages can bypass interception). All zero-server-write assertions remain. The targeted handover passed five consecutive local runs, and all eight scenarios passed in hosted CI run `34454068051`. These are simulated transport failures, not physical-device airplane-mode evidence. The ninth reminder settings scenario subsequently passed with the full local suite (about two minutes). Latest full verification passes 158 unit tests, lint, types and the optimized build; hosted verification of the reminder additions is pending.
+Earlier CI runs `34452002846` and `34453143023` found a request escaping simulated disconnection during tab replacement. The fixture now combines CDP offline state, persistent request abortion and per-tab fetch transport failure; all zero-server-write assertions remain. Guide checkpoint `5c9ceef` passed hosted CI `34469492638`, including all thirteen scenarios then present, 181 unit tests, lint, types and optimized build. The two additional session/account-switch and while-open-expiry scenarios passed targeted local tests; their complete fifteen-scenario run and hosted checkpoint are recorded in the [execution ledger](rework-progress.md) when finished. These simulations are not physical-device airplane-mode evidence.
 
 ## Offline design
 
@@ -55,7 +60,7 @@ References: [Next.js native History integration](https://nextjs.org/docs/app/get
 
 ## Still required before release
 
-- Full 24-hour window expiry while open, fresh sign-in as another account and recovery of the original account’s pending work. Expired token, known API denial and cross-tab removal paths are covered above.
+- Repeat the automated session/account-switch and while-open expiry scenarios on actual supported devices. The local behavior and limitations are documented in [session security](session-security.md).
 - Service-worker version transition with pending records and multiple open tabs/windows; storage eviction and backgrounding/screen lock.
 - Live permission conflict/recovery; concurrent area/group archival and person moves with open tasks.
 - iPhone Safari/installed PWA, Android Chrome/installed PWA and proportionate desktop Safari/Firefox checks. Chromium emulation is not a substitute for actual devices.

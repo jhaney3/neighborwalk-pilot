@@ -4,6 +4,9 @@ begin;
 insert into auth.users(id,email) values
  ('40000000-0000-4000-8000-000000000011','task-leader@neighborwalk.test'),
  ('40000000-0000-4000-8000-000000000012','task-volunteer@neighborwalk.test');
+-- Live, fictional sessions for interactive JWT fixtures; all are rolled back.
+insert into auth.sessions(id,user_id,created_at,updated_at)
+ select id,id,now(),now() from auth.users where id::text like '40000000-%';
 insert into public.churches(id,name,created_by) values
  ('40000000-0000-4000-8000-000000000001','Fictional Task Church','40000000-0000-4000-8000-000000000011');
 insert into public.church_memberships(church_id,user_id,role,active,display_name) values
@@ -12,7 +15,7 @@ insert into public.church_memberships(church_id,user_id,role,active,display_name
 insert into public.outreach_locations(church_id,id,address,source) values
  ('40000000-0000-4000-8000-000000000001','task-location-a','Fictional A','manual'),
  ('40000000-0000-4000-8000-000000000001','task-location-b','Fictional B','manual');
-select set_config('request.jwt.claims','{"sub":"40000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"40000000-0000-4000-8000-000000000011","session_id":"40000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
 set local role authenticated;
 create function pg_temp.task_command(command_id text, task_id text, version integer, record jsonb) returns jsonb language sql as $$
  select jsonb_build_object('id',command_id,'churchId','40000000-0000-4000-8000-000000000001','schemaVersion',1,'operations',jsonb_build_array(
@@ -37,7 +40,7 @@ do $$ declare r jsonb; begin
  perform public.outreach_apply_command(pg_temp.task_command('task-cancel-current','task-cancel',1,r||'{"status":"cancelled","history":[{"action":"cancelled","note":"Neighbor no longer requested this step."}]}'));
  if (select count(*) from public.outreach_task_activity where task_id='task-cancel') <> 2 then raise exception 'Cancellation history was not appended exactly once'; end if;
 end $$;
-select set_config('request.jwt.claims','{"sub":"40000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"40000000-0000-4000-8000-000000000012","session_id":"40000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
 do $$ declare r jsonb; begin
  r:='{"dueAt":"2026-09-14","propertyId":"task-location-a","assignedVolunteerId":"volunteer_40000000000040008000000000000012","acceptance":"declined","status":"scheduled"}';
  perform public.outreach_apply_command(pg_temp.task_command('decline-task','task-a',1,r));

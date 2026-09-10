@@ -4,11 +4,14 @@ insert into auth.users(id,email) values
  ('70000000-0000-4000-8000-000000000011','correction-leader@neighborwalk.test'),
  ('70000000-0000-4000-8000-000000000012','correction-volunteer@neighborwalk.test');
 insert into auth.sessions(id,user_id,created_at,updated_at) values('70000000-0000-4000-8000-000000000021','70000000-0000-4000-8000-000000000011',now(),now());
+-- Live, fictional sessions for interactive JWT fixtures; all are rolled back.
+insert into auth.sessions(id,user_id,created_at,updated_at)
+ select id,id,now(),now() from auth.users where id::text like '70000000-%';
 insert into public.churches(id,name,created_by) values('70000000-0000-4000-8000-000000000001','Fictional Correction Church','70000000-0000-4000-8000-000000000011');
 insert into public.church_memberships(church_id,user_id,role,active) values
  ('70000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000011','leader',true),
  ('70000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000012','volunteer',true);
-select set_config('request.jwt.claims','{"sub":"70000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"70000000-0000-4000-8000-000000000011","session_id":"70000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
 insert into public.outreach_locations(church_id,id,address) values('70000000-0000-4000-8000-000000000001','correction-place','123 Fictional Correction Road');
 insert into public.discipleship_people(id,church_id,property_id,name,faith_status,discipleship_stage,status,preferred_contact) values
  ('correction-person','70000000-0000-4000-8000-000000000001','correction-place','Fictional Private Correction Person','not_discussed','new_connection','active','none');
@@ -71,7 +74,7 @@ do $$ declare request jsonb; result jsonb; begin
  perform public.outreach_admin_action(pg_temp.correction_request('correction-restricted','restricted-correction')||'{"outcome":"conversation","context":"door"}');
  if (select count(*) from public.outreach_audit where church_id='70000000-0000-4000-8000-000000000001' and action='visit.corrected')<>5 then raise exception 'Correction audit missing or duplicated'; end if;
 end $$;
-select set_config('request.jwt.claims','{"sub":"70000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"70000000-0000-4000-8000-000000000012","session_id":"70000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
 do $$ begin
  perform pg_temp.correction_denied(pg_temp.correction_request('correction-anonymous','volunteer-correct'),'42501');
  if exists(select 1 from public.outreach_encounters where id='correction-encounter') then raise exception 'Private correction leaked'; end if;

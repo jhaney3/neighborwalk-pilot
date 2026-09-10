@@ -5,6 +5,9 @@ insert into auth.users(id,email) values
  ('60000000-0000-4000-8000-000000000012','merge-owner@neighborwalk.test'),
  ('60000000-0000-4000-8000-000000000013','merge-recipient@neighborwalk.test');
 insert into auth.sessions(id,user_id,created_at,updated_at) values('60000000-0000-4000-8000-000000000021','60000000-0000-4000-8000-000000000011',now(),now());
+-- Live, fictional sessions for interactive JWT fixtures; all are rolled back.
+insert into auth.sessions(id,user_id,created_at,updated_at)
+ select id,id,now(),now() from auth.users where id::text like '60000000-%';
 insert into public.churches(id,name,created_by) values('60000000-0000-4000-8000-000000000001','Fictional Combination Church','60000000-0000-4000-8000-000000000011');
 insert into public.church_memberships(church_id,user_id,role,active) values
  ('60000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000011','leader',true),
@@ -14,7 +17,7 @@ insert into public.outreach_locations(church_id,id,address,unit) values
  ('60000000-0000-4000-8000-000000000001','merge-place-a','123 Fictional Road','A'),
  ('60000000-0000-4000-8000-000000000001','merge-place-b','123 Fictional Road','A'),
  ('60000000-0000-4000-8000-000000000001','merge-other-unit','123 Fictional Road','B');
-select set_config('request.jwt.claims','{"sub":"60000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
+select set_config('request.jwt.claims','{"sub":"60000000-0000-4000-8000-000000000012","session_id":"60000000-0000-4000-8000-000000000012","role":"authenticated","is_anonymous":false}',true);
 insert into public.discipleship_people(id,church_id,property_id,created_by,assigned_to,name,phone,faith_status,discipleship_stage,status,preferred_contact) values
  ('merge-person-a','60000000-0000-4000-8000-000000000001','merge-place-a','60000000-0000-4000-8000-000000000012','60000000-0000-4000-8000-000000000012','Fictional same person','555-0101','not_discussed','new_connection','active','none'),
  ('merge-person-b','60000000-0000-4000-8000-000000000001','merge-place-a','60000000-0000-4000-8000-000000000012','60000000-0000-4000-8000-000000000012','Fictional same person','555-0102','prefer_not_to_say','building_relationship','active','none');
@@ -39,7 +42,7 @@ insert into merge_originals select 'person',to_jsonb(p) from public.discipleship
 insert into merge_originals select 'location',to_jsonb(l) from public.outreach_locations l where l.id='merge-place-a';
 grant select on merge_originals to authenticated;
 create function pg_temp.merge_claims(member text,leader boolean default false) returns text language sql as $$
- select jsonb_build_object('sub',member,'role','authenticated','is_anonymous',false,'session_id',case when leader then '60000000-0000-4000-8000-000000000021' end,
+ select jsonb_build_object('sub',member,'role','authenticated','is_anonymous',false,'session_id',case when leader then '60000000-0000-4000-8000-000000000021' else member end,
   'amr',case when leader then jsonb_build_array(jsonb_build_object('method','password','timestamp',extract(epoch from now()))) else '[]'::jsonb end)::text;
 $$;
 create function pg_temp.merge_request(kind text,source text,target text) returns jsonb language sql as $$
