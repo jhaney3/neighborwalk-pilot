@@ -14,6 +14,8 @@ Guide changes now advance the canonical church revision under the same church lo
 
 The local library is replaced only after a complete read is accepted. A failed refresh keeps any previous saved copy available within the existing account/offline window. Leaders should resolve persistent invalid-content warnings rather than assume the saved copy is current. Do not repair such warnings by deleting database records or clearing browser storage.
 
+A known authorization denial is different from a content/network warning. Direct or wrapped permission errors and changed guide identity invalidate the matching account's prepared offline window and lock the visible workspace. This applies to initial loading, refresh, pending-request review and guide submission. Original authored work remains on the device; it is not transferred to a different account or cleared to resolve the denial.
+
 ## Content and accessibility
 
 Coaching, suggested words, reminders and Scripture references are available in the editor and field reader. References do not silently fetch copyrighted passage text. Guide steps and location panels use labelled tabs, roving focus and matching keyboard orientation, with larger phone tap targets and contained step navigation.

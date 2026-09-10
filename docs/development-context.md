@@ -1,7 +1,7 @@
 # Development context
 
 Repository orientation recorded on 2026-09-08 at commit `0fad092` on `main`.
-Updated during the cleanup on `refactor/simplify-neighborwalk`. These notes describe the checked-out source, not an audit of the live deployment. See [codebase-review.md](codebase-review.md) for current verification and findings.
+Updated during the earlier cleanup on `refactor/simplify-neighborwalk`. These are historical orientation notes, not the current rework contract or an audit of the live deployment. Use [current architecture](current-architecture.md), the [execution ledger](rework-progress.md) and [release gates](production-checklist.md) for current branch behavior and verification.
 
 ## Development on this device
 
@@ -37,7 +37,7 @@ settings into `.env.local`.
 - `NEXT_PUBLIC_MAPTILER_KEY` enables MapTiler Streets and external address search.
 - `NEXT_PUBLIC_MAP_STYLE_URL` overrides the default map style.
 - `NEXT_PUBLIC_GEOCODER_URL` selects a reverse-geocoding endpoint.
-- `ESV_API_KEY` is server-only and enables inline scripture reading.
+- Historical only: `ESV_API_KEY` once enabled inline Scripture. The rework is reference-only; its retired passage endpoint makes no provider request and does not use this key.
 - `NEXT_PUBLIC_SITE_URL` overrides the metadata origin.
 
 Baseline verification under Node 22:

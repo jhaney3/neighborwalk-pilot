@@ -1,4 +1,9 @@
--- NeighborWalk production PostgreSQL schema
+-- ARCHIVED DESIGN PROPOSAL — NOT THE CURRENT OR DEPLOYED DATABASE SCHEMA.
+-- Do not execute this file against a NeighborWalk database. It uses a different
+-- identity/schema model and is retained only for design history.
+-- Current sources: supabase/migrations/, lib/database.types.ts,
+-- and docs/current-architecture.md. Follow docs/production-checklist.md.
+-- Original proposed NeighborWalk PostgreSQL schema follows unchanged.
 -- PostgreSQL 16+ with PostGIS. IDs exposed to clients are public_id values;
 -- internal relationships use sequential bigint keys for index locality.
 

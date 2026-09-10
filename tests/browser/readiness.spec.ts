@@ -465,6 +465,32 @@ test("two isolated devices retain both encounters; a lost commit response does n
   } finally { await other.close(); }
 });
 
+test("work saved during an in-flight refresh is retried without waiting for the periodic poll", async ({ context, page }) => {
+  // Install before app timers exist. Advancing only the known debounce window
+  // makes the joined-sync race deterministic, without editing the device queue.
+  await page.clock.install();
+  await isolate(context); await signIn(page);
+  let held = false;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await context.route("**/rest/v1/rpc/outreach_guide_state", async (route) => {
+    if (!held) { held = true; await gate; }
+    await route.continue();
+  });
+  try {
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect.poll(() => held).toBe(true);
+    await encounter(page, prefix + " refresh /during-read");
+    await expect.poll(() => queued(page)).toBe(1);
+    expect(recorded(prefix + " refresh")).toBe(0);
+    await page.clock.fastForward(2_000);
+    release();
+    // The ordinary 30-second periodic refresh cannot explain this result.
+    await expect.poll(() => recorded(prefix + " refresh"), { timeout: 12_000 }).toBe(1);
+    await expect.poll(() => queued(page)).toBe(0);
+  } finally { release(); }
+});
+
 test("quota failure retains the form and never claims a persisted encounter", async ({ context, page }) => {
   await isolate(context);
   await context.addInitScript(() => {
@@ -593,14 +619,18 @@ test("an already open offline workspace locks after its authorization window wit
   expect(recorded(prefix + " window")).toBe(1);
 });
 
-test("known access denial locks the cache and prevents a later offline reopen", async ({ context, page }) => {
+for (const endpoint of ["outreach_workspace_info", "outreach_guide_state"]) {
+test(`known ${endpoint} access denial locks the cache and prevents a later offline reopen`, async ({ context, page }) => {
   await isolate(context); await signIn(page);
   await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
   // Exercise the UI's real API-denial path without suspending the shared fixture
   // account. Actual membership removal is covered by the SQL regression suite.
-  await context.route("**/rest/v1/rpc/outreach_workspace_info", (route) => route.fulfill({ status: 403,
+  await context.route("**/rest/v1/rpc/" + endpoint, (route) => route.fulfill({ status: 403,
     contentType: "application/json", body: JSON.stringify({ code: "42501", message: "Fictional access denial" }) }));
-  await page.reload();
+  if (endpoint === "outreach_guide_state") {
+    await page.getByRole("button", { name: "Conversation guide", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh guides", exact: true }).click();
+  } else await page.reload();
   await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-supabase-workspace:sandbox:http://127.0.0.1:54321")!).verifiedAt)).toBe("");
   await setDisconnected(context, true);
@@ -616,6 +646,7 @@ test("known access denial locks the cache and prevents a later offline reopen", 
   await expect(reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
   await expect(reopened.getByRole("heading", { name: /Hello,/ })).toHaveCount(0);
 });
+}
 
 test("cross-tab session removal hides offline records without clearing authored work", async ({ context, page }) => {
   await isolate(context); await signIn(page);

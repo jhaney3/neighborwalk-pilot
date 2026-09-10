@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createId, type ConversationGuide, type ConversationGuideInput } from "./domain";
-import { guideStepSchema, normalizeGuideSteps, validGuideInput, type GuideLibraryState } from "./conversation-guides";
+import { GuideAccessError, guideStepSchema, normalizeGuideSteps, validGuideInput, type GuideLibraryState } from "./conversation-guides";
 import { apiError } from "./outreach-client";
 import type { Json } from "./database.types";
 import { getSupabaseBrowserClient } from "./supabase";
@@ -71,7 +71,7 @@ export async function submitGuideChange(scope: StorageScope, input: GuideChangeI
   const client = getSupabaseBrowserClient();
   if (!client || !navigator.onLine) throw new Error("Guide changes require a connection. Prepared guides remain available offline.");
   const session = await client.auth.getSession();
-  if (session.error || session.data.session?.user.id !== scope.userId) throw new Error("Sign in with the account that authored this guide request.");
+  if (session.error || session.data.session?.user.id !== scope.userId) throw new GuideAccessError("Sign in with the account that authored this guide request.");
   const previous = await pendingGuideChange(scope);
   if (previous && input) throw new Error("A previous guide request needs review. Open Guides to retry it or preserve it as reviewed first.");
   const request = previous ? parseGuideChangeRequest(previous.request) : input ? parseGuideChangeRequest({ ...guideChangeInputSchema.parse(input),

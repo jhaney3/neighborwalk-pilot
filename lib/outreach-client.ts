@@ -7,6 +7,7 @@ import { volunteerIdForUser } from "./discipleship";
 import type { getSupabaseBrowserClient } from "./supabase";
 import type { Json } from "./database.types";
 import { versionKey, type OutreachCommand } from "./command-schema";
+import { CollectionReadBudget, IncompleteCollectionError, readCompletePages } from "./complete-pages";
 
 type Client = NonNullable<ReturnType<typeof getSupabaseBrowserClient>>;
 type Row = Record<string, unknown>;
@@ -14,7 +15,7 @@ type PageRow = { id: string; version: number; record: Json };
 const rowSchema = z.record(z.string(), z.unknown());
 const infoSchema = z.object({
   apiVersion: z.literal(1), church: neighborWalkDataSchema.shape.church,
-  revision: z.number().int(), settingsVersion: z.number().int(),
+  revision: z.number().int().nonnegative(), settingsVersion: z.number().int().positive(),
   role: z.enum(["leader", "volunteer"]), userId: z.string().uuid(),
   volunteers: z.array(z.unknown()),
 });
@@ -31,21 +32,20 @@ export function apiError(error: { message?: string; code?: string }): OutreachAp
   return new OutreachApiError(error.message ?? "The church service could not be reached.", error.code);
 }
 
-export async function readOutreachPages(client: Client, churchId: string, kind: string): Promise<PageRow[]> {
-  const records: PageRow[] = [];
-  let cursor = "";
-  for (;;) {
-    const { data, error } = await client.rpc("outreach_read_records", { target_church: churchId, entity_kind: kind, after_id: cursor, page_size: 500 });
+export const WORKSPACE_READ_LIMITS = { records: 100_000, bytes: 64 * 1024 * 1024 };
+export async function readOutreachPages(client: Client, churchId: string, kind: string, budget?: CollectionReadBudget): Promise<PageRow[]> {
+  return readCompletePages(async (after) => {
+    const { data, error } = await client.rpc("outreach_read_records", { target_church: churchId, entity_kind: kind, after_id: after ?? "", page_size: 500 });
+    // Keep permission errors typed so the caller invalidates offline access.
     if (error) throw apiError(error);
-    const page = data ?? [];
-    if (!page.length) break;
-    const next = page.at(-1)!.id;
-    if (next <= cursor || page.some((row) => row.id <= cursor)) throw new Error("The record cursor did not advance. No truncated read was accepted.");
-    records.push(...page);
-    cursor = next;
-    if (page.length < 500) break;
-  }
-  return records;
+    return { data, error: null };
+  }, (row) => {
+    if (!row || typeof row.id !== "string" || !row.id || !Number.isSafeInteger(row.version) || row.version < 1
+      || !row.record || typeof row.record !== "object" || Array.isArray(row.record) || row.record.church_id !== churchId) {
+      throw new IncompleteCollectionError("A church record could not be safely read. The saved copy was not replaced; ask the operator to review the source records.");
+    }
+    return row.id;
+  }, WORKSPACE_READ_LIMITS, budget);
 }
 
 const kinds = ["event", "team", "team_member", "territory", "assignment", "property", "visit", "follow_up", "task_activity", "resident", "person_note", "restriction", "audit", "migration_issue"] as const;
@@ -114,17 +114,47 @@ export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Re
   return projectOutreachWorkspace(candidate);
 }
 
-export async function loadOutreachWorkspace(client: Client, churchId: string, preferences?: NeighborWalkData["preferences"]) {
+export function matchesWorkspaceIdentity(value: unknown, churchId: string, userId: string): boolean {
+  const parsed = infoSchema.safeParse(value);
+  return parsed.success && parsed.data.church.id === churchId && parsed.data.userId === userId;
+}
+
+function workspaceInfo(value: unknown, churchId: string, userId: string) {
+  const parsed = infoSchema.safeParse(value);
+  if (!parsed.success) throw new IncompleteCollectionError("The church workspace response is incomplete. The saved copy was not replaced.");
+  if (parsed.data.church.id !== churchId || parsed.data.userId !== userId) {
+    throw new OutreachApiError("The account or church changed during this refresh. Reconnect with the original account.", "42501");
+  }
+  return parsed.data;
+}
+
+async function readWorkspaceCollections(client: Client, churchId: string): Promise<Records> {
+  const budget = new CollectionReadBudget(WORKSPACE_READ_LIMITS);
+  const pages = {} as Records;
+  let next = 0;
+  let failed = false;
+  // Bound simultaneous API requests rather than opening all fourteen at once.
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (!failed && next < kinds.length) {
+      const kind = kinds[next++];
+      try { pages[kind] = await readOutreachPages(client, churchId, kind, budget); }
+      catch (error) { failed = true; budget.cancel(error); throw error; }
+    }
+  }));
+  return pages;
+}
+
+export async function loadOutreachWorkspace(client: Client, churchId: string, userId: string, preferences?: NeighborWalkData["preferences"]) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const before = await client.rpc("outreach_workspace_info", { target_church: churchId });
     if (before.error) throw apiError(before.error);
-    const info = infoSchema.parse(before.data);
-    const pairs = await Promise.all(kinds.map(async (kind) => [kind, await readOutreachPages(client, churchId, kind)] as const));
+    const info = workspaceInfo(before.data, churchId, userId);
+    const pages = await readWorkspaceCollections(client, churchId);
     const after = await client.rpc("outreach_workspace_info", { target_church: churchId });
     if (after.error) throw apiError(after.error);
-    const finalInfo = infoSchema.parse(after.data);
-    if (info.revision === finalInfo.revision && info.role === finalInfo.role) {
-      return { data: mapOutreachWorkspace(finalInfo, Object.fromEntries(pairs) as Records, preferences), info: finalInfo };
+    const finalInfo = workspaceInfo(after.data, churchId, userId);
+    if (info.revision === finalInfo.revision && info.settingsVersion === finalInfo.settingsVersion && info.role === finalInfo.role) {
+      return { data: mapOutreachWorkspace(finalInfo, pages, preferences), info: finalInfo };
     }
   }
   throw new Error("The church is updating records. Refresh again in a moment; a mixed-version read was not accepted.");

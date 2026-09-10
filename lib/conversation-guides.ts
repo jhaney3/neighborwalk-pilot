@@ -15,6 +15,18 @@ type DatabaseGuideRow = NeighborWalkDatabase["public"]["Tables"]["conversation_g
 type GuideRow = Omit<DatabaseGuideRow, "version" | "archived_at"> & Partial<Pick<DatabaseGuideRow, "version" | "archived_at">>;
 
 export class GuideLibraryReadError extends Error {}
+export class GuideAccessError extends GuideLibraryReadError {}
+export function guideLibraryAccessDenied(error: unknown): boolean {
+  // Page readers retain service errors as causes. Bound traversal so even an
+  // unexpected cyclic diagnostic cannot prevent the authorization check.
+  for (let depth = 0; depth < 4 && error && typeof error === "object"; depth++) {
+    if (error instanceof GuideAccessError) return true;
+    const detail = error as { code?: unknown; cause?: unknown };
+    if (typeof detail.code === "string" && /^(42501|PGRST3)/.test(detail.code)) return true;
+    error = detail.cause;
+  }
+  return false;
+}
 export function guideLibraryErrorMessage(error: unknown) {
   // Only our controlled content-free messages may appear in the field UI.
   return error instanceof GuideLibraryReadError || error instanceof IncompleteCollectionError ? error.message
@@ -230,7 +242,7 @@ export async function connectedGuideState(client: SupabaseClient<NeighborWalkDat
   const { data, error } = await client.rpc("outreach_guide_state", { target_church: churchId });
   if (error) throw error;
   const state = guideStateSchema.parse(data);
-  if (state.churchId !== churchId || state.userId !== userId) throw new GuideLibraryReadError("Guide access changed. Sign in again before refreshing this library.");
+  if (state.churchId !== churchId || state.userId !== userId) throw new GuideAccessError("Guide access changed. Sign in again before refreshing this library.");
   return state;
 }
 

@@ -28,7 +28,8 @@ Fictional browser encounters remain in the local fixture church with a generated
 | Invalid invitation | Secret scrubbed from URL; explicit dismissal restored the existing workspace without changing church data |
 | Native location dialog | Initial focus contained, reverse tab contained, Escape closed, focus returned to the launching location |
 | Expired access token / cold offline reopen | Explicit recently prepared-cache selection, one offline entry, exactly one server record after real authentication reconnects |
-| Known API permission denial | Cache window invalidated; later offline token expiry could not reopen it |
+| Known workspace API permission denial | Cache window invalidated; later offline token expiry could not reopen it |
+| Known guide-service permission denial | Live guide refresh locked visible records and invalidated the prepared window; later cold offline reopening remained unavailable |
 | Cross-tab session removal | Records hidden; original queued work retained and unavailable to an unsigned-in session |
 | Same-account tab handover | Second writer blocked; closing the original allowed reopening with the pending entry intact and both later entries shared once |
 | Leader-to-volunteer task responsibility | Assignment, decline, acceptance and completion matched server state; completion was unavailable before acceptance |
@@ -40,8 +41,11 @@ Fictional browser encounters remain in the local fixture church with a generated
 | Actual session revocation / account switch | Unexpired token denied; another device stayed authorized; original queue remained private to its author and recovered once after fresh sign-in |
 | While-open offline authorization expiry | Advancing browser time beyond 24 hours locked visible records without clearing the queue; successful online check resumed exactly-once sharing |
 | Transactional guide save, competing editor and archive | Lost response retained the original request through reload and retried without duplication; stale edit rejected; favorite clearing persisted; archived content and original record remained |
+| New work saved during a refresh | Clock-controlled debounce joined an in-flight read; after it settled, the new entry shared once before the 30-second periodic poll |
 
-Earlier CI runs `34452002846` and `34453143023` found a request escaping simulated disconnection during tab replacement. The fixture now combines CDP offline state, persistent request abortion and per-tab fetch transport failure; all zero-server-write assertions remain. Complete-read checkpoint `1bb4438` passed hosted CI `34471745794`, including all fifteen scenarios then present, 190 unit tests, lint, types and optimized build. The new guide-write scenario passes against the local transactional guide API; the complete sixteen-scenario run and exact hosted checkpoint are recorded in the [execution ledger](rework-progress.md). These simulations are not physical-device airplane-mode evidence.
+Earlier CI runs `34452002846` and `34453143023` found a request escaping simulated disconnection during tab replacement. The fixture now combines CDP offline state, persistent request abortion and per-tab fetch transport failure; all zero-server-write assertions remain. Transactional-guide checkpoint `96338c1` passed hosted CI `34478082682`, including all sixteen scenarios then present, 201 unit tests, lint, types, the optimized build and nine database suites. Subsequent workspace-read and delayed-refresh results are recorded in the [execution ledger](rework-progress.md). These simulations are not physical-device airplane-mode evidence.
+
+The delayed-refresh regression installs [Playwright's clock](https://playwright.dev/docs/clock) before application timers exist, holds one actual guide-state request during a sync, saves new fieldwork, and advances only the debounce window. Once released, the work must share before the normal 30-second poll. It does not modify the queue or manufacture a server receipt.
 
 ## Offline design
 

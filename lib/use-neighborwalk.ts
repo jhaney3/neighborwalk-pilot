@@ -24,6 +24,7 @@ import {
 } from "./domain";
 import {
   connectedGuideState,
+  guideLibraryAccessDenied,
   loadConnectedGuideLibrary,
   guideLibraryErrorMessage,
   normalizeGuideSteps,
@@ -51,7 +52,7 @@ import {
 } from "./storage";
 import { createSeedData } from "./seed";
 import { getSupabaseBrowserClient } from "./supabase";
-import { apiError, loadOutreachWorkspace, OutreachApiError, submitOutreachCommand } from "./outreach-client";
+import { apiError, loadOutreachWorkspace, matchesWorkspaceIdentity, OutreachApiError, submitOutreachCommand } from "./outreach-client";
 import { commandPending, DurableWorkspaceStore, reconcileOutreachWorkspace, stageWorkspaceChange } from "./outreach-queue";
 import { versionKey, type CommandOperation } from "./command-schema";
 import { prepareReviewedCommand } from "./outreach-recovery";
@@ -194,6 +195,22 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     }
   }, []);
 
+  const withGuideAuthorization = useCallback(async <T,>(scope: StorageScope, operation: () => Promise<T>): Promise<T> => {
+    try { return await operation(); }
+    catch (error) {
+      const connection = workspaceRef.current;
+      if (guideLibraryAccessDenied(error) && connection?.churchId === scope.churchId && connection.userId === scope.userId) {
+        // A denied guide operation is a known authorization failure, not a stale
+        // content warning. Keep authored work, but revoke the offline window.
+        writeWorkspaceConnection({ ...connection, verifiedAt: "" });
+        workspaceRef.current = null; storeRef.current = null; dataRef.current = null;
+        setData(null); setWorkspaceStatus("locked");
+        setStorageError("This account no longer has authorized guide access. Unsent work is preserved. Sign in again or ask your church leader for help.");
+      }
+      throw error;
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     let releaseTab: (() => void) | undefined;
@@ -254,7 +271,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         if (membership.role !== "leader" && membership.role !== "volunteer") throw new Error("Unsupported membership role.");
         const scope = { userId: supabaseUser.id, churchId: membership.church_id };
         cached = await loadScopedNeighborWalkData(scope);
-        const { data: remote, info } = await loadOutreachWorkspace(client, membership.church_id, cached?.preferences);
+        const { data: remote, info } = await loadOutreachWorkspace(client, membership.church_id, supabaseUser.id, cached?.preferences);
         if (!active) return;
         const connection: WorkspaceConnection = {
           churchId: membership.church_id, userId: supabaseUser.id, role: info.role,
@@ -270,10 +287,11 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         await install(cached ? reconcileOutreachWorkspace(remote, cached) : remote, scope);
         setGuidePending(await pendingGuideChange(scope));
         try {
-          const guides = await loadConnectedGuideLibrary(client, scope.churchId, scope.userId);
+          const guides = await withGuideAuthorization(scope, () => loadConnectedGuideLibrary(client, scope.churchId, scope.userId));
           if (!active) return;
           publishGuideLibrary(guides, scope.churchId, scope.userId, true);
         } catch (error) {
+          if (guideLibraryAccessDenied(error)) return;
           publishGuideLibrary(readLocalGuideLibrary(scope.churchId, [], scope.userId), scope.churchId, scope.userId);
           setGuideLibraryError(guideLibraryErrorMessage(error));
         }
@@ -327,7 +345,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         releaseTab?.();
       });
     };
-  }, [publishGuideLibrary, supabaseUser]);
+  }, [publishGuideLibrary, supabaseUser, withGuideAuthorization]);
 
   useEffect(() => {
     const update = () => {
@@ -929,9 +947,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
   const refreshGuideLibrary = useCallback(async () => {
     const scope = requireGuideScope();
-    const fresh = await loadConnectedGuideLibrary(getSupabaseBrowserClient()!, scope.churchId, scope.userId);
+    const fresh = await withGuideAuthorization(scope, () => loadConnectedGuideLibrary(getSupabaseBrowserClient()!, scope.churchId, scope.userId));
     publishGuideLibrary(fresh, scope.churchId, scope.userId, true);
-  }, [publishGuideLibrary, requireGuideScope]);
+  }, [publishGuideLibrary, requireGuideScope, withGuideAuthorization]);
 
   const performGuideChange = useCallback(async (input: GuideChangeInput | null) => {
     const scope = requireGuideScope();
@@ -939,7 +957,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     guideChangeInFlightRef.current = true;
     setGuideChanging(true);
     try {
-      const outcome = await submitGuideChange(scope, input, setGuidePending);
+      const outcome = await withGuideAuthorization(scope, () => submitGuideChange(scope, input, setGuidePending));
       publishGuideLibrary(applyGuideReceipt(guideLibraryRef.current, outcome.request, outcome.result), scope.churchId, scope.userId, true);
       try { await refreshGuideLibrary(); }
       catch (error) { setGuideLibraryError("Your guide change was confirmed. " + guideLibraryErrorMessage(error)); }
@@ -950,21 +968,21 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       guideChangeInFlightRef.current = false;
       setGuideChanging(false);
     }
-  }, [publishGuideLibrary, refreshGuideLibrary, requireGuideScope]);
+  }, [publishGuideLibrary, refreshGuideLibrary, requireGuideScope, withGuideAuthorization]);
 
   const reviewGuidePending = useCallback(async () => {
     const scope = requireGuideScope();
     if (guideChangeInFlightRef.current) throw new Error("Wait for the current guide request to finish.");
     guideChangeInFlightRef.current = true; setGuideChanging(true);
     try {
-      await connectedGuideState(getSupabaseBrowserClient()!, scope.churchId, scope.userId);
+      await withGuideAuthorization(scope, () => connectedGuideState(getSupabaseBrowserClient()!, scope.churchId, scope.userId));
       const pending = await pendingGuideChange(scope);
       if (pending) await finishGuideChange(scope, String(pending.request.id), { reviewedWithoutResubmitting: true,
         note: "Original request preserved for recovery. This does not undo any completed server change." });
       setGuidePending(null);
       try { await refreshGuideLibrary(); } catch (error) { setGuideLibraryError(guideLibraryErrorMessage(error)); }
     } finally { guideChangeInFlightRef.current = false; setGuideChanging(false); }
-  }, [refreshGuideLibrary, requireGuideScope]);
+  }, [refreshGuideLibrary, requireGuideScope, withGuideAuthorization]);
 
   const saveConversationGuide = useCallback(async (input: ConversationGuideInput) => {
     if (!validGuideInput(input)) throw new Error("Finish each guide step before saving.");
@@ -1137,7 +1155,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         });
         submittedId = undefined;
       }
-      const { data: remote, info } = await loadOutreachWorkspace(client, workspace.churchId, store.snapshot.preferences);
+      const { data: remote, info } = await loadOutreachWorkspace(client, workspace.churchId, workspace.userId, store.snapshot.preferences);
       await store.update((current) => reconcileOutreachWorkspace(remote, current));
       const connection = { ...workspace, role: info.role, revision: info.revision, verifiedAt: new Date().toISOString() };
       workspaceRef.current = connection;
@@ -1145,16 +1163,23 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       setWorkspaceMembership(connection);
       writeWorkspaceConnection(connection);
       try {
-        const guides = await loadConnectedGuideLibrary(client, workspace.churchId, supabaseUser.id);
+        const guides = await withGuideAuthorization(workspace, () => loadConnectedGuideLibrary(client, workspace.churchId, supabaseUser.id));
         publishGuideLibrary(guides, workspace.churchId, supabaseUser.id, true);
-      } catch (error) { setGuideLibraryError(guideLibraryErrorMessage(error)); }
+      } catch (error) {
+        if (guideLibraryAccessDenied(error)) return false;
+        setGuideLibraryError(guideLibraryErrorMessage(error));
+      }
       autoRetryAttemptRef.current = 0;
-      return !store.snapshot.sync.commands?.some((q) => q.state === "needs_review");
+      // A new command can be saved while the complete refresh is downloading.
+      // Report unfinished work so an auto-sync callback that joined this pass
+      // schedules another attempt instead of waiting for the 30-second poll.
+      return (store.snapshot.sync.commands?.length ?? 0) === 0;
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The church service could not be reached.";
       if (error instanceof OutreachApiError && /^(42501|PGRST3)/.test(error.code ?? "")) {
         const membershipCheck = await client.rpc("outreach_workspace_info", { target_church: workspace.churchId });
-        if (membershipCheck.error && /^(42501|PGRST3)/.test(membershipCheck.error.code ?? "")) {
+        if (membershipCheck.error && /^(42501|PGRST3)/.test(membershipCheck.error.code ?? "")
+          || !membershipCheck.error && !matchesWorkspaceIdentity(membershipCheck.data, workspace.churchId, workspace.userId)) {
           // Keep unsent work in its account-scoped cache, but immediately lock
           // the visible workspace when current membership cannot authorize it.
           writeWorkspaceConnection({ ...workspace, verifiedAt: "" });
@@ -1178,7 +1203,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       } catch { setStorageError("Device storage could not confirm the sync receipt. Keep this app open; the original command can be retried safely."); }
       return false;
     } finally { setSyncing(false); }
-  }, [publishGuideLibrary, supabaseUser]);
+  }, [publishGuideLibrary, supabaseUser, withGuideAuthorization]);
 
   const syncNow = useCallback(() => {
     if (syncInFlightRef.current) return syncInFlightRef.current;
@@ -1194,7 +1219,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     const scope = storageScopeRef.current;
     const store = storeRef.current;
     if (!client || !scope || !store || !onlineRef.current) throw new Error("Reconnect with this church account to compare shared records.");
-    return (await loadOutreachWorkspace(client, scope.churchId, store.snapshot.preferences)).data;
+    return (await loadOutreachWorkspace(client, scope.churchId, scope.userId, store.snapshot.preferences)).data;
   }, []);
 
   const resolveRecovery = useCallback(async (reviewed: NeighborWalkData, commandId: string | null, selected: string[], expectedIds: string[]) => {
@@ -1207,7 +1232,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       const client = getSupabaseBrowserClient();
       if (!scope || !store || !client || !onlineRef.current || reviewed.church.id !== scope.churchId) throw new Error("Reconnect with the account that owns this device’s work.");
       // Check membership again before exporting or changing any visible cache.
-      const { data: fresh } = await loadOutreachWorkspace(client, scope.churchId, store.snapshot.preferences);
+      const { data: fresh } = await loadOutreachWorkspace(client, scope.churchId, scope.userId, store.snapshot.preferences);
       if (fresh.sync.serverRevision !== reviewed.sync.serverRevision
         || JSON.stringify(fresh.sync.recordVersions) !== JSON.stringify(reviewed.sync.recordVersions)
         || JSON.stringify(fresh.volunteers) !== JSON.stringify(reviewed.volunteers)) {
@@ -1243,13 +1268,13 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       if (syncInFlightRef.current) await syncInFlightRef.current;
       await store.settled();
       if (store.snapshot.sync.commands?.length || store.snapshot.sync.legacyRecoveryRequired) throw new Error("Share or recover this device’s pending fieldwork before administration.");
-      const before = await loadOutreachWorkspace(client, scope.churchId, store.snapshot.preferences);
+      const before = await loadOutreachWorkspace(client, scope.churchId, scope.userId, store.snapshot.preferences);
       if (input && input.expectedRevision !== before.data.sync.serverRevision) {
         await store.update(() => before.data);
         throw new Error("The church changed. Review the refreshed records before continuing.");
       }
       const result = await submitAdministration(scope, input);
-      const fresh = await loadOutreachWorkspace(client, scope.churchId, store.snapshot.preferences);
+      const fresh = await loadOutreachWorkspace(client, scope.churchId, scope.userId, store.snapshot.preferences);
       await store.update(() => fresh.data);
       return { result, reviewedData: before.data };
     } finally { recoveryInFlightRef.current = false; }

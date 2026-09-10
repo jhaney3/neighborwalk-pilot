@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NeighborWalkDatabase } from "../lib/supabase";
-import { GuideLibraryReadError, guideLibraryErrorMessage, loadConnectedGuideLibrary, conversationGuideFromRow, readLocalGuideLibrary, writeLocalGuideLibrary } from "../lib/conversation-guides";
+import { GuideAccessError, GuideLibraryReadError, guideLibraryAccessDenied, guideLibraryErrorMessage, loadConnectedGuideLibrary, conversationGuideFromRow, readLocalGuideLibrary, writeLocalGuideLibrary } from "../lib/conversation-guides";
 import { IncompleteCollectionError } from "../lib/complete-pages";
 
 const church = "00000000-0000-4000-8000-000000000001";
@@ -54,6 +54,15 @@ function clientFor(guides: Row[], defaults: Row[] = [], favorite?: string, optio
 }
 
 describe("connected guide library reads", () => {
+  it("recognizes direct, wrapped and changed-identity denials without mistaking content/network errors for revocation", () => {
+    expect(guideLibraryAccessDenied({ code: "42501" })).toBe(true);
+    expect(guideLibraryAccessDenied(new Error("Wrapped diagnostic", { cause: { code: "PGRST301" } }))).toBe(true);
+    expect(guideLibraryAccessDenied(new GuideAccessError("Guide access changed"))).toBe(true);
+    expect(guideLibraryAccessDenied(new GuideLibraryReadError("Fictional invalid content"))).toBe(false);
+    expect(guideLibraryAccessDenied(new TypeError("Failed to fetch"))).toBe(false);
+    const cycle: { cause?: unknown } = {}; cycle.cause = cycle;
+    expect(guideLibraryAccessDenied(cycle)).toBe(false);
+  });
   it("keeps a personal guide in the separate demo cache without mixing signed-in account libraries", () => {
     const values = new Map<string, string>();
     vi.stubGlobal("window", { localStorage: { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) } });

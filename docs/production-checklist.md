@@ -24,7 +24,7 @@ Implemented foundations include normalized tenant-scoped commands, immutable out
 - [ ] Approve privacy/terms, church/operator responsibilities, permitted information, retention/erasure and backup exceptions, safeguarding, access reviews, correction requests and incident response with appropriate advice.
 - [ ] Select commercial-compatible hosting. The currently inspected Vercel team is Hobby; its [noncommercial restriction](https://vercel.com/docs/plans/hobby) must be resolved by an owner-approved hosting/billing decision.
 - [ ] Replace policy drafts with actually approved content. Do not merely enable an approval flag around unchanged draft text.
-- [ ] Verify supported geography, parcel provenance/update terms and map-provider origin/key/attribution. A local map-provider HTTP 403 is unresolved. Manual address/list use works independently; do not market national parcel coverage.
+- [ ] Verify supported geography, parcel provenance/update terms and map-provider origin/key/attribution. The configured public key's style request returned 403 with the local origin and 200 with production-origin headers; this is not a complete live map/tile/geocoder or licensing verification. Manual address/list use works independently; do not market national parcel coverage.
 
 Public enrollment stays closed until these gates are met. Do not claim legal compliance, guaranteed deliverability, validated prices, testimonials or pilot results that do not exist.
 
