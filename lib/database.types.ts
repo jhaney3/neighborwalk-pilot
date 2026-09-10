@@ -641,6 +641,7 @@ export type Database = {
           actor_key: string
           church_id: string
           context: string
+          corrections: Json
           deleted_at: string | null
           device_id: string
           id: string
@@ -660,6 +661,7 @@ export type Database = {
           actor_key: string
           church_id: string
           context?: string
+          corrections?: Json
           deleted_at?: string | null
           device_id: string
           id: string
@@ -679,6 +681,7 @@ export type Database = {
           actor_key?: string
           church_id?: string
           context?: string
+          corrections?: Json
           deleted_at?: string | null
           device_id?: string
           id?: string

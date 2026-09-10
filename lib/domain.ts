@@ -365,6 +365,10 @@ export const neighborWalkDataSchema = z.object({
     objectiveNote: z.string().max(2000).optional(),
     recordedAt: z.string().datetime(),
     deviceId: z.string().min(1),
+    corrections: z.array(z.object({
+      id: z.string().min(1), actorId: z.string().min(1), createdAt: z.string().datetime(), reason: z.string().min(3).max(500),
+      outcome: outcomeSchema.exclude(["unvisited"]), context: z.enum(["door", "community_meal", "service", "referral", "other"]), voided: z.boolean(),
+    })).max(100).optional(),
   })),
   followUps: z.array(z.object({
     id: z.string().min(1),

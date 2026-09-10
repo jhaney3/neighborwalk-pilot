@@ -66,7 +66,7 @@ Matching extensions are initialized before schema/data restoration. PostGIS buil
 
 Restore uses a single transaction with stop-on-error, keeps original object ownership where the local roles support it, and verifies every captured table's row count/digest, columns and RLS policies, plus extension names/schemas/versions. Failed targets remain isolated for investigation; no automatic database deletion or live replacement occurs. The report explicitly does **not** claim verified application sign-in or provider configuration.
 
-To exercise the whole local loop and all six database permission/workflow suites against the restored copy:
+To exercise the whole local loop and all seven current database permission/workflow suites against the restored copy:
 
 ```sh
 npm run backup:rehearse:local

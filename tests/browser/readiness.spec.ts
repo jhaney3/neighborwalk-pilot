@@ -131,6 +131,73 @@ test("a reviewed person move follows open tasks and records its reason in histor
   expect(Number(result)).toBe(1);
 });
 
+test("a reviewed encounter correction survives a lost response and preserves the promised next step", async ({ context, page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await isolate(context); await signIn(page);
+  const label = prefix + " corrected person";
+  await page.goto(origin + "/app/people");
+  await page.getByRole("button", { name: "Add person", exact: true }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox", { name: "Name or useful identifying description", exact: true }).fill(label);
+  await dialog.getByRole("button", { name: "Save person", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
+  await page.goto(origin + "/app/today");
+  await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Person (optional)", exact: true }).selectOption({ label });
+  await dialog.getByRole("combobox", { name: "What happened?", exact: true }).selectOption("follow_up");
+  await dialog.getByRole("textbox", { name: "Requested next step", exact: true }).fill("Fictional promised next step survives correction");
+  await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
+  if (!/^Fictional browser rehearsal [a-f0-9-]+ corrected person$/.test(label)) throw new Error("Invalid fixture label");
+  const fixture = JSON.parse(execFileSync("psql", [database, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+    "select jsonb_build_object('id',e.id,'personId',p.id) from public.outreach_encounters e join public.discipleship_people p on p.id=e.person_id and p.church_id=e.church_id where p.name='" + label + "';"], { encoding: "utf8" }).trim());
+  if (!/^[a-zA-Z0-9_-]+$/.test(fixture.id) || !/^[a-zA-Z0-9_-]+$/.test(fixture.personId)) throw new Error("Invalid fixture identifiers");
+  await page.goto(origin + "/app/people/" + fixture.personId);
+  await expect(page.getByText(/^Last recorded contact:/)).toBeVisible();
+  await page.goto(origin + "/app/data");
+  const review = page.getByRole("region", { name: "Correct an encounter after review", exact: true });
+  await review.getByRole("searchbox", { name: "Search encounter date, person, address or ID", exact: true }).fill(fixture.id);
+  await review.getByRole("combobox", { name: "Encounter to review", exact: true }).selectOption(fixture.id);
+  await review.getByRole("button", { name: "Review original encounter", exact: true }).click();
+  await expect(review.getByText(/1 linked tasks remain unchanged/)).toBeVisible();
+  const save = review.getByRole("button", { name: "Save reviewed correction", exact: true });
+  await expect(save).toBeDisabled();
+  await review.getByRole("combobox", { name: "Reviewed outcome", exact: true }).selectOption("conversation");
+  await review.getByRole("combobox", { name: "Reviewed context", exact: true }).selectOption("service");
+  await review.getByRole("checkbox", { name: /Entered in error — preserve history/ }).check();
+  const reason = "Fictional duplicate encounter; keep the promised follow-up.";
+  await review.getByRole("textbox", { name: "Factual reason for this correction", exact: true }).fill(reason);
+  await expect(save).toBeDisabled();
+  await review.getByRole("checkbox", { name: /I reviewed the original and will handle tasks/ }).check();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  let lost = false;
+  await context.route("**/rest/v1/rpc/outreach_admin_action", async (route) => {
+    if (!lost && route.request().postDataJSON()?.request?.action === "encounter_correct") {
+      lost = true; const committed = await route.fetch(); expect(committed.ok()).toBe(true); await route.abort("failed");
+    } else await route.continue();
+  });
+  await save.click();
+  await expect(page.getByRole("heading", { name: "Preserved administration request", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Retry preserved request", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Preserved administration request", exact: true })).toBeHidden();
+  expect(lost).toBe(true);
+  const aggregate = JSON.parse(execFileSync("psql", [database, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+    "select jsonb_build_object('outcome',e.outcome,'corrections',jsonb_array_length(e.corrections),'voided',e.corrections#>>'{0,voided}','tasks',(select count(*) from public.outreach_tasks t where t.encounter_id=e.id and t.status='scheduled')) from public.outreach_encounters e where e.id='" + fixture.id + "';"], { encoding: "utf8" }).trim());
+  expect(aggregate).toEqual({ outcome: "follow_up", corrections: 1, voided: "true", tasks: 1 });
+  await page.goto(origin + "/app/people/" + fixture.personId);
+  await expect(page.getByText(/^No person-linked contact recorded yet/)).toBeVisible();
+  await expect(page.getByText("Encounter reviewed · entered in error", { exact: true })).toBeVisible();
+  await expect(page.getByText(reason + " Tasks and restrictions unchanged.", { exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: "Note kind", exact: true }).selectOption("prayer");
+  await page.getByRole("textbox", { name: "Care note", exact: true }).fill("Fictional requested prayer note");
+  await page.getByRole("button", { name: "Save note", exact: true }).click();
+  await expect(page.locator(".person-timeline-entry").filter({ hasText: "Fictional requested prayer note" }).getByText("Prayer", { exact: true })).toBeVisible();
+  await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
+});
+
 test("reviewed duplicate people and locations retain history and resolve original links", async ({ context, page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const fixture = randomUUID();

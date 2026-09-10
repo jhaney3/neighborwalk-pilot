@@ -2,6 +2,7 @@
 
 import { groupBy } from "../lib/collections";
 import { personTimeline } from "../lib/person-timeline";
+import { lastRecordedContact } from "../lib/encounter-history";
 import { indexCurrentRecords, recordFamilyIds } from "../lib/record-aliases";
 import { ContactRestrictions } from "./ContactRestrictions";
 import { contactRestricted, type RestrictionActions } from "../lib/contact-restrictions";
@@ -36,6 +37,7 @@ import {
   discipleshipStageValues,
   faithStatusLabels,
   faithStatusValues,
+  personNoteKindLabels,
   formatPhoneNumber,
   type DiscipleshipStage,
   type FollowUp,
@@ -267,12 +269,14 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
   restrictionActions: RestrictionActions;
 }) {
   const [noteBody, setNoteBody] = useState("");
+  const [noteKind, setNoteKind] = useState<PersonNoteKind>("general");
   const action = useAsyncAction();
   const handoffQueued = data.sync.commands?.some((q) => q.command.operations.some((op) => op.entityType === "handoff" && op.entityId === resident.id));
   const noContact = resident.contactPermission === "do_not_contact" || data.restrictions?.some((r) => r.active && r.residentId === resident.id && r.channel === "all");
   const property = indexCurrentRecords(data.properties).get(resident.propertyId ?? "");
   const owner = data.volunteers.find((volunteer) => volunteer.id === resident.assignedVolunteerId);
   const timeline = personTimeline(data, resident.id);
+  const lastContact = lastRecordedContact(data, resident.id);
   const family = recordFamilyIds(data.residents, resident.id);
   const originalProfiles = data.residents.filter((person) => person.id !== resident.id && family.has(person.id));
   const personFollowUps = data.followUps.filter((followUp) => Boolean(followUp.residentId && family.has(followUp.residentId))).sort((left, right) => left.dueAt.localeCompare(right.dueAt));
@@ -301,6 +305,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
       </header>
 
       {noContact && <p role="status" className="inline-notice">Do not contact. No new follow-ups should be scheduled. Only a leader can lift the recorded restriction with a reason.</p>}
+      <p className="inline-notice">{lastContact ? `${lastContact.source === "encounter" ? "Last recorded contact" : "Historical last-contact date"}: ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: data.church.timezone }).format(new Date(lastContact.at))}.` : "No person-linked contact recorded yet."} No-answer visits, entered-in-error encounters, notes and task completion alone do not establish contact.</p>
       {resident.legacyCreatorAccess && <p className="inline-notice">Historical creator access is preserved until an accepted care handoff. Explicit sharing is listed in Edit profile.</p>}
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
       {data.church.pathwayEnabled && <section className="discipleship-path" aria-label="Discipleship relationship stage">
@@ -335,8 +340,9 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
         <div className="person-notes-heading"><div><span className="profile-section-label">Notes</span><h3>One clear history</h3></div><span>{timeline.length} activity entries</span></div>
         <div className="person-note-composer">
           <div><MessageCircle size={17} /><strong>Add a note</strong><small>Every person note goes here.</small></div>
-          <div className="person-note-fields"><textarea aria-label="Care note" rows={3} maxLength={data.church.noteCharacterLimit + 1} value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder="What should you remember for next time?" /></div>
-          <div><span className={noteBody.length > data.church.noteCharacterLimit ? "over" : ""}>{data.church.noteCharacterLimit - noteBody.length} characters remaining</span><button className="button primary small" disabled={!noteValid || action.busy} onClick={() => void action.run(() => onAddNote("general", noteBody), () => setNoteBody(""))}><NotebookPen size={14} /> Save note</button></div>
+          <label>Note kind<select disabled={action.busy} value={noteKind} onChange={(event) => setNoteKind(event.target.value as PersonNoteKind)}>{Object.entries(personNoteKindLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
+          <div className="person-note-fields"><textarea aria-label="Care note" disabled={action.busy} rows={3} maxLength={data.church.noteCharacterLimit + 1} value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder="What should you remember for next time?" /></div>
+          <div><span className={noteBody.length > data.church.noteCharacterLimit ? "over" : ""}>{data.church.noteCharacterLimit - noteBody.length} characters remaining</span><button className="button primary small" disabled={!noteValid || action.busy} onClick={() => void action.run(() => onAddNote(noteKind, noteBody), () => setNoteBody(""))}><NotebookPen size={14} /> Save note</button></div>
         </div>
         <div className="person-timeline">
           {timeline.map((note) => {

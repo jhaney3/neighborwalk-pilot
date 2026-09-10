@@ -5,6 +5,7 @@ import { csvImportOperations, csvTemplate, previewCsv, type CsvPreview, type Imp
 import type { NeighborWalkData } from "../lib/domain";
 import type { AdminInput, DuplicateKind, DuplicatePlan, RetentionPlan } from "../lib/administration";
 import { DuplicateReview } from "./DuplicateReview";
+import { EncounterCorrectionReview } from "./EncounterCorrectionReview";
 import type { PendingAdministration } from "../lib/storage";
 import { downloadBlob } from "../lib/download";
 import { useAsyncAction } from "../lib/use-async-action";
@@ -76,6 +77,7 @@ export function DataHealthView(props: Props) {
       {retention && <><p>{retention.encounterCount} anonymous encounters and {retention.taskCount} resolved tasks are eligible before {new Date(retention.cutoff).toLocaleDateString()}.</p><details><summary>Exact reviewed record identifiers</summary><pre>{JSON.stringify({ encounters: retention.encounters, tasks: retention.tasks }, null, 2)}</pre></details><label className="form-field"><span>Type ARCHIVE REVIEWED after checking the preview</span><input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} /></label><button className="button quiet" disabled={blocked || confirmation !== "ARCHIVE REVIEWED" || !(retention.taskCount + retention.encounterCount)} onClick={() => void run(() => onRun({ action: "retention_archive", expectedRevision: retention.revision, reviewToken: retention.token, confirmation }), () => { setRetention(null); setMessage("Reviewed records archived. Open responsibilities and restrictions were preserved."); })}>Archive exactly the reviewed records</button></>}
     </section>
     <DuplicateReview data={data} blocked={blocked} error={action.error} onPreview={props.onPreviewDuplicates} onRun={onRun} onAction={run} />
+    <EncounterCorrectionReview data={data} blocked={blocked} error={action.error} onRun={onRun} onAction={run} />
     <section className="today-card"><h2>Historical data needing review</h2><p>Original records remain preserved. Resolving a flag records your review; it does not automatically repair links or change responsibility.</p>
       {(data.migrationIssues ?? []).map((issue) => <IssueReview key={issue.entityType + issue.entityId + issue.issue} issue={issue} blocked={blocked} onOpen={() => issue.entityType === "person" ? props.onOpenPerson(issue.entityId) : props.onOpenLocation(issue.entityId)} onSave={(reason) => run(() => onRun({ action: "review_migration_issue", expectedRevision: data.sync.serverRevision ?? 0, ...issue, reason }))} />)}
       {!data.migrationIssues?.length && <p>No unresolved migration flags are visible to this leader.</p>}

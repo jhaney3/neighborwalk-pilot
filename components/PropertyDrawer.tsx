@@ -1,4 +1,5 @@
 "use client";
+import { reviewedEncounter } from "../lib/encounter-history";
 
 import {
   AlertOctagon,
@@ -507,13 +508,15 @@ function ResidentForm({ resident, volunteers, activeVolunteerId, pathwayEnabled,
 }
 
 function VisitHistoryItem({ visit, volunteerName }: { visit: Visit; volunteerName: string }) {
+  const current = reviewedEncounter(visit);
   return (
     <article className="history-item">
-      <i data-outcome={visit.outcome} />
+      <i data-outcome={current.outcome} />
       <div>
-        <div><strong>{outcomeMeta[visit.outcome].label}</strong><span><Clock3 size={12} /> {formatDateTime(visit.recordedAt)}</span></div>
+        <div><strong>{current.voided ? "Entered in error · " : ""}{outcomeMeta[current.outcome].label}</strong><span><Clock3 size={12} /> {formatDateTime(visit.recordedAt)}</span></div>
         {visit.objectiveNote && <p>{visit.objectiveNote}</p>}
         <small>Recorded by {volunteerName}</small>
+        {Boolean(visit.corrections?.length) && <details><summary>Original and reviewed corrections</summary><p>Original: {outcomeMeta[visit.outcome].label} · {(visit.context ?? "door").replaceAll("_", " ")}. Original links, note and date retained.</p>{visit.corrections?.map((correction) => <p key={correction.id}><time>{formatDateTime(correction.createdAt)}</time> · {correction.voided ? "Entered in error" : outcomeMeta[correction.outcome].label} · {correction.context.replaceAll("_", " ")} — {correction.reason}</p>)}<p>Tasks and contact restrictions unchanged.</p></details>}
       </div>
     </article>
   );

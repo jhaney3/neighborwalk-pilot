@@ -4,6 +4,7 @@ import { useState } from "react";
 import { calendarDaysFromNow, churchDateTimeToIso, localDateTimeValue } from "../lib/calendar";
 import type { ConversationGuide, NeighborWalkData, OutreachEvent } from "../lib/domain";
 import { useAsyncAction } from "../lib/use-async-action";
+import { reviewedEncounter } from "../lib/encounter-history";
 import { EmptyState, Modal, ViewHeading } from "./ui";
 
 type Assignment = NonNullable<NeighborWalkData["assignments"]>[number];
@@ -45,7 +46,7 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
   const myTeams = new Set(data.teams.filter((t) => t.memberIds.includes(activeVolunteerId)).map((t) => t.id));
   const myAssignment = assignments.find((a) => (a.assignedVolunteerId === activeVolunteerId || myTeams.has(a.assignedTeamId ?? "")) && !["cancelled", "declined"].includes(a.status));
   const openTasks = data.followUps.filter((t) => t.eventId === outing.id && t.status === "scheduled");
-  const encounters = data.visits.filter((v) => v.eventId === outing.id);
+  const encounters = data.visits.filter((v) => v.eventId === outing.id && !reviewedEncounter(v).voided);
   const guide = props.guides.find((g) => g.id === outing.guideId);
   const closed = ["completed", "archived", "cancelled"].includes(outing.status);
   const transition = (status: OutreachEvent["status"]) => action.run(() => onSave({ ...outing, status }, outing.id));

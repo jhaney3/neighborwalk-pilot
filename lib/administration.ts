@@ -16,7 +16,7 @@ export const duplicatePlanSchema = z.object({
 });
 export type DuplicatePlan = z.infer<typeof duplicatePlanSchema>;
 export type DuplicateKind = DuplicatePlan["kind"];
-export type AdminInput = { action: "record_export" | "import" | "retention_archive" | "review_migration_issue" | "duplicate_merge"; expectedRevision: number } & Record<string, unknown>;
+export type AdminInput = { action: "record_export" | "import" | "retention_archive" | "review_migration_issue" | "duplicate_merge" | "encounter_correct"; expectedRevision: number } & Record<string, unknown>;
 
 export async function submitAdministration(scope: StorageScope, input: AdminInput | null) {
   const client = getSupabaseBrowserClient();

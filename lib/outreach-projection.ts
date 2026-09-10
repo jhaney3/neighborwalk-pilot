@@ -1,12 +1,15 @@
 import type { NeighborWalkData, Visit } from "./domain";
 import { indexCurrentRecords } from "./record-aliases";
+import { reviewedEncounter } from "./encounter-history";
 
 /** Derived displays never become the authority for contact restrictions.
  * Historical do-not-visit encounters remain history after an approved lift. */
 export function projectOutreachWorkspace(data: NeighborWalkData, pendingRestrictedLocations = new Set<string>()): NeighborWalkData {
   const summaries = new Map<string, { count: number; latest: Visit; latestOrdinary?: Visit }>();
   const locations = indexCurrentRecords(data.properties);
-  for (const visit of data.visits) {
+  for (const original of data.visits) {
+    const visit = reviewedEncounter(original);
+    if (visit.voided) continue;
     const propertyId = visit.propertyId ? locations.get(visit.propertyId)?.id : undefined;
     if (!propertyId) continue;
     const summary = summaries.get(propertyId) ?? { count: 0, latest: visit };

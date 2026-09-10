@@ -9,6 +9,9 @@
 .data-health-view fieldset.form-stack legend { padding: 0 6px; }
 .data-health-view fieldset.form-stack label { min-width: 0; }
 .data-health-view fieldset.form-stack select { width: 100%; min-width: 0; }
+.data-health-view dd { margin-inline-start: 0; overflow-wrap: anywhere; }
+.person-note-composer > label { display: grid; gap: 6px; font-size: 14px; }
+.person-note-composer > label select { min-height: 44px; font-size: 16px; }
 .people-profile-empty strong { font-size: 18px; }
 .people-profile-empty span { font-size: 15px; line-height: 1.6; }
 .data-health-view .form-field { display: grid; gap: 8px; margin: 20px 0; }
