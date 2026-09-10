@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { storageKey } from "./environment";
+import { IncompleteCollectionError, readCompletePages } from "./complete-pages";
 import {
   createId,
   type ConversationGuide,
@@ -11,6 +12,13 @@ import {
 import type { Json, NeighborWalkDatabase } from "./supabase";
 
 type GuideRow = NeighborWalkDatabase["public"]["Tables"]["conversation_guides"]["Row"];
+
+export class GuideLibraryReadError extends Error {}
+export function guideLibraryErrorMessage(error: unknown) {
+  // Only our controlled content-free messages may appear in the field UI.
+  return error instanceof GuideLibraryReadError || error instanceof IncompleteCollectionError ? error.message
+    : "Could not refresh guides. Reconnect and try again; saved guides have not been replaced.";
+}
 
 export type GuideLibraryState = {
   guides: ConversationGuide[];
@@ -206,39 +214,41 @@ export async function loadConnectedGuideLibrary(
   userId: string,
 ): Promise<GuideLibraryState> {
   const [guideResult, preferenceResult, teamDefaultsResult] = await Promise.all([
-    client
-      .from("conversation_guides")
-      .select("id, church_id, scope, owner_user_id, title, description, steps, sort_order, created_by, updated_by, created_at, updated_at")
-      .eq("church_id", churchId)
-      .order("sort_order")
-      .order("created_at"),
+    readCompletePages((cursor) => {
+      const query = client.from("conversation_guides")
+        .select("id, church_id, scope, owner_user_id, title, description, steps, sort_order, created_by, updated_by, created_at, updated_at")
+        .eq("church_id", churchId).order("id").limit(100);
+      return cursor ? query.gt("id", cursor) : query;
+    }, (row) => row.id),
     client
       .from("conversation_guide_preferences")
       .select("favorite_guide_id")
       .eq("church_id", churchId)
       .eq("user_id", userId)
       .maybeSingle(),
-    client
-      .from("conversation_guide_team_defaults")
-      .select("team_id, guide_id")
-      .eq("church_id", churchId),
+    readCompletePages((cursor) => {
+      const query = client.from("conversation_guide_team_defaults")
+        .select("team_id, guide_id").eq("church_id", churchId).order("team_id").limit(100);
+      return cursor ? query.gt("team_id", cursor) : query;
+    }, (row) => row.team_id),
   ]);
-  if (guideResult.error) throw guideResult.error;
   if (preferenceResult.error) throw preferenceResult.error;
-  if (teamDefaultsResult.error) throw teamDefaultsResult.error;
-  const guides = (guideResult.data ?? []).flatMap((row) => {
+  const guides = guideResult.map((row) => {
     const guide = conversationGuideFromRow(row);
-    return guide ? [guide] : [];
-  });
+    if (!guide || guide.churchId !== churchId || (guide.scope === "personal" && guide.ownerUserId !== userId)) {
+      throw new GuideLibraryReadError("A guide could not be safely read. The saved library was not replaced; ask your leader to review guide content and access.");
+    }
+    return guide;
+  }).sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const accessible = new Map(guides.map((guide) => [guide.id, guide]));
   const favoriteGuideId = preferenceResult.data?.favorite_guide_id;
+  if ((favoriteGuideId && !accessible.has(favoriteGuideId)) || teamDefaultsResult.some((item) => accessible.get(item.guide_id)?.scope !== "church")) {
+    throw new GuideLibraryReadError("Guide choices changed or contain an unavailable reference. Refresh before continuing; the saved library was not replaced.");
+  }
   return {
     guides,
-    favoriteGuideId: guides.some((guide) => guide.id === favoriteGuideId) ? favoriteGuideId : undefined,
-    teamGuideDefaults: Object.fromEntries(
-      (teamDefaultsResult.data ?? [])
-        .filter((item) => guides.some((guide) => guide.id === item.guide_id && guide.scope === "church"))
-        .map((item) => [item.team_id, item.guide_id]),
-    ),
+    favoriteGuideId,
+    teamGuideDefaults: Object.fromEntries(teamDefaultsResult.map((item) => [item.team_id, item.guide_id])),
   };
 }
 

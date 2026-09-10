@@ -25,6 +25,7 @@ import {
 import {
   deleteConnectedGuide,
   loadConnectedGuideLibrary,
+  guideLibraryErrorMessage,
   normalizeGuideSteps,
   readLocalGuideLibrary,
   saveConnectedFavorite,
@@ -256,9 +257,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           writeLocalGuideLibrary(guides, scope.churchId, scope.userId);
           setGuideLibrary(guides);
           setGuideLibraryError(null);
-        } catch {
+        } catch (error) {
           setGuideLibrary(readLocalGuideLibrary(scope.churchId, [], scope.userId));
-          setGuideLibraryError("The saved guide library is available; refresh online to check for changes.");
+          setGuideLibraryError(guideLibraryErrorMessage(error));
         }
         setWorkspaceStatus("ready");
       } catch (error) {
@@ -1124,7 +1125,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         writeLocalGuideLibrary(guides, workspace.churchId, supabaseUser.id);
         setGuideLibrary(guides);
         setGuideLibraryError(null);
-      } catch { setGuideLibraryError("Guides could not refresh. Your saved library is still available."); }
+      } catch (error) { setGuideLibraryError(guideLibraryErrorMessage(error)); }
       autoRetryAttemptRef.current = 0;
       return !store.snapshot.sync.commands?.some((q) => q.state === "needs_review");
     } catch (error) {
