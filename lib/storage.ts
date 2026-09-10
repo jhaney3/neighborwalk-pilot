@@ -327,6 +327,36 @@ export async function finishAdministration(scope: StorageScope, requestId: strin
   await transaction.done;
 }
 
+/** Available even when membership has been revoked: only the signed-in
+ * account's authored work, never its old read cache or a whole church export. */
+export async function authoredDeviceRecovery(scope: StorageScope) {
+  const database = await getDatabase();
+  const scopeKey = scopedStorageKey(scope);
+  const current = await database.get(STORE, scopeKey);
+  const keys = await database.getAllKeys(STORE);
+  const authored: ReturnType<typeof authoredRecovery>[] = [];
+  let supervisedCopies = 0;
+  const add = (data: unknown) => {
+    if (!data) return;
+    try { authored.push(authoredRecovery(data, scope)); } catch { supervisedCopies++; }
+  };
+  add(current);
+  const ownsLegacy = await database.get(STORE, "legacy_owner") === scopeKey;
+  for (const key of keys) {
+    if (typeof key !== "string" || !archiveKeyAllowed(key, scopeKey, ownsLegacy)) continue;
+    const record = await database.get(STORE, key);
+    add(key.startsWith("recovery:") ? record?.data : record);
+  }
+  const administration = [];
+  for (const key of keys) {
+    if (typeof key !== "string" || !(key === "admin-pending:" + scopeKey || key.startsWith("admin-history:" + scopeKey + ":"))) continue;
+    const record = await database.get(STORE, key);
+    if (record?.scope?.userId === scope.userId && record.scope.churchId === scope.churchId && record.request?.churchId === scope.churchId) administration.push(record);
+  }
+  return { format: "neighborwalk-authored-device-recovery", formatVersion: 1, scope, authored, administration, supervisedCopies,
+    notice: "Only this account’s authored transactions and administration journal. No cached church records. Older copies without reliable authorship remain on the device for supervised recovery." };
+}
+
 export async function replaceNeighborWalkData(candidate: unknown): Promise<NeighborWalkData> {
   const parsed = neighborWalkDataSchema.parse(migrateNeighborWalkData(candidate));
   const retained = enforceRetention(parsed);

@@ -7,11 +7,12 @@ import { useAsyncAction } from "../lib/use-async-action";
 import { ViewHeading } from "./ui";
 
 type Archive = { key: string; reason: string; createdAt: string };
-export function RecoveryView({ data, online, onPreview, onResolve, onExport, onArchives, onDownloadArchive, onSync }: {
+export function RecoveryView({ data, online, onPreview, onResolve, onExport, onAuthoredExport, onArchives, onDownloadArchive, onSync }: {
   data: NeighborWalkData; online: boolean;
   onPreview: () => Promise<NeighborWalkData>;
   onResolve: (reviewed: NeighborWalkData, commandId: string | null, selected: string[], expectedIds: string[]) => Promise<string>;
   onExport: () => Promise<unknown>; onArchives: () => Promise<Archive[]>; onDownloadArchive: (key: string) => Promise<void>; onSync: () => Promise<boolean>;
+  onAuthoredExport: () => Promise<void>;
 }) {
   const action = useAsyncAction();
   const [remote, setRemote] = useState<NeighborWalkData | null>(null);
@@ -35,6 +36,8 @@ export function RecoveryView({ data, online, onPreview, onResolve, onExport, onA
       <p>{data.sync.lastError || (online ? "Connected. Shared records refresh while the app is open." : "Offline. Reconnect to share work or compare a conflict.")}</p>
       <p>Volunteer downloads contain only their own queued transactions; older copies require supervised recovery. Full leader copies require a connected sign-in within 15 minutes and an audit entry. Store downloads securely and never send them through public channels.</p>
       <div className="care-next-actions"><button className="button quiet" disabled={action.busy} onClick={() => void action.run(async () => onExport())}><Download size={16} /> Export this device’s recovery copy</button><button className="button quiet" disabled={action.busy || !online} onClick={() => void action.run(async () => { const ok = await onSync(); setMessage(ok ? "Refresh completed." : "Work remains on this device. Check the message above."); })}><RefreshCcw size={16} /> Refresh &amp; retry</button></div>
+      <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onAuthoredExport)}>Download only my authored work &amp; administration journal</button>
+      <p>The authored-work download includes your own preserved transactions and reviewed administration requests, not the old read cache or another account’s work.</p>
     </div>
     {!!commands.length && <section className="today-card"><h2>Device queue</h2><ol>{commands.map((q, i) => <li key={q.command.id}><strong>{i + 1}. {q.state === "needs_review" ? "Needs review" : first?.state === "needs_review" && i ? "Waiting behind the held change" : "Waiting to share"}</strong><p>{q.command.operations.map((op) => op.entityType.replaceAll("_", " ")).join(", ")} · {new Date(q.command.createdAt).toLocaleString()}</p>{q.error && <p>{q.error}</p>}<details><summary>Original transaction (preserved exactly)</summary><pre>{JSON.stringify(q.command, null, 2)}</pre></details></li>)}</ol></section>}
     {(data.sync.legacyRecoveryRequired || first?.state === "needs_review") && <section className="today-card"><h2>Compare before resolving</h2>

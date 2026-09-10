@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import { createSeedData } from "../lib/seed";
 import { storageKey } from "../lib/environment";
-import { archiveWorkspaceRecovery, exportRecoveryArchive, recoveryArchives, loadScopedNeighborWalkData, saveNeighborWalkData, scopedStorageKey, StorageRecoveryError, preserveAdministration, pendingAdministration, finishAdministration } from "../lib/storage";
+import { archiveWorkspaceRecovery, exportRecoveryArchive, recoveryArchives, loadScopedNeighborWalkData, saveNeighborWalkData, scopedStorageKey, StorageRecoveryError, preserveAdministration, pendingAdministration, finishAdministration, authoredDeviceRecovery } from "../lib/storage";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -38,7 +38,24 @@ describe("account-scoped durable storage", () => {
     const history = await database.get("app_state", "admin-history:" + scopedStorageKey(scope) + ":" + request.id);
     expect(history.request).toEqual(request);
     expect(history.result).toEqual({ imported: 1 });
+    expect((await authoredDeviceRecovery(scope)).administration[0].request).toEqual(request);
+    expect((await authoredDeviceRecovery({ ...scope, userId: "different-admin" })).administration).toEqual([]);
     database.close();
+  });
+
+  it("allows authored recovery while withholding former read caches and legacy ambiguous copies", async () => {
+    browser();
+    const data = createSeedData();
+    data.sync.commands = [];
+    const scope = { userId: "locked-member", churchId: data.church.id };
+    await saveNeighborWalkData(data, scope);
+    await archiveWorkspaceRecovery({ ...data, sync: { ...data.sync, legacyRecoveryRequired: true } }, scope, "Legacy original");
+    const recovery = await authoredDeviceRecovery(scope);
+    expect(recovery.authored).toHaveLength(1);
+    expect(recovery.authored[0].commands).toEqual([]);
+    expect(recovery.supervisedCopies).toBe(1);
+    expect(JSON.stringify(recovery)).not.toContain(data.residents[0].name);
+    expect((await authoredDeviceRecovery({ ...scope, userId: "other-account" })).authored).toEqual([]);
   });
 
   it("does not allow a scope to save another church's records", async () => {

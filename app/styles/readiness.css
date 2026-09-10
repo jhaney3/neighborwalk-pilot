@@ -126,3 +126,6 @@ dialog.property-drawer .drawer-followup-banner span, dialog.property-drawer .dra
 .leader-view .activity-list span { font-size: 14px; line-height: 1.6; }
 .member-management input, .member-management select, .member-management textarea { font-size: 16px; min-height: 44px; }
 .member-management .member-controls { flex-wrap: wrap; }
+.offline-preparation { padding: 9px 20px; background: #edf4ef; color: #284a3c; font-size: 13px; line-height: 1.5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.offline-preparation.unavailable, .offline-preparation.update_waiting { background: #fff3db; color: #694a0c; }
+.offline-preparation .text-button { text-decoration: underline; min-height: 44px; }

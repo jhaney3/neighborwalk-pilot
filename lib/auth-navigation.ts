@@ -1,12 +1,22 @@
 import { appHref, validAppSegments, type AppView } from "./app-routes";
 
+export function safeAppPath(value: string | null | undefined): string {
+  if (!value?.startsWith("/app/")) return appHref("today");
+  try {
+    const url = new URL(value, "https://neighborwalk.invalid");
+    if (url.origin !== "https://neighborwalk.invalid" || !validAppSegments(url.pathname.split("/").filter(Boolean).slice(1))) return appHref("today");
+    const query = new URLSearchParams();
+    if (url.pathname === "/app/followups") {
+      const person = url.searchParams.get("person"); const scope = url.searchParams.get("scope");
+      if (person && /^[A-Za-z0-9_-]{1,240}$/.test(person)) query.set("person", person);
+      if (scope && ["mine", "all", "team", "unowned", "declined"].includes(scope)) query.set("scope", scope);
+    }
+    return url.pathname + (query.size ? "?" + query.toString() : "");
+  } catch { return appHref("today"); }
+}
+
 export function authenticatedAppPath(search: string): string {
-  const params = new URLSearchParams(search);
-  const next = params.get("next");
-  const parts = next?.split("/").filter(Boolean);
-  const safe = next?.startsWith("/app/") && parts && validAppSegments(parts.slice(1)) ? next : appHref("today");
-  const invite = params.get("invite");
-  return safe + (invite && /^[a-f0-9-]{16,200}$/i.test(invite) ? "?invite=" + encodeURIComponent(invite) : "");
+  return safeAppPath(new URLSearchParams(search).get("next"));
 }
 
 export function legacyAppPath(search: string, hash: string, standalone = false): string | null {

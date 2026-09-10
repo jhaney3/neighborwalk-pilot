@@ -26,7 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { followUpScope, followUpsHref, type FollowUpScope } from "../lib/follow-up-filters";
 import Link from "next/link";
 import { appHref, appRoute, type AppView } from "../lib/app-routes";
@@ -56,6 +56,8 @@ import {
   type Territory,
 } from "../lib/domain";
 import { useAsyncAction } from "../lib/use-async-action";
+import { clearPendingInvitation, pendingInvitation } from "../lib/invitations";
+import { offlineShellCopy } from "../lib/offline-shell";
 import { useNeighborWalk, type SupabaseUser } from "../lib/use-neighborwalk";
 import { preferredConversationGuide } from "../lib/conversation-guides";
 import { forwardGeocode, reverseGeocode, type AddressSearchResult } from "../lib/geocoding";
@@ -93,8 +95,7 @@ const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
 ];
 
 export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: { supabaseUser?: SupabaseUser | null; onSignOut?: () => Promise<void>; onUpdatePassword?: (password: string) => Promise<void> } = {}) {
-  const { data, loading, storageError, online, saving, syncing, workspaceStatus, workspaceMembership, guideLibrary, guideLibraryError, activeTerritory: currentTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
-  const router = useRouter();
+  const { data, loading, storageError, online, saving, syncing, offlineShell, workspaceStatus, workspaceMembership, guideLibrary, guideLibraryError, activeTerritory: currentTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [demoTaskScope, setDemoTaskScope] = useState<FollowUpScope>("mine");
@@ -207,7 +208,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   if (data && supabaseUser && workspaceStatus === "invitation_required") {
     return <InvitationRequired user={supabaseUser} error={data.sync.lastError} onSignOut={onSignOut} />;
   }
-  if (!data || !activeVolunteer) return <AppFailure error={storageError || "The app could not load its field data."} />;
+  if (workspaceStatus === "locked" || !data || !activeVolunteer) return <AppFailure error={storageError || "The app could not load its field data."} onSignOut={onSignOut} onRecovery={supabaseUser ? actions.downloadAuthoredDeviceRecovery : undefined} />;
 
   const pendingChanges = data.sync.commands?.length ?? data.sync.pending.length;
   const needsReview = data.sync.legacyRecoveryRequired || data.sync.commands?.some((q) => q.state === "needs_review");
@@ -290,7 +291,9 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   };
 
   const navigate = (next: View, id?: string) => {
-    if (pathname.startsWith("/app")) router.push(appHref(next, id));
+    // All protected views use the same client workspace. Next's native History
+    // integration updates routes without a network-only RSC navigation.
+    if (pathname.startsWith("/app")) window.history.pushState(null, "", appHref(next, id));
     else setDemoRoute({ view: next, id });
     setSelectedPropertyId(null);
     setGuidedPropertyId(null);
@@ -372,6 +375,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
           <button className="profile-button" onClick={() => navigate("settings")} aria-label="Open profile and settings"><CircleUserRound size={21} /><span>{activeVolunteer.name}</span></button>
         </div>
       </header>
+      {data.sync.mode === "connected" && <div className={`offline-preparation ${offlineShell}`}><span role="status">{offlineShellCopy[offlineShell]}</span>{["preparing", "unavailable"].includes(offlineShell) && <button className="text-button" onClick={actions.checkOfflinePreparation}>Check preparation</button>}</div>}
 
       <div className="app-body">
         <aside className="desktop-sidebar">
@@ -405,9 +409,9 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
         <section className="workspace">
           {view === "data" && (canManage && data.sync.mode === "connected" ? <DataHealthView data={data} online={online} onRun={actions.runAdministration} onExport={actions.exportChurchRecords} onAuthenticate={actions.reauthenticateAdmin} onPending={actions.getAdministrationPending} onReviewPending={actions.reviewAdministrationPending} onPreviewRetention={actions.getRetentionPreview} onRefresh={actions.syncNow} onOpenPerson={(id) => navigate("people", id)} onOpenLocation={(id) => navigate("map", id)} /> : <section className="content-view"><h1>Leader administration</h1><p>A connected church leader account is required. The sample does not import or archive real church records.</p></section>)}
           {["today", "outreach"].includes(view) && <EncounterComposer data={data} outingId={view === "outreach" ? route.id : undefined} onSave={async (input) => { await actions.recordVisit(input); setToast("Encounter saved on this device"); }} />}
-          {view === "recovery" && <RecoveryView data={data} online={online} onPreview={actions.previewRecovery} onResolve={actions.resolveRecovery} onExport={actions.downloadDeviceRecovery} onArchives={actions.listDeviceArchives} onDownloadArchive={actions.downloadDeviceArchive} onSync={actions.syncNow} />}
-          {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) router.push(followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={() => navigate("people")} />}
-          {view === "outreach" && <OutreachView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onSelect={(id) => navigate("outreach", id)} onStart={async (id, territoryId) => { await actions.setPreference("activeEventId", id); if (territoryId) await actions.selectTerritory(territoryId); if (pathname.startsWith("/app")) router.push(appHref("outreach", id) + "/field"); else setDemoRoute({ view: "map", fieldOutingId: id }); }} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onAddList={(name) => actions.addTerritory({ name, kind: "list", boundary: [], color: "#286c59" })} onOpenGuide={(id) => navigate("guide", id)} />}
+          {view === "recovery" && <RecoveryView data={data} online={online} onPreview={actions.previewRecovery} onResolve={actions.resolveRecovery} onExport={actions.downloadDeviceRecovery} onAuthoredExport={actions.downloadAuthoredDeviceRecovery} onArchives={actions.listDeviceArchives} onDownloadArchive={actions.downloadDeviceArchive} onSync={actions.syncNow} />}
+          {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={() => navigate("people")} />}
+          {view === "outreach" && <OutreachView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onSelect={(id) => navigate("outreach", id)} onStart={async (id, territoryId) => { await actions.setPreference("activeEventId", id); if (territoryId) await actions.selectTerritory(territoryId); if (pathname.startsWith("/app")) window.history.pushState(null, "", appHref("outreach", id) + "/field"); else setDemoRoute({ view: "map", fieldOutingId: id }); }} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onAddList={(name) => actions.addTerritory({ name, kind: "list", boundary: [], color: "#286c59" })} onOpenGuide={(id) => navigate("guide", id)} />}
           {view === "more" && <section className="content-view"><h1>More</h1><p>Resources and tools for your church team.</p><div className="more-grid"><button onClick={() => { setFollowUpPersonId(null); navigate("followups"); }}><CalendarClock /> Follow-ups <strong>{openFollowUps} open</strong></button><button onClick={() => navigate("guide")}><BookOpenText /> Conversation guides</button><button onClick={() => navigate("map")}><MapIcon /> Locations &amp; address lists</button>{canManage && <button onClick={() => navigate("leader")}><Users /> Groups &amp; members</button>}{canManage && data.sync.mode === "connected" && <button onClick={() => navigate("data")}><ShieldCheck /> Data &amp; health</button>}<button onClick={() => navigate("settings")}><Settings2 /> Settings, data &amp; recovery</button><button onClick={() => navigate("recovery")}><CloudOff /> Sync &amp; recovery</button><Link href="/help">Help &amp; field guide</Link><Link href="/trust">Privacy &amp; trust</Link></div></section>}
           {view === "map" && (
             <section className="map-view">
@@ -524,7 +528,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
             </section>
           )}
           {view === "followups" && <FollowUpsView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} key={pathname + searchParams.toString() + (followUpPersonId ?? "") + demoTaskScope} focusedTaskId={route.id} initialPersonId={pathname.startsWith("/app") ? searchParams.get("person") : followUpPersonId} initialScope={pathname.startsWith("/app") ? followUpScope(searchParams.get("scope")) : demoTaskScope} onOpenTask={(id) => navigate("followups", id)} onClearPersonFocus={() => { setFollowUpPersonId(null); navigate("followups"); }} onOpenProperty={(propertyId) => { navigate("map", propertyId); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); }} onOpenPerson={(residentId) => navigate("people", residentId)} onAddPersonNote={actions.addPersonNote} onComplete={async (id, input) => { await actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next task scheduled" : "Follow-up completed"); }} onReschedule={async (id, date, note) => { await actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={async (id, note) => { await actions.cancelFollowUp(id, note); setToast("Follow-up cancelled on this device"); }} onAssign={actions.assignFollowUp} onAccept={actions.acceptFollowUp} />}
-          {view === "people" && <PeopleView restrictionActions={{ add: actions.addRestriction, lift: actions.liftRestriction }} data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialSelectedResidentId={personSelection} onSelectResident={(id) => navigate("people", id)} onOpenProperty={(propertyId) => { navigate("map", propertyId); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); }} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} onAddPersonNote={actions.addPersonNote} onDeletePersonNote={actions.deletePersonNote} onAddPersonFollowUp={actions.addPersonFollowUp} onHandoff={actions.handoffPerson} onOpenFollowUps={(residentId) => { setFollowUpPersonId(residentId); if (pathname.startsWith("/app")) router.push(followUpsHref(undefined, residentId)); else setDemoRoute({ view: "followups" }); }} />}
+          {view === "people" && <PeopleView restrictionActions={{ add: actions.addRestriction, lift: actions.liftRestriction }} data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialSelectedResidentId={personSelection} onSelectResident={(id) => navigate("people", id)} onOpenProperty={(propertyId) => { navigate("map", propertyId); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); }} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} onAddPersonNote={actions.addPersonNote} onDeletePersonNote={actions.deletePersonNote} onAddPersonFollowUp={actions.addPersonFollowUp} onHandoff={actions.handoffPerson} onOpenFollowUps={(residentId) => { setFollowUpPersonId(residentId); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(undefined, residentId)); else setDemoRoute({ view: "followups" }); }} />}
           {view === "guide" && <GuideView key={route.id ?? "guides"} routeGuideId={route.id} onSelectGuide={(id) => navigate("guide", id)} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} effectiveGuideId={favoriteConversationGuide?.id} activeTeamId={activeGuideTeam?.id} activeTeamName={activeGuideTeam?.name} teams={data.teams} teamGuideDefaults={guideLibrary.teamGuideDefaults} canManage={canManage} allowBuiltInManagement={data.sync.mode === "device_only"} libraryError={guideLibraryError} onSave={actions.saveConversationGuide} onDelete={actions.deleteConversationGuide} onSetFavorite={actions.setFavoriteConversationGuide} onSetTeamDefault={actions.setTeamConversationGuide} />}
           {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} onSelectTerritory={(id) => { void actions.selectTerritory(id).then(() => navigate("map")).catch((error) => setToast(error.message)); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} onOpenOutreach={() => navigate("outreach")} onOpenToday={() => navigate("today")} onOpenSettings={() => navigate("settings")} onOpenData={() => navigate("data")} onAuthenticate={actions.reauthenticateAdmin} onAccessChanged={actions.syncNow} />}
           {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} accountEmail={supabaseUser?.email} onSignOut={onSignOut ? async () => {
@@ -572,6 +576,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
 }
 
 function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; error?: string; onSignOut?: () => Promise<void> }) {
+  const action = useAsyncAction();
   return (
     <main className="workspace-setup-shell">
       <section className="workspace-setup-card" aria-labelledby="workspace-title">
@@ -582,7 +587,8 @@ function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; er
         <div className="workspace-account"><CircleUserRound size={17} /><span><strong>Signed in</strong>{user.email}</span></div>
         <div className="data-note"><ShieldCheck size={16} /><span>Invitation links expire after 7 days, work once, and cannot be used by a different email.</span></div>
         {error && <p className="auth-error" role="alert">{error}</p>}
-        {onSignOut && <button className="button quiet" onClick={() => void onSignOut()}>Use a different account</button>}
+        {onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onSignOut)}>Use a different account</button>}
+        {action.error && <p role="alert">{action.error}</p>}
       </section>
     </main>
   );
@@ -606,7 +612,7 @@ function AddPropertyModal({ intent, existingDwellingCount, guideName, guideAvail
     <Modal
       title={needsLabel ? "Add another dwelling" : "Add this location"}
       description={intent.parcel ? "Each dwelling keeps its own visits, outcome, and follow-ups." : "Confirm the address, then start the visit your way."}
-      onClose={onClose}
+      onClose={action.busy ? () => undefined : onClose}
     >
       <div className="location-preview"><MapPinned size={20} /><span><strong>{intent.parcel ? `Official ${countyName} parcel` : "Map location selected"}</strong>{intent.coordinates[1].toFixed(6)}, {intent.coordinates[0].toFixed(6)}{intent.buildingGeometry ? " · Building found" : ""}</span></div>
       {intent.parcel && <div className="parcel-preview"><span><strong>{intent.parcel.propertyClass ?? "Unclassified parcel"}</strong><small>{intent.parcel.landUse ?? "No land-use description in the county file"}</small></span><ShieldCheck size={15} /><small>Owner names and property values are not stored.</small></div>}
@@ -618,7 +624,7 @@ function AddPropertyModal({ intent, existingDwellingCount, guideName, guideAvail
       {guideAvailable && <div className="guided-start-note"><BookOpenText size={17} /><span><strong>Want a little help at the door?</strong>The guided path opens with {guideName || "your favorite guide"}. You can leave it at any time.</span></div>}
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
       <div className="modal-actions split add-location-actions">
-        <button className="button quiet" onClick={onClose}>Cancel</button>
+        <button className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button>
         <div>
           <button className="button quiet" disabled={!canSave || action.busy} onClick={() => void action.run(() => onSave(address, unit, false))}><Plus size={15} /> {guideAvailable ? "Add without guide" : "Add dwelling"}</button>
           {guideAvailable && <button className="button primary" disabled={!canSave || action.busy} onClick={() => void action.run(() => onSave(address, unit, true))}><BookOpenText size={15} /> Add &amp; use guide</button>}
@@ -721,6 +727,9 @@ function AppLoading() {
   return <main className="app-loading" role="status"><div className="loading-mark"><Navigation size={23} /></div><strong>Preparing your workspace</strong><span>Loading your church workspace and saved records…</span></main>;
 }
 
-function AppFailure({ error }: { error: string }) {
-  return <main className="app-loading error"><div className="loading-mark"><X size={23} /></div><strong>NeighborWalk could not start</strong><span>{error}</span><button className="button primary" onClick={() => location.reload()}>Try again</button></main>;
+function AppFailure({ error, onSignOut, onRecovery }: { error: string; onSignOut?: () => Promise<void>; onRecovery?: () => Promise<void> }) {
+  const action = useAsyncAction();
+  let hasInvitation = false;
+  try { hasInvitation = typeof window !== "undefined" && Boolean(pendingInvitation(window.sessionStorage)); } catch { /* Leave a blocked browser's state intact. */ }
+  return <main className="app-loading error"><div className="loading-mark"><X size={23} /></div><h1>Workspace access needs attention</h1><p>{error}</p><p>Your original device records have not been cleared. Reconnect or ask your church leader to review access. Do not clear browser storage to resolve this.</p><button className="button primary" onClick={() => location.reload()}>Try again</button>{hasInvitation && <button className="button quiet" disabled={action.busy} onClick={() => { if (window.confirm("Dismiss only this invitation and try your existing account membership? The invitation is not revoked and church records are not changed.")) void action.run(async () => { clearPendingInvitation(); window.location.reload(); }); }}>Dismiss this invitation; use my existing workspace</button>}{onRecovery && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onRecovery)}>Download only my authored work</button>}{onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => { if (window.confirm("Unconfirmed work stays on this device for this same account. Another account cannot recover it. Sign out without clearing it?")) void action.run(onSignOut); }}>Sign out or use a different account</button>}<Link href="/help">Recovery & sign-in help</Link>{action.error && <p role="alert">{action.error}</p>}</main>;
 }

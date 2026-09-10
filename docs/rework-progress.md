@@ -7,6 +7,8 @@ Approved by the product owner on September 9, 2026. The original audit and plan 
 - Existing improvements committed and pushed to `main`: `d94d17c6a24075e6cc657759b676dba988789a97`.
 - Vercel production deployment `dpl_C4sMrQ52ewYiZdrAyMF3YCc9qjho`: READY; public URL returned HTTP 200.
 - Rework branch: `rework/church-ready-neighborwalk`, created after production verification.
+- Rework checkpoints `00ee6bf`, `178aabf` and `1c337c0` are now pushed to the same verified private repository. A safety review initially paused the push; read-only verification confirmed the existing private destination, administrator access and excluded private backup/environment files before the retry succeeded. `main` remains the original production checkpoint.
+- GitHub Actions run `34446494932` passed both quality and database jobs for `1c337c0`, including clean `npm ci`, full verification, dependency audit, clean Supabase startup, database regressions and normalized sandbox verification. Browser regressions are added in the subsequent checkpoint.
 - Baseline checks: lint, TypeScript, 68 tests / 14 files, optimized production build all passed.
 - No production database mutations performed yet.
 
@@ -70,6 +72,15 @@ Restore rehearsal completed in `neighborwalk_rehearsal_20260909`, a separate loc
 - Local sandbox seeding/verifying now uses the normalized command API. A separate namespaced seed check rolls back fictional fixtures without changing existing test accounts or records. CI has a local Supabase/database regression job; a hosted CI run is still pending.
 - Location-dialog browser verification passed after rendering settled: focus begins inside the native dialog, reverse tab remains contained, Escape closes it, and focus returns to the exact location launcher. Other dialogs, 200% enlargement and actual phones still require the broader review.
 - Checkpoint verification: lint, TypeScript, all 123 unit tests / 29 files and the optimized build passed; all three local database regression scripts passed individually. Local Supabase security advisors found no warning/error issues after migration 11. The revised leader screen renders correctly with the fictional roster; actual browser access mutation/recovery and the remaining release matrix are not yet complete.
+
+### September 10 — invitation privacy and reproducible offline verification
+
+- `/invite#invite=…` now carries new invitation secrets in a fragment rather than a request query. Session-scoped preservation happens before URL scrubbing; legacy query links remain usable. Safe post-sign-in task/person destinations preserve approved filters without carrying tokens or arbitrary redirect URLs. Invalid-link browser testing confirmed explicit dismissal restores an existing workspace without altering church records.
+- Locked/revoked workspaces explicitly hide the old read cache and offer safe sign-out plus recovery of only the same signed-in account's authored transactions and administration journal. Legacy copies without reliable authorship stay preserved for supervised recovery. Ordinary recovery now exposes the same authored journal download.
+- Added fixed-localhost browser regressions with no remote-target override, no outbound third-party requests and no traces containing account tokens. Two-device concurrency, dropped success response and quota failure passed. The first cache-cleared cold-offline test found a real missing-app-assets failure.
+- Fixed that failure with build-specific static-asset precaching, anonymous app-shell requests, normal non-forced worker activation and explicit preparation/update status. Protected view navigation now uses native History integration with the persistent workspace and does not require network-only RSC navigation.
+- Cold guide reopen plus 100 offline encounters, close/reopen and reconnect passed: 100 durable local entries, zero server entries while disconnected, exactly 100 after sharing. All three browser scenarios passed together again after the preparation indicator/navigation changes and anonymous-precache hardening. The new browser CI job still needs its first hosted run.
+- Latest full verification passed 131 unit tests / 30 files, lint, types and optimized build. The generated app-asset manifest is about 2.9 MiB uncompressed and has a reviewed-growth limit. Actual phones, authentication expiry, update transitions and other remaining gates are listed in [browser readiness](browser-readiness.md); this is not a complete production-readiness claim.
 
 ## External launch gates — do not claim these are implemented or verified
 

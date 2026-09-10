@@ -9,7 +9,8 @@ import { NeighborWalkApp } from "../app/NeighborWalkApp";
 import { authErrorMessage, validAuthEmail } from "../lib/auth";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
 import { isProductionApp } from "../lib/environment";
-import { authenticatedAppPath } from "../lib/auth-navigation";
+import { authenticatedAppPath, safeAppPath } from "../lib/auth-navigation";
+import { rememberBrowserInvitation } from "../lib/invitations";
 
 export function NeighborWalkRoot() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export function NeighborWalkRoot() {
   const configured = isSupabaseConfigured();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(configured);
+  const [connectionError, setConnectionError] = useState("");
   const [passwordRecovery, setPasswordRecovery] = useState(() => {
     if (typeof window === "undefined") return false;
     return new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
@@ -29,20 +31,28 @@ export function NeighborWalkRoot() {
   const workspaceUser = useMemo(() => userId ? { id: userId, email, name } : null, [userId, email, name]);
 
   useEffect(() => {
-    if (!loading && session && !passwordRecovery && pathname === "/login") router.replace(authenticatedAppPath(window.location.search));
-  }, [loading, session, passwordRecovery, pathname, router]);
+    if (!loading && !connectionError && session && !passwordRecovery && ["/login", "/invite"].includes(pathname)) router.replace(authenticatedAppPath(window.location.search));
+  }, [loading, connectionError, session, passwordRecovery, pathname, router]);
 
   useEffect(() => {
     if (!configured) return;
-    const client = getSupabaseBrowserClient();
+    try { rememberBrowserInvitation(); }
+    catch (error) {
+      queueMicrotask(() => { setConnectionError(error instanceof Error ? error.message : "This browser could not preserve the invitation. Keep the original link and try again after signing in."); setLoading(false); });
+      return;
+    }
+    let client;
+    try { client = getSupabaseBrowserClient(); }
+    catch (error) { queueMicrotask(() => { setConnectionError(error instanceof Error ? error.message : "The workspace connection is unavailable."); setLoading(false); }); return; }
     if (!client) return;
     let active = true;
-    void client.auth.getSession().then(({ data }) => {
+    void client.auth.getSession().then(({ data, error }) => {
       if (active) {
+        if (error) setConnectionError(authErrorMessage(error));
         setSession(data.session);
         setLoading(false);
       }
-    });
+    }).catch(() => { if (active) { setConnectionError("Sign-in could not be checked. Reconnect and try again. Your device records have not been cleared."); setLoading(false); } });
     const { data: listener } = client.auth.onAuthStateChange((event, nextSession) => {
       if (active) {
         setSession(nextSession);
@@ -65,10 +75,11 @@ export function NeighborWalkRoot() {
   };
 
   if (!configured) return <main className="app-loading"><h1>Workspace connection unavailable</h1><p>Ask the operator to finish connecting this deployment. Real church records will not be replaced with sample data.</p><Link className="button quiet" href="/demo">Explore the separate sample workspace</Link></main>;
+  if (connectionError) return <main className="auth-shell"><section className="auth-card"><h1>Check your connection or invitation</h1><p role="alert">{connectionError}</p><p>Nothing was cleared. If an email link opened in another tab, sign in there, then reopen your original church invitation.</p><button className="button quiet" onClick={() => window.location.reload()}>Try again</button><Link className="button quiet" href="/login">Open sign-in</Link><Link href="/help">Sign-in help</Link></section></main>;
   if (loading) return <ConnectionLoading />;
   if (!session) return <SignInScreen />;
   if (passwordRecovery) return <PasswordRecovery email={session.user.email ?? "your account"} onSave={async (password) => { await updatePassword(password); setPasswordRecovery(false); }} />;
-  if (pathname === "/login") return <ConnectionLoading />;
+  if (["/login", "/invite"].includes(pathname)) return <ConnectionLoading />;
 
   return (
     <NeighborWalkApp
@@ -85,8 +96,8 @@ export function NeighborWalkRoot() {
 
 function authRedirectUrl() {
   const url = new URL("/login", window.location.origin);
-  const invitation = new URL(window.location.href).searchParams.get("invite");
-  if (invitation) url.searchParams.set("invite", invitation);
+  const next = window.location.pathname.startsWith("/app/") ? safeAppPath(window.location.pathname + window.location.search) : authenticatedAppPath(window.location.search);
+  if (next !== "/app/today") url.searchParams.set("next", next);
   return url.toString();
 }
 

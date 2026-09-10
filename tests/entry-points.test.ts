@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authenticatedAppPath, legacyAppPath } from "../lib/auth-navigation";
+import { authenticatedAppPath, legacyAppPath, safeAppPath } from "../lib/auth-navigation";
 import { publicSiteConfig } from "../lib/site-config";
 import { offlineMembershipValid } from "../lib/offline-access";
 describe("safe app entry points", () => {
@@ -12,7 +12,10 @@ describe("safe app entry points", () => {
     expect(authenticatedAppPath("?next=//evil.test")).toBe("/app/today");
     expect(authenticatedAppPath("?next=/app/people/person_1")).toBe("/app/people/person_1");
     const invite = "a".repeat(64);
-    expect(authenticatedAppPath("?invite=" + invite)).toBe("/app/today?invite=" + invite);
+    expect(authenticatedAppPath("?invite=" + invite)).toBe("/app/today");
+    expect(safeAppPath("/app/followups?person=person_1&scope=unowned&invite=" + invite)).toBe("/app/followups?person=person_1&scope=unowned");
+    expect(safeAppPath("/app/people/person_1#access_token=secret")).toBe("/app/people/person_1");
+    expect(safeAppPath("/app/../../evil.test")).toBe("/app/today");
   });
   it("keeps pilot enrollment closed until required decisions are explicitly configured", () => {
     expect(publicSiteConfig({}).pilotOpen).toBe(false);

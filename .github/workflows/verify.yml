@@ -42,5 +42,8 @@ jobs:
       - run: npm run sandbox:start
       - run: npm run test:database
       - run: npm run sandbox:verify
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
       - if: always()
         run: npm run sandbox:stop

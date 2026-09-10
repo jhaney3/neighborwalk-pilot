@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
     return [{
       source: "/:path*",
       headers: securityHeaders(production),
+    }, {
+      source: "/:file(sw.js|sw-build.js)",
+      headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
     }];
   },
 };

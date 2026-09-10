@@ -9,6 +9,7 @@
     "prepare:map-worker": "node scripts/copy-maplibre-worker.mjs",
     "postinstall": "npm run prepare:map-worker",
     "prebuild": "npm run prepare:map-worker",
+    "postbuild": "node scripts/prepare-offline.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -19,6 +20,7 @@
     "sandbox:status": "tsx scripts/sandbox.ts status",
     "test": "vitest run --config vitest.config.ts",
     "test:database": "node scripts/test-database.mjs",
+    "test:browser": "playwright test",
     "typecheck": "tsc --noEmit",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "lint": "eslint ."
@@ -36,6 +38,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.4",
     "@next/eslint-plugin-next": "16.3.4",
+    "@playwright/test": "1.63.0",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

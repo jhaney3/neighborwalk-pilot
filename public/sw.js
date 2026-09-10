@@ -1,12 +1,16 @@
+importScripts("/sw-build.js");
 const CACHE_SCOPE = new URL(self.location.href).searchParams.has("sandbox") ? "-sandbox" : "";
-const APP_CACHE = `neighborwalk-app-v18${CACHE_SCOPE}`;
-const CORE = ["/", "/app/today", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
+const APP_CACHE = `neighborwalk-app-${self.NEIGHBORWALK_BUILD.version}${CACHE_SCOPE}`;
+const CORE = ["/", "/app/today", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", ...self.NEIGHBORWALK_BUILD.assets];
 const STATIC_DESTINATIONS = new Set(["style", "script", "worker", "image", "font", "manifest"]);
 
 self.addEventListener("install", (event) => {
   // Do not replace the running app while a volunteer has unsent work.
   // The browser activates this worker after existing clients have closed.
-  event.waitUntil(caches.open(APP_CACHE).then((cache) => cache.addAll(CORE)));
+  event.waitUntil(caches.open(APP_CACHE).then((cache) => cache.addAll(CORE.map((path) => new Request(new URL(path, self.location.origin), { credentials: "omit", cache: "reload" })))).catch(async (error) => {
+    await caches.delete(APP_CACHE);
+    throw error;
+  }));
 });
 
 self.addEventListener("activate", (event) => {
@@ -14,11 +18,26 @@ self.addEventListener("activate", (event) => {
     (key.startsWith("neighborwalk-app-") || key.startsWith("neighborwalk-map-"))
     && (CACHE_SCOPE ? key.endsWith("-sandbox") : !key.endsWith("-sandbox"))
     && key !== APP_CACHE
-  ).map((key) => caches.delete(key)))));
+  ).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "OFFLINE_STATUS" || !event.ports?.[0]) return;
+  event.waitUntil((async () => {
+    const cache = await caches.open(APP_CACHE);
+    const entries = await Promise.all(CORE.map((path) => cache.match(path)));
+    event.ports[0].postMessage({ ready: entries.every(Boolean), build: self.NEIGHBORWALK_BUILD.version, bytes: self.NEIGHBORWALK_BUILD.bytes });
+  })());
 });
 
 async function navigation(request) {
   const cache = await caches.open(APP_CACHE);
+  if (new URL(request.url).pathname.startsWith("/app/")) {
+    // Pin the authenticated app shell to this worker's fully prepared build.
+    // A new worker takes over only after old tabs close, not mid-fieldwork.
+    const shell = await cache.match("/app/today");
+    if (shell) return shell;
+  }
   try {
     const response = await fetch(request);
     if (response.ok) await cache.put(request, response.clone());
@@ -32,11 +51,12 @@ async function navigation(request) {
 
 async function staticAsset(request) {
   const cache = await caches.open(APP_CACHE);
-  const cached = await cache.match(request);
+  const pathname = new URL(request.url).pathname;
+  const cached = await cache.match(pathname);
   if (cached) return cached;
   try {
     const response = await fetch(request);
-    if (response.ok) await cache.put(request, response.clone());
+    if (response.ok) await cache.put(pathname, response.clone());
     return response;
   } catch {
     return new Response("This resource is not prepared offline.", { status: 503 });
@@ -50,10 +70,13 @@ self.addEventListener("fetch", (event) => {
   // Authentication, API data, external maps, and token-bearing URLs are never
   // stored here. Offline church records live in account-scoped IndexedDB.
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")
-    || url.pathname.startsWith("/auth/") || url.pathname.startsWith("/invite/")) return;
+    || url.pathname === "/login" || url.pathname.startsWith("/auth/") || url.pathname === "/invite" || url.pathname.startsWith("/invite/")) return;
   if (request.mode === "navigate") {
-    if (!url.search) event.respondWith(navigation(request));
+    const safeAppQuery = url.pathname.startsWith("/app/") && [...url.searchParams].every(([key, value]) =>
+      key === "person" ? /^[A-Za-z0-9_-]{1,240}$/.test(value) : key === "scope" && ["mine", "all", "team", "unowned", "declined"].includes(value));
+    if (!url.search || safeAppQuery) event.respondWith(navigation(request));
     return;
   }
-  if (STATIC_DESTINATIONS.has(request.destination)) event.respondWith(staticAsset(request));
+  const safeAssetQuery = [...url.searchParams].every(([key, value]) => key === "dpl" && /^[A-Za-z0-9_-]{1,200}$/.test(value));
+  if (STATIC_DESTINATIONS.has(request.destination) && CORE.includes(url.pathname) && safeAssetQuery) event.respondWith(staticAsset(request));
 });

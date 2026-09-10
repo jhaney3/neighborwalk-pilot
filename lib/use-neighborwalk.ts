@@ -41,6 +41,7 @@ import {
   exportRecoveryArchive,
   pendingAdministration,
   finishAdministration,
+  authoredDeviceRecovery,
   importNeighborWalkFile,
   loadNeighborWalkData,
   loadScopedNeighborWalkData,
@@ -55,6 +56,8 @@ import { versionKey, type CommandOperation } from "./command-schema";
 import { prepareReviewedCommand } from "./outreach-recovery";
 import { downloadBlob } from "./download";
 import { offlineMembershipValid } from "./offline-access";
+import { observeOfflineShell, type OfflineShellState } from "./offline-shell";
+import { pendingInvitation, clearPendingInvitation } from "./invitations";
 import { authoredRecovery } from "./device-recovery";
 import { recordEncounter, type EncounterInput } from "./encounters";
 import { requireCalendarDate } from "./calendar";
@@ -103,14 +106,11 @@ function writeWorkspaceConnection(connection: WorkspaceConnection) {
 
 function invitationToken() {
   if (typeof window === "undefined") return null;
-  const token = new URL(window.location.href).searchParams.get("invite")?.trim() ?? "";
-  return /^[0-9a-f]{64}$/i.test(token) ? token : null;
+  return pendingInvitation(window.sessionStorage);
 }
 
 function clearInvitationToken() {
-  const url = new URL(window.location.href);
-  url.searchParams.delete("invite");
-  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  clearPendingInvitation();
 }
 
 type NewPropertyInput = {
@@ -168,6 +168,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   const onlineRef = useRef(true);
   const syncInFlightRef = useRef<Promise<boolean> | null>(null);
   const recoveryInFlightRef = useRef(false);
+  const [offlineShell, setOfflineShell] = useState<OfflineShellState>(process.env.NODE_ENV === "production" ? "preparing" : "development");
+  const [preparationAttempt, setPreparationAttempt] = useState(0);
   const autoRetryAttemptRef = useRef(0);
   const actorIdRef = useRef<string | null>(supabaseUser ? volunteerIdForUser(supabaseUser.id) : null);
   const roleRef = useRef<WorkspaceMembership["role"] | null>(null);
@@ -299,9 +301,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [data]);
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
+    if (!("serviceWorker" in navigator)) { queueMicrotask(() => setOfflineShell("unavailable")); return; }
     if (process.env.NODE_ENV === "production") {
-      navigator.serviceWorker.register(isProductionApp ? "/sw.js" : "/sw.js?sandbox").catch(() => undefined);
+      return observeOfflineShell(isProductionApp ? "/sw.js" : "/sw.js?sandbox", setOfflineShell);
     } else {
       // A previous local production build must not revive an old connected app offline.
       void navigator.serviceWorker.getRegistrations().then((registrations) => Promise.all(
@@ -309,7 +311,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           .map((registration) => registration.unregister()),
       )).catch(() => undefined);
     }
-  }, []);
+  }, [preparationAttempt]);
 
   const updateData = useCallback(async (updater: (current: NeighborWalkData) => NeighborWalkData, extraOperations?: (current: NeighborWalkData) => CommandOperation[]) => {
     if (recoveryInFlightRef.current) throw new Error("Wait for the reviewed operation to finish before saving another change.");
@@ -1215,6 +1217,17 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     if (signedIn.user.id !== scope.userId) throw new Error("Sign-in did not match this account. No administration was performed.");
   }, [requireAdminScope, supabaseUser]);
   const getAdministrationPending = useCallback(() => storageScopeRef.current ? pendingAdministration(storageScopeRef.current) : Promise.resolve(null), []);
+  const downloadAuthoredDeviceRecovery = useCallback(async () => {
+    if (!supabaseUser) throw new Error("Sign in with the account that authored this work.");
+    const connection = readWorkspaceConnection(supabaseUser.id);
+    const scope = storageScopeRef.current ?? (connection ? { userId: supabaseUser.id, churchId: connection.churchId } : null);
+    if (!scope || scope.userId !== supabaseUser.id) throw new Error("No church device copy is associated with this account. Keep the original browser profile and ask your leader for supervised help.");
+    const client = getSupabaseBrowserClient();
+    const session = await client?.auth.getSession();
+    if (session?.data.session?.user.id !== scope.userId) throw new Error("Sign in again with the original author’s account before recovering device work.");
+    const recovery = await authoredDeviceRecovery(scope);
+    downloadBlob(new Blob([JSON.stringify(recovery, null, 2)], { type: "application/json" }), "neighborwalk-my-authored-device-recovery.json");
+  }, [supabaseUser]);
   const reviewAdministrationPending = useCallback(async () => {
     const scope = requireAdminScope();
     const pending = await pendingAdministration(scope);
@@ -1325,6 +1338,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
   return {
     data,
+    offlineShell,
     loading,
     storageError,
     online,
@@ -1337,6 +1351,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     activeTerritory,
     activeVolunteer,
     actions: {
+      checkOfflinePreparation: () => setPreparationAttempt((attempt) => attempt + 1),
       updateData,
       setPreference,
       selectTerritory,
@@ -1386,6 +1401,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       exportChurchRecords,
       reauthenticateAdmin,
       getAdministrationPending,
+      downloadAuthoredDeviceRecovery,
       reviewAdministrationPending,
       getRetentionPreview,
     },
