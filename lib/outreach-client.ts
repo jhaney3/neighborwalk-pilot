@@ -97,9 +97,10 @@ export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Re
       history: (activitiesByTask.get(r.id) ?? []).map((a) => ({ id: a.id, action: a.action, actorId: a.actor_key,
         note: string(a, "note"), dueAt: string(a, "due_date"), createdAt: iso(a, "occurred_at") })).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))) })),
     restrictions: rows("restriction").map((r) => ({ ...common(r), residentId: string(r, "person_id"), propertyId: string(r, "location_id"), channel: r.channel,
-      active: r.active, reason: r.reason, createdAt: iso(r, "created_at"), correctionReason: string(r, "correction_reason") })),
+      active: r.active, reason: r.reason, createdAt: iso(r, "created_at"), correctionReason: string(r, "correction_reason"), correctedAt: iso(r, "corrected_at") })),
     audit: rows("audit").map((r) => ({ id: String(r.sequence), action: r.action, entityType: r.entity_type, entityId: r.entity_id,
-      actorId: user(r, "actor_id") ?? "system", createdAt: iso(r, "occurred_at"), summary: String(r.action).replaceAll(".", " ") })).reverse(),
+      actorId: user(r, "actor_id") ?? "system", createdAt: iso(r, "occurred_at"), details: r.details,
+      summary: String(r.action).replaceAll(".", " ").replaceAll("_", " ") })).reverse(),
     migrationIssues: rows("migration_issue").map((r) => ({ entityType: r.entity_type, entityId: r.entity_id, issue: r.issue })),
     guide: [], preferences: { ...createSeedData().preferences, ...preferences, activeEventId,
       activeVolunteerId: volunteerIdForUser(info.userId), activeTerritoryId: territories.some((t) => t.id === preferences?.activeTerritoryId)

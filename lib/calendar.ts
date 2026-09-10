@@ -1,5 +1,11 @@
 export const DEFAULT_CHURCH_TIMEZONE = "America/Chicago";
 
+export function requireCalendarDate(value: string): string {
+  const instant = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(value + "T12:00:00Z") : null;
+  if (!instant || Number.isNaN(instant.getTime()) || instant.toISOString().slice(0, 10) !== value) throw new Error("Choose a valid calendar date.");
+  return value;
+}
+
 export function calendarDate(value: string | Date, timezone = DEFAULT_CHURCH_TIMEZONE): string {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" })

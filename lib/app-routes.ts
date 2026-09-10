@@ -1,5 +1,5 @@
-export type AppView = "today" | "outreach" | "map" | "people" | "followups" | "guide" | "leader" | "settings" | "more" | "recovery";
-const paths: Record<AppView, string> = { today: "today", outreach: "outreach", map: "locations", people: "people", followups: "followups", guide: "guides", leader: "leader", settings: "settings", more: "more", recovery: "recovery" };
+export type AppView = "today" | "outreach" | "map" | "people" | "followups" | "guide" | "leader" | "settings" | "more" | "recovery" | "data";
+const paths: Record<AppView, string> = { today: "today", outreach: "outreach", map: "locations", people: "people", followups: "followups", guide: "guides", leader: "leader", settings: "settings", more: "more", recovery: "recovery", data: "data" };
 export function appHref(view: AppView, id?: string) { return "/app/" + paths[view] + (id ? "/" + encodeURIComponent(id) : ""); }
 export function appRoute(pathname: string): { view: AppView; id?: string; fieldOutingId?: string } {
   const parts = pathname.split("/").filter(Boolean);

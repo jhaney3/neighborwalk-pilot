@@ -43,6 +43,8 @@ import {
   type Visit,
 } from "../lib/domain";
 import { ScriptureReader } from "./ScriptureReader";
+import { ContactRestrictions } from "./ContactRestrictions";
+import type { RestrictionActions } from "../lib/contact-restrictions";
 import { useAsyncAction } from "../lib/use-async-action";
 
 type VisitInput = {
@@ -81,6 +83,7 @@ export function PropertyDrawer({
   onDeleteProperty,
   onUpsertResident,
   onDeleteResident,
+  restrictionActions,
 }: {
   property: Property;
   parcelDwellings: Property[];
@@ -100,8 +103,17 @@ export function PropertyDrawer({
   onDeleteProperty: (propertyId: string) => Promise<unknown>;
   onUpsertResident: (propertyId: string, input: ResidentInput, residentId?: string) => Promise<string>;
   onDeleteResident: (residentId: string) => Promise<unknown>;
+  restrictionActions: RestrictionActions;
 }) {
+  const drawer = useRef<HTMLDialogElement>(null);
   const action = useAsyncAction();
+  useEffect(() => {
+    const element = drawer.current;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    element?.showModal();
+    return () => { element?.close(); previousFocus?.focus(); };
+  }, []);
+  const requestClose = () => { if (!action.busy && !drawer.current?.querySelector('[aria-busy="true"]')) onClose(); };
   const [tab, setTab] = useState<"record" | "people" | "history">("record");
   const guideSteps = useMemo(() => [...(conversationGuide?.steps ?? [])].sort((first, second) => first.order - second.order), [conversationGuide]);
   const [workflowStage, setWorkflowStage] = useState<"record" | "guide" | "name">(
@@ -166,7 +178,7 @@ export function PropertyDrawer({
   };
 
   return (
-    <aside className="property-drawer" aria-label={`Location details for ${property.address}`}>
+    <dialog ref={drawer} className="property-drawer" aria-label={`Location details for ${property.address}`} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
       {property.currentOutcome === "do_not_visit" && <p className="inline-notice">Do not visit this location. A church leader must review any restriction correction.</p>}
       <div className="drawer-handle" aria-hidden="true" />
@@ -187,7 +199,7 @@ export function PropertyDrawer({
           )}
           <small>{property.visitCount ? `${property.visitCount} visit${property.visitCount === 1 ? "" : "s"} recorded` : "No visits recorded"}</small>
         </div>
-        <button className="close-button" onClick={onClose} aria-label="Close location details"><X size={19} /></button>
+        <button className="close-button" disabled={action.busy} onClick={requestClose} aria-label="Close location details"><X size={19} /></button>
       </div>
 
       {property.parcel && parcelDwellings.length > 0 && (
@@ -364,7 +376,8 @@ export function PropertyDrawer({
           )}
         </div>
       )}
-    </aside>
+      <ContactRestrictions data={data} propertyId={property.id} canManage={canManage} actions={restrictionActions} />
+    </dialog>
   );
 }
 
@@ -453,7 +466,7 @@ function ResidentForm({ resident, volunteers, activeVolunteerId, pathwayEnabled,
   const [preferredContact, setPreferredContact] = useState(resident?.preferredContact ?? "none");
   const contactMethodValid = preferredContact === "email" ? Boolean(email.trim())
     : preferredContact === "text" || preferredContact === "call" ? Boolean(phone.trim()) : true;
-  const canSave = contactMethodValid;
+  const canSave = contactMethodValid && (Boolean(resident) || Boolean(name.trim()));
   const activeOwner = volunteers.find((volunteer) => volunteer.id === activeVolunteerId);
 
   useEffect(() => {
@@ -461,9 +474,9 @@ function ResidentForm({ resident, volunteers, activeVolunteerId, pathwayEnabled,
   }, [autoFocusName]);
 
   return (
-    <div className="resident-form">
+    <div className="resident-form" aria-busy={action.busy}>
       <div className="form-stack">
-        <label className="form-field"><span>Name <small>Optional</small></span><input ref={nameInputRef} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Only if they choose to share it" /></label>
+        <label className="form-field"><span>Name or useful description</span><input ref={nameInputRef} required={!resident} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="A shared name or respectful identifying description" /></label>
         {pathwayEnabled && <label className="form-field"><span>Faith status <small>Self-described only</small></span><select value={faithStatus} onChange={(event) => setFaithStatus(event.target.value as Resident["faithStatus"])}>{faithStatusValues.map((value) => <option value={value} key={value}>{faithStatusLabels[value]}</option>)}</select></label>}
         <p>Responsible person: {volunteers.find((v) => v.id === assignedVolunteerId)?.name ?? activeOwner?.name ?? "You"}. Arrange ownership changes through a care handoff in People.</p>
         {pathwayEnabled && <label className="form-field"><span>Relationship stage</span><select value={discipleshipStage} onChange={(event) => setDiscipleshipStage(event.target.value as Resident["discipleshipStage"])}>{discipleshipStageValues.map((value) => <option value={value} key={value}>{discipleshipStageLabels[value]}</option>)}</select></label>}

@@ -68,7 +68,7 @@ do $$ declare command jsonb; first_result jsonb; visit jsonb; begin
   perform pg_temp.expect_denied(pg_temp.command('atomic-failure','[
     {"entityType":"property","entityId":"must-rollback","operation":"upsert","expectedVersion":0,"record":{"address":"Rolled back"}},
     {"entityType":"property","entityId":"invalid-second","operation":"upsert","expectedVersion":0,"record":{"address":""}}
-  ]'),'23514');
+  ]'),'22023');
   if exists(select 1 from public.outreach_locations where id='must-rollback') or exists(select 1 from public.outreach_audit where command_id='atomic-failure') then
     raise exception 'Partial command persisted after failure'; end if;
   visit := jsonb_build_object('entityType','visit','entityId','restricted-visit','operation','upsert','expectedVersion',0,'record',
@@ -150,6 +150,38 @@ select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-00000000
 do $$ begin
   if exists(select 1 from public.discipleship_people where id='handoff-person') then raise exception 'Former creator retained implicit access after accepted handoff'; end if;
   if exists(select 1 from public.outreach_tasks where id='handoff-task') then raise exception 'Former owner retained implicit task access'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
+do $$ begin
+  perform public.outreach_apply_command(pg_temp.command('community-encounter','[
+    {"entityType":"visit","entityId":"community-anonymous","operation":"upsert","expectedVersion":0,"record":{"context":"community_meal","outcome":"conversation","recordedAt":"2026-09-10T01:00:00Z","deviceId":"test-device"}}
+  ]'));
+  if not exists(select 1 from public.outreach_encounters where id='community-anonymous' and location_id is null and person_id is null and context='community_meal') then raise exception 'Anonymous community encounter required manufactured records'; end if;
+  perform pg_temp.expect_denied(pg_temp.command('unnamed-new-person','[
+    {"entityType":"resident","entityId":"unnamed-new","operation":"upsert","expectedVersion":0,"record":{"preferredContact":"none"}}
+  ]'),'22023');
+  perform pg_temp.expect_denied(pg_temp.command('locationless-door','[
+    {"entityType":"visit","entityId":"missing-door","operation":"upsert","expectedVersion":0,"record":{"context":"door","outcome":"no_answer","recordedAt":"2026-09-10T01:00:00Z","deviceId":"test-device"}}
+  ]'),'22023');
+  perform pg_temp.expect_denied(pg_temp.command('misplaced-private-note','[
+    {"entityType":"visit","entityId":"misplaced-note","operation":"upsert","expectedVersion":0,"record":{"context":"referral","residentId":"handoff-person","outcome":"conversation","objectiveNote":"Private care detail","recordedAt":"2026-09-10T01:00:00Z","deviceId":"test-device"}}
+  ]'),'22023');
+  perform public.outreach_apply_command(pg_temp.command('no-contact-person','[
+    {"entityType":"resident","entityId":"no-contact-person","operation":"upsert","expectedVersion":0,"record":{"name":"Fictional No Contact","preferredContact":"none","contactPermission":"do_not_contact"}},
+    {"entityType":"follow_up","entityId":"no-contact-task","operation":"upsert","expectedVersion":0,"record":{"residentId":"no-contact-person","dueAt":"2026-10-02","channel":"email","status":"scheduled"}}
+  ]'));
+  if (select status from public.outreach_tasks where id='no-contact-task')<>'cancelled' then raise exception 'All-contact restriction missed a task'; end if;
+  perform public.outreach_apply_command(pg_temp.command('review-person-correction','[
+    {"entityType":"restriction","entityId":"restriction_no-contact-person_1","operation":"upsert","expectedVersion":1,"record":{"active":false,"correctionReason":"Fictional neighbor explicitly corrected their request"}}
+  ]'));
+  if (select contact_permission from public.discipleship_people where id='no-contact-person')<>'not_recorded' then raise exception 'Corrected restriction left contradictory profile state'; end if;
+  if (select status from public.outreach_tasks where id='no-contact-task')<>'cancelled' then raise exception 'Restriction correction reopened a cancelled task'; end if;
+  perform public.outreach_apply_command(pg_temp.command('email-only-restriction','[
+    {"entityType":"follow_up","entityId":"call-allowed-task","operation":"upsert","expectedVersion":0,"record":{"residentId":"no-contact-person","dueAt":"2026-10-02","channel":"call","status":"scheduled"}},
+    {"entityType":"follow_up","entityId":"email-blocked-task","operation":"upsert","expectedVersion":0,"record":{"residentId":"no-contact-person","dueAt":"2026-10-02","channel":"email","status":"scheduled"}},
+    {"entityType":"restriction","entityId":"email-only","operation":"upsert","expectedVersion":0,"record":{"residentId":"no-contact-person","channel":"email","active":true,"reason":"Fictional neighbor requested no email"}}
+  ]'));
+  if (select status from public.outreach_tasks where id='call-allowed-task')<>'scheduled' or (select status from public.outreach_tasks where id='email-blocked-task')<>'cancelled' then raise exception 'Channel restriction applied to the wrong tasks'; end if;
 end $$;
 reset role;
 rollback;

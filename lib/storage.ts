@@ -9,6 +9,7 @@ import {
 import { createSeedData } from "./seed";
 import { calendarDate } from "./calendar";
 import { storageKey } from "./environment";
+import { authoredRecovery } from "./device-recovery";
 import {
   DEFAULT_MAP_STYLE_URL,
   isOpenFreeMapStyle,
@@ -284,19 +285,46 @@ export async function recoveryArchives(scope: StorageScope): Promise<{ key: stri
   return entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export async function exportRecoveryArchive(scope: StorageScope, key: string): Promise<Blob> {
+export async function exportRecoveryArchive(scope: StorageScope, key: string, mode: "authored" | "workspace" = "authored"): Promise<Blob> {
   const database = await getDatabase();
   const scopeKey = scopedStorageKey(scope);
   if (!archiveKeyAllowed(key, scopeKey, await database.get(STORE, "legacy_owner") === scopeKey)) throw new Error("This archive belongs to a different account or church.");
   const entry = await database.get(STORE, key);
   if (!entry) throw new Error("The archive is no longer available on this device.");
   const payload = key.startsWith("recovery:") ? entry : { data: entry, reason: "Original preserved device copy", scope };
+  if (mode === "authored") return new Blob([JSON.stringify(authoredRecovery(payload.data, scope), null, 2)], { type: "application/json" });
   return new Blob([JSON.stringify({ format: "neighborwalk-recovery", formatVersion: 1, ...payload }, null, 2)], { type: "application/json" });
 }
 
 function archiveKeyAllowed(key: string, scopeKey: string, ownsLegacy: boolean) {
   return ["recovery:", "pre-upgrade:", "quarantine:"].some((prefix) => key.startsWith(prefix + scopeKey + ":"))
     || ownsLegacy && ["pre-upgrade:primary:", "quarantine:primary:"].some((prefix) => key.startsWith(prefix));
+}
+
+export type PendingAdministration = { request: Record<string, unknown>; savedAt: string; scope: StorageScope };
+export async function pendingAdministration(scope: StorageScope): Promise<PendingAdministration | null> {
+  const database = await getDatabase();
+  const entry = await database.get(STORE, "admin-pending:" + scopedStorageKey(scope));
+  if (!entry) return null;
+  if (entry.scope?.churchId !== scope.churchId || entry.scope?.userId !== scope.userId || entry.request?.churchId !== scope.churchId) throw new Error("Administration recovery belongs to a different account.");
+  return entry;
+}
+export async function preserveAdministration(scope: StorageScope, request: Record<string, unknown>) {
+  if (request.churchId !== scope.churchId || typeof request.id !== "string") throw new Error("An account-scoped administration request is required.");
+  const existing = await pendingAdministration(scope);
+  if (existing && JSON.stringify(existing.request) !== JSON.stringify(request)) throw new Error("Review or retry this account’s previous administration request first.");
+  const database = await getDatabase();
+  await database.put(STORE, { request, scope, savedAt: existing?.savedAt ?? new Date().toISOString() }, "admin-pending:" + scopedStorageKey(scope));
+}
+export async function finishAdministration(scope: StorageScope, requestId: string, result: unknown) {
+  const database = await getDatabase();
+  const transaction = database.transaction(STORE, "readwrite");
+  const key = "admin-pending:" + scopedStorageKey(scope);
+  const original = await transaction.store.get(key);
+  if (!original || original.request.id !== requestId) { await transaction.done; return; }
+  await transaction.store.put({ ...original, result, reviewedAt: new Date().toISOString() }, "admin-history:" + scopedStorageKey(scope) + ":" + requestId);
+  await transaction.store.delete(key);
+  await transaction.done;
 }
 
 export async function replaceNeighborWalkData(candidate: unknown): Promise<NeighborWalkData> {

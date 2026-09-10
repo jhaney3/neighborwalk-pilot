@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import { createSeedData } from "../lib/seed";
 import { storageKey } from "../lib/environment";
-import { archiveWorkspaceRecovery, exportRecoveryArchive, recoveryArchives, loadScopedNeighborWalkData, saveNeighborWalkData, scopedStorageKey, StorageRecoveryError } from "../lib/storage";
+import { archiveWorkspaceRecovery, exportRecoveryArchive, recoveryArchives, loadScopedNeighborWalkData, saveNeighborWalkData, scopedStorageKey, StorageRecoveryError, preserveAdministration, pendingAdministration, finishAdministration } from "../lib/storage";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -20,6 +20,25 @@ describe("account-scoped durable storage", () => {
     await saveNeighborWalkData(data, owner);
     expect((await loadScopedNeighborWalkData(owner))?.properties.length).toBe(data.properties.length);
     expect(await loadScopedNeighborWalkData({ ...owner, userId: "bob" })).toBeNull();
+  });
+
+  it("keeps administrative attempts immutable, account scoped and archived on receipt", async () => {
+    browser();
+    const scope = { userId: "admin-author", churchId: "test-admin-church" };
+    const request = { id: "immutable-admin", churchId: scope.churchId, action: "import", expectedRevision: 7, operations: [] };
+    await preserveAdministration(scope, request);
+    expect((await pendingAdministration(scope))?.request).toEqual(request);
+    expect(await pendingAdministration({ ...scope, userId: "different-admin" })).toBeNull();
+    await expect(preserveAdministration(scope, { ...request, expectedRevision: 8 })).rejects.toThrow("previous administration");
+    await finishAdministration(scope, "wrong-receipt", {});
+    expect(await pendingAdministration(scope)).not.toBeNull();
+    await finishAdministration(scope, request.id, { imported: 1 });
+    expect(await pendingAdministration(scope)).toBeNull();
+    const database = await openDB(storageKey("neighborwalk"), 1);
+    const history = await database.get("app_state", "admin-history:" + scopedStorageKey(scope) + ":" + request.id);
+    expect(history.request).toEqual(request);
+    expect(history.result).toEqual({ imported: 1 });
+    database.close();
   });
 
   it("does not allow a scope to save another church's records", async () => {
@@ -58,7 +77,7 @@ describe("account-scoped durable storage", () => {
     const key = await archiveWorkspaceRecovery(data, scope, "Fictional reviewed recovery");
     expect(await recoveryArchives(scope)).toHaveLength(1);
     expect(await recoveryArchives({ ...scope, userId: "someone-else" })).toHaveLength(0);
-    const copy = JSON.parse(await (await exportRecoveryArchive(scope, key)).text());
+    const copy = JSON.parse(await (await exportRecoveryArchive(scope, key, "workspace")).text());
     expect(copy.data).toEqual(data);
     await expect(exportRecoveryArchive({ ...scope, userId: "someone-else" }, key)).rejects.toThrow("different account");
   });

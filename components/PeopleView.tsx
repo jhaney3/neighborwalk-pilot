@@ -1,8 +1,11 @@
 "use client";
 
 import { groupBy } from "../lib/collections";
+import { personTimeline } from "../lib/person-timeline";
+import { ContactRestrictions } from "./ContactRestrictions";
+import { contactRestricted, type RestrictionActions } from "../lib/contact-restrictions";
 import { useAsyncAction } from "../lib/use-async-action";
-import { calendarDate, calendarDaysFromNow } from "../lib/calendar";
+import { calendarDate, calendarDaysFromNow, formatCalendarDate } from "../lib/calendar";
 
 import {
   ArrowLeft,
@@ -21,7 +24,6 @@ import {
   Phone,
   Plus,
   Search,
-  ShieldCheck,
   Trash2,
   UserCheck,
   UserRound,
@@ -33,9 +35,7 @@ import {
   discipleshipStageValues,
   faithStatusLabels,
   faithStatusValues,
-  formatDateTime,
   formatPhoneNumber,
-  personNoteKindLabels,
   type DiscipleshipStage,
   type FollowUp,
   type NeighborWalkData,
@@ -50,6 +50,7 @@ type PeopleViewProps = {
   canManage: boolean;
   activeVolunteerId: string;
   initialSelectedResidentId?: string | null;
+  restrictionActions: RestrictionActions;
   onSelectResident?: (id?: string) => void;
   onOpenProperty: (propertyId: string) => void;
   onUpsertResident: (propertyId: string | undefined, input: ResidentInput, residentId?: string) => Promise<string>;
@@ -109,6 +110,7 @@ export function PeopleView({
   onAddPersonFollowUp,
   onOpenFollowUps,
   onHandoff,
+  restrictionActions,
 }: PeopleViewProps) {
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState<"all" | DiscipleshipStage>("all");
@@ -205,7 +207,7 @@ export function PeopleView({
                     {data.church.pathwayEnabled && <small>{discipleshipStageLabels[resident.discipleshipStage]}</small>}
                     <span className="person-list-meta"><span><UserRound size={11} /> {ownerRecord?.name ?? "Unknown owner"}</span>{property && <span><MapPin size={11} /> {property.address}</span>}</span>
                     {(nextFollowUp?.note || latestNote) && <p>{nextFollowUp?.note ?? latestNote?.body}</p>}
-                    {nextFollowUp && <span className={`person-next-date ${nextStepState}`}><Clock3 size={11} /> {nextStepState === "overdue" ? "Overdue · " : ""}{formatDateTime(nextFollowUp.dueAt, { month: "short", day: "numeric" })}</span>}
+                    {nextFollowUp && <span className={`person-next-date ${nextStepState}`}><Clock3 size={11} /> {nextStepState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "short", day: "numeric" })}</span>}
                   </span>
                   <ChevronRight size={16} />
                 </button>
@@ -233,6 +235,7 @@ export function PeopleView({
             onOpenFollowUps={() => onOpenFollowUps(selected.id)}
             onAddNote={(kind, body) => onAddPersonNote(selected.id, kind, body)}
             onDeleteNote={onDeletePersonNote}
+            restrictionActions={restrictionActions}
           />
         ) : <div className="people-profile-empty"><CircleUserRound size={32} /><strong>Select a person</strong><span>Their follow-up plan and complete note history will appear here.</span></div>}
       </div>
@@ -242,7 +245,7 @@ export function PeopleView({
   );
 }
 
-function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, onEdit, onOpenProperty, onChangeStage, onChangeOwner, onHandoffResponse, onChangeStatus, onAddFollowUp, onOpenFollowUps, onAddNote, onDeleteNote }: {
+function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, onEdit, onOpenProperty, onChangeStage, onChangeOwner, onHandoffResponse, onChangeStatus, onAddFollowUp, onOpenFollowUps, onAddNote, onDeleteNote, restrictionActions }: {
   resident: Resident;
   data: NeighborWalkData;
   canManage: boolean;
@@ -258,6 +261,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
   onOpenFollowUps: () => void;
   onAddNote: (kind: PersonNoteKind, body: string) => Promise<unknown>;
   onDeleteNote: (noteId: string) => Promise<unknown>;
+  restrictionActions: RestrictionActions;
 }) {
   const [noteBody, setNoteBody] = useState("");
   const action = useAsyncAction();
@@ -265,7 +269,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
   const noContact = resident.contactPermission === "do_not_contact" || data.restrictions?.some((r) => r.active && r.residentId === resident.id && r.channel === "all");
   const property = data.properties.find((item) => item.id === resident.propertyId);
   const owner = data.volunteers.find((volunteer) => volunteer.id === resident.assignedVolunteerId);
-  const timeline = data.personNotes.filter((note) => note.residentId === resident.id).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const timeline = personTimeline(data, resident.id);
   const personFollowUps = data.followUps.filter((followUp) => followUp.residentId === resident.id).sort((left, right) => left.dueAt.localeCompare(right.dueAt));
   const openFollowUps = personFollowUps.filter((followUp) => followUp.status === "scheduled");
   const nextFollowUp = openFollowUps[0];
@@ -285,8 +289,8 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
           {canEdit && <button className="button quiet small" onClick={onEdit}><Edit3 size={14} /> Edit profile</button>}
         </div>
         <div className="person-profile-contact">
-          {!noContact && resident.phone && <a href={`tel:${resident.phone}`}><Phone size={14} /><span><small>{resident.preferredContact === "call" || resident.preferredContact === "text" ? "Preferred" : "Phone"}</small><strong>{formatPhoneNumber(resident.phone)}</strong></span></a>}
-          {!noContact && resident.email && <a href={`mailto:${resident.email}`}><Mail size={14} /><span><small>{resident.preferredContact === "email" ? "Preferred" : "Email"}</small><strong>{resident.email}</strong></span></a>}
+          {!contactRestricted(data, resident.id, "call") && resident.phone && <a href={`tel:${resident.phone}`}><Phone size={14} /><span><small>{resident.preferredContact === "call" ? "Preferred" : "Phone"}</small><strong>{formatPhoneNumber(resident.phone)}</strong></span></a>}
+          {!contactRestricted(data, resident.id, "email") && resident.email && <a href={`mailto:${resident.email}`}><Mail size={14} /><span><small>{resident.preferredContact === "email" ? "Preferred" : "Email"}</small><strong>{resident.email}</strong></span></a>}
           {property && <button onClick={onOpenProperty}><MapPin size={14} /><span><small>Home</small><strong>{property.address}{property.unit ? ` · ${property.unit}` : ""}</strong></span></button>}
         </div>
       </header>
@@ -313,15 +317,16 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
           {handoffQueued && <p role="status">Handoff change saved on this device; waiting for the church to confirm.</p>}
         </section>
         <section className={`care-next-card ${nextState}`}>
-          <div><span className="profile-section-label">Follow-up plan</span>{nextFollowUp && <em><CalendarClock size={12} /> {nextState === "overdue" ? "Overdue · " : ""}{formatDateTime(nextFollowUp.dueAt, { month: "long", day: "numeric" })}</em>}</div>
+          <div><span className="profile-section-label">Follow-up plan</span>{nextFollowUp && <em><CalendarClock size={12} /> {nextState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "long", day: "numeric" })}</em>}</div>
           {nextFollowUp ? <p>{nextFollowUp.note || "Follow up with this person."}</p> : <p className="care-next-empty">No open follow-up is planned.</p>}
           {openFollowUps.length > 1 && <small>{openFollowUps.length - 1} more open {openFollowUps.length === 2 ? "task" : "tasks"}</small>}
           <div className="care-next-actions">{canEdit && !noContact && <FollowUpPlanner timezone={data.church.timezone} defaultDays={data.church.defaultFollowUpDays} noteLimit={data.church.noteCharacterLimit} onSave={onAddFollowUp} />}<button onClick={onOpenFollowUps}>Open follow-ups <ChevronRight size={13} /></button></div>
         </section>
       </div>
 
+      <ContactRestrictions data={data} residentId={resident.id} canManage={canManage} actions={restrictionActions} />
       <section className="person-notes-section">
-        <div className="person-notes-heading"><div><span className="profile-section-label">Notes</span><h3>One clear history</h3></div><span>{timeline.length} {timeline.length === 1 ? "note" : "notes"}</span></div>
+        <div className="person-notes-heading"><div><span className="profile-section-label">Notes</span><h3>One clear history</h3></div><span>{timeline.length} activity entries</span></div>
         <div className="person-note-composer">
           <div><MessageCircle size={17} /><strong>Add a note</strong><small>Every person note goes here.</small></div>
           <div className="person-note-fields"><textarea aria-label="Care note" rows={3} maxLength={data.church.noteCharacterLimit + 1} value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder="What should you remember for next time?" /></div>
@@ -329,11 +334,11 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
         </div>
         <div className="person-timeline">
           {timeline.map((note) => {
-            const author = data.volunteers.find((volunteer) => volunteer.id === note.authorId);
-            const canDelete = canManage || note.authorId === activeVolunteerId;
-            return <article className={`person-timeline-entry ${note.kind}`} key={note.id}><span className="person-timeline-mark">{note.kind === "milestone" ? <CheckCircle2 size={14} /> : note.kind === "prayer" ? <ShieldCheck size={14} /> : <MessageCircle size={14} />}</span><div><div><span>{personNoteKindLabels[note.kind]}</span><time>{formatDateTime(note.createdAt, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</time></div><p>{note.body}</p><footer><span>{author?.name ?? "Church member"}</span>{canDelete && <button onClick={() => { if (window.confirm("Archive this note from the active profile? Its audit entry remains.")) void action.run(() => onDeleteNote(note.id)); }} aria-label="Delete note"><Trash2 size={12} /></button>}</footer></div></article>;
+            const author = data.volunteers.find((volunteer) => volunteer.id === note.actorId);
+            const canDelete = Boolean(note.noteId) && (canManage || note.actorId === activeVolunteerId);
+            return <article className="person-timeline-entry general" key={note.id}><span className="person-timeline-mark"><MessageCircle size={14} /></span><div><div><span>{note.title}</span><time>{new Intl.DateTimeFormat("en-US", { timeZone: data.church.timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(note.at))}</time></div>{note.body && <p>{note.body}</p>}<footer><span>{author?.name ?? "Church record"}</span>{canDelete && <button onClick={() => { if (window.confirm("Archive this note from the active profile? Its audit entry remains.")) void action.run(() => onDeleteNote(note.noteId!)); }} aria-label="Archive note"><Trash2 size={12} /></button>}</footer></div></article>;
           })}
-          {!timeline.length && <div className="person-timeline-empty"><NotebookPen size={22} /><strong>No notes yet</strong><span>Add the first note above. Notes follow your church’s retention and archival policy.</span></div>}
+          {!timeline.length && <div className="person-timeline-empty"><NotebookPen size={22} /><strong>No activity yet</strong><span>Add the first note above. Notes follow your church’s retention and archival policy.</span></div>}
         </div>
       </section>
 
@@ -379,14 +384,14 @@ function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onD
   const action = useAsyncAction();
   const toggle = (values: string[], value: string) => values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
   const contactValid = preferredContact === "email" ? Boolean(email.trim()) : ["text", "call"].includes(preferredContact) ? Boolean(phone.trim()) : true;
-  return <form className="person-editor-form form-stack" onSubmit={(event) => {
+  return <form className="person-editor-form form-stack" aria-busy={action.busy} onSubmit={(event) => {
     event.preventDefault();
     void action.run(() => onSave(propertyId || undefined, { name: name.trim() || undefined, faithStatus, discipleshipStage, assignedVolunteerId,
       sharedWithVolunteerIds: sharedWithVolunteerIds.filter((id) => id !== assignedVolunteerId), sharedWithTeamIds, status, phone: phone.trim() || undefined,
       email: email.trim() || undefined, preferredContact, contactPermission, lastContactAt: resident?.lastContactAt }));
   }}>
     <div className="person-editor-grid">
-      <label>Name (only if shared)<input value={name} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="First name is enough" /></label>
+      <label>Name or useful identifying description<input value={name} required={!resident} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="First name or a respectful description" /></label>
       <label>Home or meeting location (optional)<select value={propertyId} onChange={(e) => setPropertyId(e.target.value)}><option value="">No address provided</option>{data.properties.map((p) => <option key={p.id} value={p.id}>{p.address}{p.unit ? " · " + p.unit : ""}</option>)}</select></label>
       <label>Phone (optional)<input type="tel" autoComplete="off" value={phone} maxLength={40} minLength={3} onChange={(e) => setPhone(e.target.value)} /></label>
       <label>Email (optional)<input type="email" autoComplete="off" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} /></label>

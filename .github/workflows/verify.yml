@@ -27,3 +27,20 @@ jobs:
       - run: npm ci
       - run: npm run verify
       - run: npm audit --omit=dev --audit-level=high
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run sandbox:start
+      - run: npm run test:database
+      - run: npm run sandbox:verify
+      - if: always()
+        run: npm run sandbox:stop

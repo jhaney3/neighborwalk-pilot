@@ -215,6 +215,13 @@ export type Database = {
             referencedRelation: "conversation_guides"
             referencedColumns: ["id", "church_id"]
           },
+          {
+            foreignKeyName: "conversation_guide_team_normalized_fk"
+            columns: ["church_id", "team_id"]
+            isOneToOne: true
+            referencedRelation: "outreach_teams"
+            referencedColumns: ["church_id", "id"]
+          },
         ]
       }
       conversation_guides: {
@@ -570,6 +577,7 @@ export type Database = {
           actor_id: string
           church_id: string
           command_id: string
+          details: Json
           entity_id: string
           entity_type: string
           occurred_at: string
@@ -580,6 +588,7 @@ export type Database = {
           actor_id: string
           church_id: string
           command_id: string
+          details?: Json
           entity_id: string
           entity_type: string
           occurred_at?: string
@@ -590,6 +599,7 @@ export type Database = {
           actor_id?: string
           church_id?: string
           command_id?: string
+          details?: Json
           entity_id?: string
           entity_type?: string
           occurred_at?: string
@@ -800,21 +810,27 @@ export type Database = {
           entity_id: string
           entity_type: string
           issue: string
+          resolution_note: string | null
           resolved_at: string | null
+          resolved_by: string | null
         }
         Insert: {
           church_id: string
           entity_id: string
           entity_type: string
           issue: string
+          resolution_note?: string | null
           resolved_at?: string | null
+          resolved_by?: string | null
         }
         Update: {
           church_id?: string
           entity_id?: string
           entity_type?: string
           issue?: string
+          resolution_note?: string | null
           resolved_at?: string | null
+          resolved_by?: string | null
         }
         Relationships: [
           {
@@ -1151,6 +1167,13 @@ export type Database = {
             referencedColumns: ["church_id", "id"]
           },
           {
+            foreignKeyName: "outreach_tasks_parent_tenant_fk"
+            columns: ["church_id", "parent_task_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_tasks"
+            referencedColumns: ["church_id", "id"]
+          },
+          {
             foreignKeyName: "outreach_tasks_person_id_church_id_fkey"
             columns: ["person_id", "church_id"]
             isOneToOne: false
@@ -1240,9 +1263,10 @@ export type Database = {
           color: string
           deleted_at: string | null
           id: string
-          latitude: number
+          kind: string
+          latitude: number | null
           legacy_event_id: string | null
-          longitude: number
+          longitude: number | null
           name: string
           version: number
           zoom: number
@@ -1253,9 +1277,10 @@ export type Database = {
           color?: string
           deleted_at?: string | null
           id: string
-          latitude: number
+          kind?: string
+          latitude?: number | null
           legacy_event_id?: string | null
-          longitude: number
+          longitude?: number | null
           name: string
           version?: number
           zoom?: number
@@ -1266,9 +1291,10 @@ export type Database = {
           color?: string
           deleted_at?: string | null
           id?: string
-          latitude?: number
+          kind?: string
+          latitude?: number | null
           legacy_event_id?: string | null
-          longitude?: number
+          longitude?: number | null
           name?: string
           version?: number
           zoom?: number
@@ -1399,6 +1425,7 @@ export type Database = {
           role: string
         }[]
       }
+      outreach_admin_action: { Args: { request: Json }; Returns: Json }
       outreach_apply_command: { Args: { command: Json }; Returns: Json }
       outreach_read_records: {
         Args: {
@@ -1412,6 +1439,17 @@ export type Database = {
           record: Json
           version: number
         }[]
+      }
+      outreach_update_member: {
+        Args: {
+          expected_active: boolean
+          expected_role: string
+          member_active: boolean
+          member_role: string
+          reason: string
+          target_user_id: string
+        }
+        Returns: Json
       }
       outreach_workspace_info: {
         Args: { target_church: string }

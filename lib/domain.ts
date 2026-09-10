@@ -390,7 +390,7 @@ export const neighborWalkDataSchema = z.object({
   restrictions: z.array(z.object({
     id: z.string(), churchId: z.string(), residentId: z.string().optional(), propertyId: z.string().optional(),
     channel: z.enum(["all", "visit", "call", "text", "email"]), active: z.boolean(), reason: z.string(),
-    createdAt: z.string().datetime(), correctionReason: z.string().optional(),
+    createdAt: z.string().datetime(), correctionReason: z.string().optional(), correctedAt: z.string().datetime().optional(),
   })).optional(),
   migrationIssues: z.array(z.object({ entityType: z.string(), entityId: z.string(), issue: z.string() })).optional(),
   personNotes: z.array(z.object({
@@ -420,6 +420,7 @@ export const neighborWalkDataSchema = z.object({
     actorId: z.string().min(1),
     createdAt: z.string().datetime(),
     summary: z.string().min(1).max(500),
+    details: z.object({ beforeRole: z.string().optional(), beforeActive: z.boolean().optional(), role: z.string().optional(), active: z.boolean().optional(), reason: z.string().max(500).optional() }).optional(),
   })),
   preferences: z.object({
     activeEventId: z.string(),

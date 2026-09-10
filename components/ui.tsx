@@ -15,8 +15,9 @@ export function Modal({ title, description, wide = false, onClose, children }: {
       previousFocus?.focus();
     };
   }, []);
-  return <dialog ref={dialog} className={`modal-card${wide ? " wide" : ""}`} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onCancel={(event) => { event.preventDefault(); onClose(); }}>
-    <div className="modal-heading"><div><h2 id={titleId}>{title}</h2>{description && <p id={descriptionId}>{description}</p>}</div><button type="button" className="close-button" onClick={onClose} aria-label="Close dialog">×</button></div>{children}
+  const requestClose = () => { if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose(); };
+  return <dialog ref={dialog} className={`modal-card${wide ? " wide" : ""}`} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
+    <div className="modal-heading"><div><h2 id={titleId}>{title}</h2>{description && <p id={descriptionId}>{description}</p>}</div><button type="button" className="close-button" onClick={requestClose} aria-label="Close dialog">×</button></div>{children}
   </dialog>;
 }
 

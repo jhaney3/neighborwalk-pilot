@@ -5,11 +5,15 @@ import { useMemo, useState } from "react";
 import { calendarDate, calendarDaysFromNow, formatCalendarDate } from "../lib/calendar";
 import { dateInputValue, type FollowUp, type FollowUpCompletionInput, type NeighborWalkData } from "../lib/domain";
 import { useAsyncAction } from "../lib/use-async-action";
+import { taskMatchesScope, type FollowUpScope } from "../lib/follow-up-filters";
+import { contactRestricted } from "../lib/contact-restrictions";
 import { EmptyState, Modal, ViewHeading } from "./ui";
 
 type Props = {
   data: NeighborWalkData; canManage: boolean; activeVolunteerId: string;
   initialPersonId?: string | null; onClearPersonFocus: () => void;
+  focusedTaskId?: string; initialScope?: FollowUpScope;
+  onOpenTask?: (id: string) => void;
   onOpenProperty: (id: string) => void; onOpenPerson: (id: string) => void;
   onAddPersonNote: (id: string, kind: "general", body: string) => Promise<unknown>;
   onComplete: (id: string, input: FollowUpCompletionInput) => Promise<unknown>;
@@ -23,15 +27,15 @@ type Filter = "open" | "overdue" | "today" | "upcoming" | "completed" | "cancell
 export function FollowUpsView(props: Props) {
   const { data, canManage, activeVolunteerId, initialPersonId, onClearPersonFocus } = props;
   const [filter, setFilter] = useState<Filter>("open");
-  const [owner, setOwner] = useState("mine");
+  const [owner, setOwner] = useState<FollowUpScope>(props.initialScope ?? "mine");
   const [query, setQuery] = useState("");
   const today = calendarDate(new Date(), data.church.timezone);
   const people = useMemo(() => new Map(data.residents.map((p) => [p.id, p])), [data.residents]);
   const locations = useMemo(() => new Map(data.properties.map((p) => [p.id, p])), [data.properties]);
   const tasks = data.followUps.filter((task) => {
+    if (props.focusedTaskId) return task.id === props.focusedTaskId;
     if (initialPersonId && task.residentId !== initialPersonId) return false;
-    if (!initialPersonId && owner === "mine" && task.assignedVolunteerId !== activeVolunteerId) return false;
-    if (!initialPersonId && owner === "unassigned" && task.assignedVolunteerId) return false;
+    if (!initialPersonId && !taskMatchesScope(task, owner, data, activeVolunteerId)) return false;
     const date = calendarDate(task.dueAt, data.church.timezone);
     if (["completed", "cancelled"].includes(filter)) { if (task.status !== filter) return false; }
     else {
@@ -43,16 +47,17 @@ export function FollowUpsView(props: Props) {
     return [people.get(task.residentId ?? "")?.name, locations.get(task.propertyId ?? "")?.address, task.note]
       .join(" ").toLowerCase().includes(query.trim().toLowerCase());
   }).sort((a, b) => a.dueAt.localeCompare(b.dueAt));
-  const unassigned = data.followUps.filter((t) => t.status === "scheduled" && !t.assignedVolunteerId).length;
+  const unassigned = data.followUps.filter((t) => t.status === "scheduled" && taskMatchesScope(t, "unowned", data, activeVolunteerId)).length;
   return <section className="content-view followups-view">
     <ViewHeading eyebrow="Personal follow-through" title="Follow-ups" description={"A clear next step, a responsible person, and a date. Dates use " + data.church.timezone + "."} />
+    {props.focusedTaskId && <p className="inline-notice">{tasks.length ? "This is the task from your link." : "This task is archived, unavailable to your account, or not yet downloaded."} <button onClick={onClearPersonFocus}>Open my task list</button></p>}
     {initialPersonId && <div className="followup-person-focus"><UserRound size={18} /> Tasks for {people.get(initialPersonId)?.name ?? "this person"}<button onClick={onClearPersonFocus}>Show all</button></div>}
-    {canManage && unassigned > 0 && <p className="inline-notice">{unassigned} open tasks need an owner. <button onClick={() => { setOwner("unassigned"); setFilter("open"); }}>Review unassigned</button></p>}
-    <div className="list-toolbar">
-      <label>Responsibility<select value={owner} onChange={(e) => setOwner(e.target.value)} disabled={Boolean(initialPersonId)}><option value="mine">My tasks</option><option value="all">All I can access</option>{canManage && <option value="unassigned">Unassigned</option>}</select></label>
+    {!props.focusedTaskId && canManage && unassigned > 0 && <p className="inline-notice">{unassigned} open tasks have no active owner. <button onClick={() => { setOwner("unowned"); setFilter("open"); }}>Review unowned</button></p>}
+    {!props.focusedTaskId && <div className="list-toolbar">
+      <label>Responsibility<select value={owner} onChange={(e) => setOwner(e.target.value as FollowUpScope)} disabled={Boolean(initialPersonId)}><option value="mine">My tasks</option><option value="team">My group tasks</option><option value="all">All I can access</option>{canManage && <><option value="unowned">Unowned or inactive owner</option><option value="declined">Declined assignments</option></>}</select></label>
       <label>Status<select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>{(["open", "overdue", "today", "upcoming", "completed", "cancelled"] as const).map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label>
       <label>Search<input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Person, address, or next step" /></label>
-    </div>
+    </div>}
     {tasks.length ? <div className="followup-list">{tasks.map((task) => <TaskCard key={task.id} task={task} {...props} />)}</div>
       : <EmptyState icon={<ClipboardCheck size={26} />} title="Nothing waiting in this view" copy="Try another filter. Plan a next step from a person’s profile or record a requested return visit during outreach." />}
   </section>;
@@ -67,17 +72,20 @@ function TaskCard({ task, ...props }: Props & { task: FollowUp }) {
   const owner = data.volunteers.find((v) => v.id === task.assignedVolunteerId);
   const ownTask = task.assignedVolunteerId === activeVolunteerId;
   const canEdit = canManage || ownTask;
-  const open = task.status === "scheduled";
+  const restricted = contactRestricted(data, task.residentId, task.channel ?? "visit", task.propertyId);
+  const open = task.status === "scheduled" && !restricted;
   const date = calendarDate(task.dueAt, data.church.timezone);
   const overdue = open && date < calendarDate(new Date(), data.church.timezone);
   return <article className={"followup-card" + (overdue ? " overdue" : "")}>
     <div className="followup-main">
       <div className="followup-heading"><h2>{person?.name || location?.address || "Personal next step"}</h2><span className="status-badge">{task.status}</span></div>
       <p>{task.note || "Return visit requested"}</p>
+      {task.status === "scheduled" && restricted && <p role="status" className="inline-notice">Do not act on this task. A recorded restriction applies; the server will cancel prohibited next steps when this device shares the change.</p>}
       <p className="task-meta"><CalendarClock size={16} /> {overdue ? "Overdue · " : ""}{formatCalendarDate(date)} · {task.channel ?? "visit"}</p>
       <p className="task-meta"><UserRound size={16} /> {owner?.name ?? "Needs an owner"}{task.acceptance === "pending" ? " · Awaiting acceptance" : task.acceptance === "declined" ? " · Assignment declined" : ""}</p>
       {task.completionNote && <p><strong>Completed:</strong> {task.completionNote}</p>}
       <div className="care-next-actions">
+        {props.onOpenTask && !props.focusedTaskId && <button className="button quiet small" onClick={() => props.onOpenTask!(task.id)}>Open task</button>}
         {person && <button className="button quiet small" onClick={() => onOpenPerson(person.id)}><UserRound size={16} /> Person &amp; notes</button>}
         {location && <button className="button quiet small" onClick={() => onOpenProperty(location.id)}><MapPin size={16} /> Location</button>}
         {open && ownTask && task.acceptance === "pending" && onAccept && <><button className="button primary small" disabled={action.busy} onClick={() => void action.run(() => onAccept(task.id, "accepted"))}>Accept responsibility</button><button className="button quiet small" disabled={action.busy} onClick={() => void action.run(() => onAccept(task.id, "declined"))}>Decline</button></>}
