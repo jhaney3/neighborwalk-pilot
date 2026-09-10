@@ -11,6 +11,8 @@ export function GuideView({
   guides,
   favoriteGuideId,
   effectiveGuideId,
+  routeGuideId,
+  onSelectGuide,
   activeTeamId,
   activeTeamName,
   teams,
@@ -26,6 +28,8 @@ export function GuideView({
   guides: ConversationGuide[];
   favoriteGuideId?: string;
   effectiveGuideId?: string;
+  routeGuideId?: string;
+  onSelectGuide?: (id: string) => void;
   activeTeamId?: string;
   activeTeamName?: string;
   teams: NeighborWalkData["teams"];
@@ -44,7 +48,7 @@ export function GuideView({
   const [message, setMessage] = useState("");
   const [messageError, setMessageError] = useState(false);
   const [savingTeamId, setSavingTeamId] = useState<string>();
-  const selectedGuide = guides.find((guide) => guide.id === selectedGuideId)
+  const selectedGuide = guides.find((guide) => guide.id === (routeGuideId ?? selectedGuideId))
     ?? guides.find((guide) => guide.id === favoriteGuideId)
     ?? guides[0];
   const steps = selectedGuide?.steps ?? [];
@@ -54,6 +58,7 @@ export function GuideView({
   const churchGuides = guides.filter((guide) => guide.scope === "church" && canUseBuiltInActions(guide));
 
   const chooseGuide = (guideId: string) => {
+    onSelectGuide?.(guideId);
     setSelectedGuideId(guideId);
     setIndex(0);
     setMessage("");

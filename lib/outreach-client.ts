@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { APP_SCHEMA_VERSION, neighborWalkDataSchema, summarizePropertyVisits, type NeighborWalkData } from "./domain";
+import { APP_SCHEMA_VERSION, neighborWalkDataSchema, type NeighborWalkData } from "./domain";
+import { projectOutreachWorkspace } from "./outreach-projection";
+import { groupBy } from "./collections";
 import { createSeedData } from "./seed";
 import { volunteerIdForUser } from "./discipleship";
 import type { getSupabaseBrowserClient } from "./supabase";
@@ -57,13 +59,15 @@ export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Re
     assignedTeamId: string(r, "team_id"), assignedVolunteerId: user(r, "assignee_id"), status: r.status }));
   const members = rows("team_member");
   const activities = rows("task_activity");
+  const membersByTeam = groupBy(members, (row) => row.team_id);
+  const activitiesByTask = groupBy(activities, (row) => row.task_id);
   const events = rows("event").map((r) => ({ ...common(r), name: r.name, startsAt: iso(r, "starts_at"), endsAt: iso(r, "ends_at"), status: r.status,
     timezone: r.timezone, purpose: r.purpose, meetingPoint: r.meeting_point, leaderContact: r.leader_contact, guideId: string(r, "guide_id"), debrief: r.debrief }));
   const activeEventId = events.some((event) => event.id === preferences?.activeEventId) ? preferences!.activeEventId
     : String(events.find((event) => ["active", "ready", "scheduled"].includes(String(event.status)))?.id ?? events[0]?.id ?? "");
   const currentAssignments = assignments.filter((a) => a.eventId === activeEventId && !["cancelled", "declined"].includes(String(a.status)));
   const territories = rows("territory").map((r) => ({ ...common(r), eventId: string(r, "legacy_event_id"), name: r.name, color: r.color,
-    center: [r.longitude, r.latitude], zoom: r.zoom, boundary: r.boundary,
+    center: r.longitude == null ? undefined : [r.longitude, r.latitude], kind: r.kind ?? "map", zoom: r.zoom, boundary: r.boundary,
     assignedTeamId: currentAssignments.find((a) => a.territoryId === r.id)?.assignedTeamId }));
   const now = new Date().toISOString();
   const candidate = neighborWalkDataSchema.parse({
@@ -71,7 +75,7 @@ export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Re
     volunteers: info.volunteers.map((v) => { const r = rowSchema.parse(v); return { ...r, email: string(r, "email") }; }),
     events, territories, assignments,
     teams: rows("team").map((r) => ({ ...common(r), name: r.name, eventId: string(r, "legacy_event_id"), status: r.status,
-      memberIds: members.filter((m) => m.team_id === r.id).map((m) => m.volunteer_id),
+      memberIds: (membersByTeam.get(r.id) ?? []).map((m) => m.volunteer_id),
       territoryIds: currentAssignments.filter((a) => a.assignedTeamId === r.id).map((a) => a.territoryId) })),
     properties: rows("property").map((r) => ({ ...common(r), address: r.address, unit: string(r, "unit"), territoryId: string(r, "territory_id"),
       coordinates: r.longitude == null ? undefined : [r.longitude, r.latitude], buildingGeometry: r.building_geometry ?? undefined, parcel: r.parcel_reference ?? undefined,
@@ -90,7 +94,7 @@ export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Re
       eventId: string(r, "outing_id"), assignedTeamId: string(r, "team_id"), assignedVolunteerId: user(r, "owner_id"), dueAt: r.due_date,
       status: r.status, acceptance: r.acceptance, channel: r.channel, note: string(r, "note"), completionNote: string(r, "completion_note"),
       parentFollowUpId: string(r, "parent_task_id"), createdAt: iso(r, "created_at"), completedAt: iso(r, "completed_at"),
-      history: activities.filter((a) => a.task_id === r.id).map((a) => ({ id: a.id, action: a.action, actorId: a.actor_key,
+      history: (activitiesByTask.get(r.id) ?? []).map((a) => ({ id: a.id, action: a.action, actorId: a.actor_key,
         note: string(a, "note"), dueAt: string(a, "due_date"), createdAt: iso(a, "occurred_at") })).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))) })),
     restrictions: rows("restriction").map((r) => ({ ...common(r), residentId: string(r, "person_id"), propertyId: string(r, "location_id"), channel: r.channel,
       active: r.active, reason: r.reason, createdAt: iso(r, "created_at"), correctionReason: string(r, "correction_reason") })),
@@ -102,11 +106,7 @@ export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Re
         ? preferences!.activeTerritoryId : String(territories[0]?.id ?? "") },
     sync: { mode: "connected", pending: [], commands: [], recordVersions: versions, serverRevision: info.revision, lastSyncedAt: now }, updatedAt: now,
   });
-  const restrictedLocations = new Set(candidate.restrictions?.filter((r) => r.active && ["all", "visit"].includes(r.channel)).map((r) => r.propertyId));
-  // A corrected restriction must not be resurrected from historical outcomes.
-  const summaries = summarizePropertyVisits(candidate.properties, candidate.visits.filter((visit) => visit.outcome !== "do_not_visit"));
-  return { ...candidate, properties: summaries.map((p) => ({ ...p, currentOutcome: restrictedLocations.has(p.id) ? "do_not_visit" : p.currentOutcome,
-    visitCount: candidate.visits.filter((v) => v.propertyId === p.id).length })) };
+  return projectOutreachWorkspace(candidate);
 }
 
 export async function loadOutreachWorkspace(client: Client, churchId: string, preferences?: NeighborWalkData["preferences"]) {

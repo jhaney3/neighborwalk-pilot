@@ -2,15 +2,17 @@ import { createId, neighborWalkDataSchema, type NeighborWalkData, type PendingMu
 import { calendarDate } from "./calendar";
 import { outreachCommandSchema, versionKey, type CommandEntity, type CommandOperation, type QueuedCommand } from "./command-schema";
 import type { StorageScope } from "./storage";
+import { projectOutreachWorkspace } from "./outreach-projection";
 
-const collections = {
+export const commandCollections = {
   event: "events", team: "teams", territory: "territories", assignment: "assignments", property: "properties",
   visit: "visits", resident: "residents", person_note: "personNotes", follow_up: "followUps", restriction: "restrictions",
 } as const;
+const collections = commandCollections;
 type CollectionKind = keyof typeof collections;
-const fields: Record<CollectionKind, string[]> = {
+export const commandFields: Record<CollectionKind, string[]> = {
   event: ["name", "startsAt", "endsAt", "status", "timezone", "purpose", "meetingPoint", "leaderContact", "guideId", "debrief"],
-  team: ["name", "status", "memberIds"], territory: ["name", "color", "center", "zoom", "boundary"],
+  team: ["name", "status", "memberIds"], territory: ["name", "kind", "color", "center", "zoom", "boundary"],
   assignment: ["eventId", "territoryId", "assignedTeamId", "assignedVolunteerId", "status"],
   property: ["territoryId", "address", "unit", "coordinates", "buildingGeometry", "parcel", "source"],
   visit: ["eventId", "territoryId", "propertyId", "residentId", "outcome", "context", "objectiveNote", "recordedAt", "deviceId"],
@@ -19,6 +21,7 @@ const fields: Record<CollectionKind, string[]> = {
   follow_up: ["propertyId", "residentId", "sourceVisitId", "eventId", "assignedTeamId", "assignedVolunteerId", "dueAt", "status", "channel", "acceptance", "note", "completionNote", "parentFollowUpId", "history"],
   restriction: ["residentId", "propertyId", "channel", "active", "reason", "correctionReason"],
 };
+const fields = commandFields;
 type EntityRecord = { id: string } & Record<string, unknown>;
 const records = (data: NeighborWalkData, kind: CollectionKind) => (data[collections[kind]] ?? []) as EntityRecord[];
 const comparable = (kind: CollectionKind, record: EntityRecord) => Object.fromEntries(fields[kind].map((key) => [key, record[key]]));
@@ -79,12 +82,16 @@ export function reconcileOutreachWorkspace(remote: NeighborWalkData, local: Neig
   if (remote.church.id !== local.church.id) throw new Error("Cannot combine different churches.");
   if (local.sync.legacyRecoveryRequired) return { ...local, sync: { ...local.sync, lastError: "Legacy pending work needs a reviewed recovery. Export it before continuing." } };
   const commands = local.sync.commands ?? [];
+  const pendingRestrictedLocations = new Set<string>();
   let result = { ...remote, preferences: { ...local.preferences, activeVolunteerId: remote.preferences.activeVolunteerId },
     sync: { ...remote.sync, commands, pending: commandPending(commands), warnings: local.sync.warnings,
       lastError: commands.find((q) => q.state === "needs_review")?.error, recordVersions: { ...remote.sync.recordVersions } } };
   for (const queued of commands) {
-    if (queued.state === "needs_review") continue;
+    // Later commands may depend on the rejected command. Do not display them
+    // as applied while the first unresolved transaction is held for review.
+    if (queued.state === "needs_review") break;
     for (const op of queued.command.operations) {
+      if (op.entityType === "visit" && op.record?.outcome === "do_not_visit" && typeof op.record.propertyId === "string") pendingRestrictedLocations.add(op.record.propertyId);
       if (op.entityType === "settings") {
         result = { ...result, church: op.record as NeighborWalkData["church"] };
       } else if (op.entityType in collections) {
@@ -97,7 +104,7 @@ export function reconcileOutreachWorkspace(remote: NeighborWalkData, local: Neig
       result.sync.recordVersions[versionKey(op.entityType, op.entityId)] = op.expectedVersion + 1;
     }
   }
-  return neighborWalkDataSchema.parse(result);
+  return projectOutreachWorkspace(neighborWalkDataSchema.parse(result), pendingRestrictedLocations);
 }
 
 /** Serializes local mutations and server receipts against the latest committed
@@ -106,9 +113,9 @@ export class DurableWorkspaceStore {
   private queue: Promise<void> = Promise.resolve();
   constructor(private current: NeighborWalkData, private readonly persist: (data: NeighborWalkData) => Promise<void>, private readonly publish: (data: NeighborWalkData) => void) {}
   get snapshot() { return this.current; }
-  async update(change: (data: NeighborWalkData) => NeighborWalkData): Promise<NeighborWalkData> {
+  async update(change: (data: NeighborWalkData) => NeighborWalkData | Promise<NeighborWalkData>): Promise<NeighborWalkData> {
     const task = this.queue.catch(() => undefined).then(async () => {
-      const next = neighborWalkDataSchema.parse(change(this.current));
+      const next = neighborWalkDataSchema.parse(await change(this.current));
       await this.persist(next);
       this.current = next;
       this.publish(next);

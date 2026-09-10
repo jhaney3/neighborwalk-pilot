@@ -1,8 +1,8 @@
 {
   "name": "NeighborWalk",
   "short_name": "NeighborWalk",
-  "description": "Offline-ready territory, visit, follow-up, and conversation support for church outreach teams.",
-  "start_url": "/",
+  "description": "Turn neighborhood conversations into personal follow-through.",
+  "start_url": "/app/today",
   "id": "/",
   "scope": "/",
   "display": "standalone",
@@ -33,15 +33,15 @@
   ],
   "shortcuts": [
     {
-      "name": "Open walk map",
-      "short_name": "Map",
-      "url": "/?view=map",
+      "name": "Prepare outreach",
+      "short_name": "Outreach",
+      "url": "/app/outreach",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Review follow-ups",
       "short_name": "Follow-ups",
-      "url": "/?view=followups",
+      "url": "/app/followups",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]

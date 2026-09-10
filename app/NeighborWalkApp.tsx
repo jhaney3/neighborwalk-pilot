@@ -26,6 +26,12 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { appHref, appRoute, type AppView } from "../lib/app-routes";
+import { TodayView } from "../components/TodayView";
+import { OutreachView } from "../components/OutreachView";
+import { RecoveryView } from "../components/RecoveryView";
 import { MapCanvas, type MapSearchTarget } from "../components/MapCanvas";
 import { PropertyDrawer } from "../components/PropertyDrawer";
 import { AddressList } from "../components/AddressList";
@@ -48,7 +54,7 @@ import {
 } from "../lib/domain";
 import { useAsyncAction } from "../lib/use-async-action";
 import { useNeighborWalk, type SupabaseUser } from "../lib/use-neighborwalk";
-import { conversationGuideTeam, preferredConversationGuide } from "../lib/conversation-guides";
+import { preferredConversationGuide } from "../lib/conversation-guides";
 import { forwardGeocode, reverseGeocode, type AddressSearchResult } from "../lib/geocoding";
 import { dwellingsForParcel, parcelProgress } from "../lib/parcel-groups";
 import { mergeParcelFeatureCollections, type MapViewport, type ParcelDetails } from "../lib/parcels";
@@ -56,7 +62,7 @@ import { coverageForTerritory, type TerritoryCoverageById } from "../lib/territo
 import { useTerritoryParcels } from "../lib/use-territory-parcels";
 import { useVisibleParcels } from "../lib/use-visible-parcels";
 
-type View = "map" | "people" | "followups" | "guide" | "leader" | "settings";
+type View = AppView;
 type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[]; parcel?: ParcelDetails; legacyPropertyIds?: string[] };
 type ParcelSelection = { parcel: ParcelReference; situsAddress?: string | null; propertyIds: string[] };
 type SavedAddressResult = { propertyId: string; territoryId?: string; label: string; detail: string; coordinates?: Coordinates; color: string };
@@ -84,8 +90,13 @@ const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
 ];
 
 export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: { supabaseUser?: SupabaseUser | null; onSignOut?: () => Promise<void>; onUpdatePassword?: (password: string) => Promise<void> } = {}) {
-  const { data, loading, storageError, online, saving, syncing, workspaceStatus, workspaceMembership, guideLibrary, guideLibraryError, activeTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
-  const [viewOverride, setViewOverride] = useState<View | null>(null);
+  const { data, loading, storageError, online, saving, syncing, workspaceStatus, workspaceMembership, guideLibrary, guideLibraryError, activeTerritory: currentTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
+  const router = useRouter();
+  const pathname = usePathname();
+  const [demoRoute, setDemoRoute] = useState<ReturnType<typeof appRoute>>({ view: "today" });
+  const [outreachDisplay, setOutreachDisplay] = useState<"map" | "list">("list");
+  const route = pathname.startsWith("/app") ? appRoute(pathname) : demoRoute;
+  const activeTerritory = useMemo<Territory>(() => currentTerritory ?? { id: "", churchId: data?.church.id ?? "", name: "No area selected", kind: "list", boundary: [], zoom: 15, color: "#286c59" }, [currentTerritory, data?.church]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [followUpPersonId, setFollowUpPersonId] = useState<string | null>(null);
@@ -132,7 +143,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   const properties = data?.properties ?? EMPTY_PROPERTIES;
   const activeTerritoryId = activeTerritory?.id;
   const territoryProperties = useMemo(() => properties.filter((property) => property.territoryId === activeTerritoryId), [properties, activeTerritoryId]);
-  const territoryParcelResults = useTerritoryParcels(territories);
+  const territoryParcelResults = useTerritoryParcels(route.view === "map" && outreachDisplay === "map" ? territories : EMPTY_TERRITORIES);
   const visibleParcelState = useVisibleParcels(mapViewport);
   const mapParcels = useMemo(() => mergeParcelFeatureCollections(
     activeTerritory ? territoryParcelResults[activeTerritory.id]?.parcels : undefined,
@@ -144,7 +155,6 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
       coverageForTerritory({ territories, properties }, territory.id, territoryParcelResults[territory.id]?.parcels),
     ]));
   }, [properties, territories, territoryParcelResults]);
-  const [outreachDisplay, setOutreachDisplay] = useState<"map" | "list">("map");
   const savedAddressResults = useMemo<SavedAddressResult[]>(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!data || normalizedQuery.length < 2) return [];
@@ -160,8 +170,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
         color: outcomeMeta[property.currentOutcome].color,
       }));
   }, [data, query]);
-  const searchProximityLongitude = activeTerritory?.center[0];
-  const searchProximityLatitude = activeTerritory?.center[1];
+  const searchProximityLongitude = activeTerritory?.center?.[0];
+  const searchProximityLatitude = activeTerritory?.center?.[1];
 
   useEffect(() => {
     const normalizedQuery = query.trim();
@@ -192,33 +202,36 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   if (data && supabaseUser && workspaceStatus === "invitation_required") {
     return <InvitationRequired user={supabaseUser} error={data.sync.lastError} onSignOut={onSignOut} />;
   }
-  if (!data || !activeTerritory || !activeVolunteer) return <AppFailure error={storageError || "The app could not load its field data."} />;
+  if (!data || !activeVolunteer) return <AppFailure error={storageError || "The app could not load its field data."} />;
 
-  const pendingChanges = data.sync.pending.length;
-  const syncStatusLabel = !online
-    ? pendingChanges > 0 ? `${pendingChanges} saved offline` : "Working offline"
-    : data.sync.mode === "device_only"
-      ? "Saved on device"
-      : syncing
-        ? "Syncing changes"
-        : pendingChanges > 0
-          ? "Saving automatically"
-          : "All changes saved";
-
+  const pendingChanges = data.sync.commands?.length ?? data.sync.pending.length;
+  const needsReview = data.sync.legacyRecoveryRequired || data.sync.commands?.some((q) => q.state === "needs_review");
+  const syncStatusLabel = saving ? "Saving on this device…"
+    : needsReview ? "Saved on device · review needed"
+    : data.sync.mode === "device_only" ? "Demo · saved on this device"
+    : !online ? pendingChanges ? `${pendingChanges} saved on device · offline` : "Offline · cached records"
+    : syncing ? "Saved on device · sharing…"
+    : pendingChanges ? `${pendingChanges} saved on device · waiting to share`
+    : data.sync.lastError ? "Refresh needs attention"
+    : data.sync.lastSyncedAt ? "Shared · " + new Date(data.sync.lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Connected";
   const canManage = workspaceMembership ? workspaceMembership.role === "leader" : activeVolunteer.role === "leader";
-  const activeGuideTeam = conversationGuideTeam(data.teams, activeVolunteer.id, activeTerritory.assignedTeamId);
+  const requestedView = route.view;
+  const view = requestedView === "leader" && !canManage ? "today" : requestedView;
+  const fieldOuting = route.fieldOutingId ? data.events.find((e) => e.id === route.fieldOutingId) : undefined;
+  const fieldAssignment = fieldOuting ? data.assignments?.find((a) => a.eventId === fieldOuting.id && a.territoryId === activeTerritory.id && !["declined", "cancelled"].includes(a.status)) : undefined;
+  const activeGuideTeam = fieldAssignment?.assignedTeamId ? data.teams.find((team) => team.id === fieldAssignment.assignedTeamId) : undefined;
   const teamDefaultGuideId = activeGuideTeam ? guideLibrary.teamGuideDefaults[activeGuideTeam.id] : undefined;
-  const favoriteConversationGuide = preferredConversationGuide(guideLibrary.guides, guideLibrary.favoriteGuideId, teamDefaultGuideId);
-  const requestedView = typeof window === "undefined"
-    ? data.preferences.lastView
-    : new URLSearchParams(window.location.search).get("view") ?? data.preferences.lastView;
-  const allowedViews: View[] = ["map", "people", "followups", "guide", "leader", "settings"];
-  const initialView = allowedViews.includes(requestedView as View) ? requestedView as View : "map";
-  const view = viewOverride ?? (initialView === "leader" && !canManage ? "map" : initialView);
+  const favoriteConversationGuide = guideLibrary.guides.find((g) => g.id === fieldOuting?.guideId)
+    ?? preferredConversationGuide(guideLibrary.guides, guideLibrary.favoriteGuideId, teamDefaultGuideId);
+  const propertySelection = view === "map" && route.id ? route.id : selectedPropertyId;
+  const personSelection = view === "people" && route.id ? route.id : selectedPersonId;
+  const showAddressList = !drawMode && (outreachDisplay === "list" || !activeTerritory.center || activeTerritory.kind === "list");
+  // This is only a starting viewport for drawing, never a persisted location.
+  const canvasTerritory: Territory = activeTerritory.center ? activeTerritory : { ...activeTerritory, center: [-98, 39], zoom: 4 };
   const coverage = coverageByTerritory[activeTerritory.id]
     ?? coverageForTerritory(data, activeTerritory.id);
   const coverageLabel = coverage.basis === "residential_parcels" ? "residential covered" : "mapped covered";
-  const selectedProperty = data.properties.find((property) => property.id === selectedPropertyId) ?? null;
+  const selectedProperty = data.properties.find((property) => property.id === propertySelection) ?? null;
   const selectedVisits = selectedProperty ? visitsForProperty(data, selectedProperty.id) : [];
   const selectedFollowUp = selectedProperty ? data.followUps.find((followUp) => followUp.propertyId === selectedProperty.id && followUp.status === "scheduled") : undefined;
   const selectedPropertyDwellings = selectedProperty?.parcel
@@ -236,9 +249,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   const openFollowUps = data.followUps.filter((followUp) => followUp.status === "scheduled").length;
   const activePeople = data.residents.filter((resident) => resident.status === "active").length;
   const editingTerritory = editingTerritoryId ? data.territories.find((territory) => territory.id === editingTerritoryId) : undefined;
-  const territoryEditorEventId = editingTerritory?.eventId ?? data.preferences.activeEventId;
-  const territoryEditorTeams = data.teams.filter((team) => team.eventId === territoryEditorEventId);
-  const territoryEditorTerritories = data.territories.filter((territory) => territory.eventId === territoryEditorEventId);
+  const territoryEditorTerritories = data.territories;
 
   const focusSearchTarget = (coordinates: Coordinates, zoom: number) => {
     searchTargetSequence.current += 1;
@@ -273,8 +284,9 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     setSearchTarget(null);
   };
 
-  const navigate = (next: View) => {
-    setViewOverride(next);
+  const navigate = (next: View, id?: string) => {
+    if (pathname.startsWith("/app")) router.push(appHref(next, id));
+    else setDemoRoute({ view: next, id });
     setSelectedPropertyId(null);
     setGuidedPropertyId(null);
     setSelectedParcel(null);
@@ -283,7 +295,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
       setDrawMode(false);
       setDraftBoundary([]);
     }
-    actions.setPreference("lastView", next);
+    setSelectedPersonId(next === "people" ? id ?? null : null);
   };
 
   const handleAddProperty = async (address: string, unit: string, startGuided: boolean) => {
@@ -307,6 +319,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
 
   const startDrawing = () => {
     navigate("map");
+    setOutreachDisplay("map");
     setSelectedPropertyId(null);
     setAddMode(false);
     setEditingTerritoryId(null);
@@ -342,8 +355,9 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
 
   return (
     <main className="app-shell">
+      {data.sync.mode === "device_only" && <div className="demo-notice" role="status">Sample workspace · fictional data only · nothing here is shared with a church. <Link href="/">Return to website</Link></div>}
       <header className="app-header">
-        <button className="brand" onClick={() => navigate("map")} aria-label="Open NeighborWalk map">
+        <button className="brand" onClick={() => navigate("today")} aria-label="Open NeighborWalk Today">
           <span className="brand-mark" aria-hidden="true"><Navigation size={18} /></span>
           <span><strong>NeighborWalk</strong><small>{data.church.name}</small></span>
         </button>
@@ -357,20 +371,23 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
       <div className="app-body">
         <aside className="desktop-sidebar">
           <div className="sidebar-context">
-            <label><span>Active event</span><div className="select-wrap"><select value={data.preferences.activeEventId} onChange={(event) => actions.setPreference("activeEventId", event.target.value)}>{data.events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select><ChevronDown size={14} /></div></label>
-            <label><span>Territory</span><div className="select-wrap"><select value={activeTerritory.id} onChange={(event) => actions.selectTerritory(event.target.value)}>{data.territories.filter((territory) => territory.eventId === data.preferences.activeEventId).map((territory) => <option key={territory.id} value={territory.id}>{territory.name}</option>)}</select><ChevronDown size={14} /></div></label>
+            <p className="sidebar-church"><strong>{data.church.name}</strong><span>{canManage ? "Church leader" : "Church volunteer"}</span></p>
+            {view === "map" && <label><span>List or territory</span><div className="select-wrap"><select value={activeTerritory.id} onChange={(event) => actions.selectTerritory(event.target.value)}>{data.territories.map((territory) => <option key={territory.id} value={territory.id}>{territory.name}</option>)}</select><ChevronDown size={14} /></div></label>}
           </div>
-          <div className="coverage-card">
+          {view === "map" && <div className="coverage-card">
             <div><strong>{coverage.percent}%</strong><span>{coverageLabel}</span></div>
             <div className="progress-track"><i style={{ width: `${coverage.percent}%` }} /></div>
             <p><span>{coverage.touched} touched</span><span>{coverage.remaining} remaining</span></p>
-          </div>
+          </div>}
           <nav className="sidebar-nav" aria-label="Main sections">
-            <NavButton active={view === "map"} icon={<MapIcon size={18} />} label="Walk map" onClick={() => navigate("map")} />
+            <NavButton active={view === "today"} icon={<Check size={18} />} label="Today" onClick={() => navigate("today")} />
+            <NavButton active={view === "outreach"} icon={<MapPinned size={18} />} label="Outreach" onClick={() => navigate("outreach")} />
+            <NavButton active={view === "map"} icon={<MapIcon size={18} />} label="Locations" onClick={() => navigate("map")} />
             <NavButton active={view === "people"} icon={<Users size={18} />} label="People" count={activePeople} onClick={() => navigate("people")} />
             <NavButton active={view === "followups"} icon={<CalendarClock size={18} />} label="Follow-ups" count={openFollowUps} onClick={() => { setFollowUpPersonId(null); navigate("followups"); }} />
             <NavButton active={view === "guide"} icon={<BookOpenText size={18} />} label="Conversation guide" onClick={() => navigate("guide")} />
             {canManage && <NavButton active={view === "leader"} icon={<BarChart3 size={18} />} label="Leader view" onClick={() => navigate("leader")} />}
+            <NavButton active={view === "recovery"} icon={<CloudOff size={18} />} label="Sync & recovery" onClick={() => navigate("recovery")} />
             <NavButton active={view === "settings"} icon={<Settings2 size={18} />} label="Settings" onClick={() => navigate("settings")} />
           </nav>
           <div className="sidebar-footer">
@@ -380,10 +397,15 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
         </aside>
 
         <section className="workspace">
+          {view === "recovery" && <RecoveryView data={data} online={online} onPreview={actions.previewRecovery} onResolve={actions.resolveRecovery} onExport={actions.downloadDeviceRecovery} onArchives={actions.listDeviceArchives} onDownloadArchive={actions.downloadDeviceArchive} onSync={actions.syncNow} />}
+          {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={() => { setFollowUpPersonId(null); navigate("followups"); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={() => navigate("people")} />}
+          {view === "outreach" && <OutreachView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onSelect={(id) => navigate("outreach", id)} onStart={async (id, territoryId) => { await actions.setPreference("activeEventId", id); if (territoryId) await actions.selectTerritory(territoryId); if (pathname.startsWith("/app")) router.push(appHref("outreach", id) + "/field"); else setDemoRoute({ view: "map", fieldOutingId: id }); }} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onAddList={(name) => actions.addTerritory({ name, kind: "list", boundary: [], color: "#286c59" })} onOpenGuide={(id) => navigate("guide", id)} />}
+          {view === "more" && <section className="content-view"><h1>More</h1><p>Resources and tools for your church team.</p><div className="more-grid"><button onClick={() => { setFollowUpPersonId(null); navigate("followups"); }}><CalendarClock /> Follow-ups <strong>{openFollowUps} open</strong></button><button onClick={() => navigate("guide")}><BookOpenText /> Conversation guides</button><button onClick={() => navigate("map")}><MapIcon /> Locations &amp; address lists</button>{canManage && <button onClick={() => navigate("leader")}><Users /> Groups &amp; members</button>}<button onClick={() => navigate("settings")}><Settings2 /> Settings, data &amp; recovery</button><button onClick={() => navigate("recovery")}><CloudOff /> Sync &amp; recovery</button><Link href="/help">Help &amp; field guide</Link><Link href="/trust">Privacy &amp; trust</Link></div></section>}
           {view === "map" && (
             <section className="map-view">
-              <div className="outreach-display-switch" aria-label="Outreach display"><button aria-pressed={outreachDisplay === "list"} onClick={() => setOutreachDisplay("list")}>Address list</button><button aria-pressed={outreachDisplay === "map"} onClick={() => setOutreachDisplay("map")}>Map</button></div>
-              {outreachDisplay === "list" ? <AddressList data={data} onOpen={setSelectedPropertyId} onAdd={actions.addProperty} /> : <>
+              {fieldOuting && <div className="field-context"><button className="button quiet" onClick={() => navigate("outreach", fieldOuting.id)}>← {fieldOuting.name}</button><span>Encounters here are linked to this outing.</span></div>}
+              <div className="outreach-display-switch" aria-label="Outreach display"><button aria-pressed={showAddressList} onClick={() => setOutreachDisplay("list")}>Address list</button><button disabled={!activeTerritory.center || activeTerritory.kind === "list"} aria-pressed={!showAddressList} onClick={() => setOutreachDisplay("map")}>Map</button></div>
+              {showAddressList ? <AddressList data={data} onOpen={(id) => { if (fieldOuting) setSelectedPropertyId(id); else navigate("map", id); }} onAdd={actions.addProperty} /> : <>
               <div className="mobile-context-row">
                 <div><p className="eyebrow">{data.events.find((event) => event.id === data.preferences.activeEventId)?.name}</p><button onClick={() => setTerritoryPickerOpen(true)}><strong>{activeTerritory.name}</strong><ChevronDown size={15} /></button></div>
                 <div><strong>{coverage.percent}%</strong><span>{coverageLabel}</span></div>
@@ -447,7 +469,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                 </div>
               </div>
               <div className="map-stage">
-                <MapCanvas territory={activeTerritory} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchTarget={searchTarget} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} parcels={mapParcels} onViewportChange={setMapViewport} onSelectProperty={(id) => { setSelectedPropertyId(id); setGuidedPropertyId(null); setSelectedParcel(null); setAddMode(false); }} onAddIntent={async (intent) => {
+                <MapCanvas territory={canvasTerritory} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchTarget={searchTarget} addMode={addMode} drawMode={drawMode} drawModeLabel={editingTerritoryId ? "Tap the corners of the replacement boundary" : "Tap at least 3 corners"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} parcels={mapParcels} onViewportChange={setMapViewport} onSelectProperty={(id) => { if (!fieldOuting) navigate("map", id); setSelectedPropertyId(id); setGuidedPropertyId(null); setSelectedParcel(null); setAddMode(false); }} onAddIntent={async (intent) => {
                   if (intent.parcel) {
                     const linkedDwellings = dwellingsForParcel(territoryProperties, intent.parcel);
                     const legacyPropertyIds = intent.legacyPropertyIds ?? [];
@@ -490,45 +512,47 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                 {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => points.slice(0, -1))}><Undo2 size={15} /> Undo</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={draftBoundary.length < 3} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
               </div>
               </>}
-              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={teamDefaultGuideId && activeGuideTeam ? `${activeGuideTeam.name} default` : "Your favorite"} canManage={canManage} activeVolunteerId={activeVolunteer.id} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={async (input) => { await actions.recordVisit(input); setToast(`${outcomeMeta[input.outcome].label} saved on this device`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
+              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={fieldOuting?.guideId ? "Outing guide" : teamDefaultGuideId && activeGuideTeam ? `${activeGuideTeam.name} default` : "Your favorite"} canManage={canManage} activeVolunteerId={activeVolunteer.id} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { if (route.id && !fieldOuting) navigate("map"); setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={async (input) => { await actions.recordVisit({ ...input, eventId: fieldOuting?.id }); setToast(`${outcomeMeta[input.outcome].label} saved on this device`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
             </section>
           )}
-          {view === "followups" && <FollowUpsView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialPersonId={followUpPersonId} onClearPersonFocus={() => setFollowUpPersonId(null)} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); }} onOpenPerson={(residentId) => { setSelectedPersonId(residentId); navigate("people"); }} onAddPersonNote={actions.addPersonNote} onComplete={async (id, input) => { await actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next task scheduled" : "Follow-up completed"); }} onReschedule={async (id, date, note) => { await actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={async (id, note) => { await actions.cancelFollowUp(id, note); setToast("Follow-up cancelled on this device"); }} onAssign={actions.assignFollowUp} onAccept={actions.acceptFollowUp} />}
-          {view === "people" && <PeopleView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialSelectedResidentId={selectedPersonId} onOpenProperty={(propertyId) => { navigate("map"); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); }} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} onAddPersonNote={actions.addPersonNote} onDeletePersonNote={actions.deletePersonNote} onAddPersonFollowUp={actions.addPersonFollowUp} onHandoff={actions.handoffPerson} onOpenFollowUps={(residentId) => { setFollowUpPersonId(residentId); navigate("followups"); }} />}
-          {view === "guide" && <GuideView guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} effectiveGuideId={favoriteConversationGuide?.id} activeTeamId={activeGuideTeam?.id} activeTeamName={activeGuideTeam?.name} teams={data.teams} teamGuideDefaults={guideLibrary.teamGuideDefaults} canManage={canManage} allowBuiltInManagement={data.sync.mode === "device_only"} libraryError={guideLibraryError} onSave={actions.saveConversationGuide} onDelete={actions.deleteConversationGuide} onSetFavorite={actions.setFavoriteConversationGuide} onSetTeamDefault={actions.setTeamConversationGuide} />}
+          {view === "followups" && <FollowUpsView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialPersonId={route.id ?? followUpPersonId} onClearPersonFocus={() => { setFollowUpPersonId(null); navigate("followups"); }} onOpenProperty={(propertyId) => { navigate("map", propertyId); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); }} onOpenPerson={(residentId) => navigate("people", residentId)} onAddPersonNote={actions.addPersonNote} onComplete={async (id, input) => { await actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next task scheduled" : "Follow-up completed"); }} onReschedule={async (id, date, note) => { await actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); }} onCancel={async (id, note) => { await actions.cancelFollowUp(id, note); setToast("Follow-up cancelled on this device"); }} onAssign={actions.assignFollowUp} onAccept={actions.acceptFollowUp} />}
+          {view === "people" && <PeopleView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} initialSelectedResidentId={personSelection} onSelectResident={(id) => navigate("people", id)} onOpenProperty={(propertyId) => { navigate("map", propertyId); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); const property = data.properties.find((item) => item.id === propertyId); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); }} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} onAddPersonNote={actions.addPersonNote} onDeletePersonNote={actions.deletePersonNote} onAddPersonFollowUp={actions.addPersonFollowUp} onHandoff={actions.handoffPerson} onOpenFollowUps={(residentId) => { setFollowUpPersonId(residentId); navigate("followups", residentId); }} />}
+          {view === "guide" && <GuideView key={route.id ?? "guides"} routeGuideId={route.id} onSelectGuide={(id) => navigate("guide", id)} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} effectiveGuideId={favoriteConversationGuide?.id} activeTeamId={activeGuideTeam?.id} activeTeamName={activeGuideTeam?.name} teams={data.teams} teamGuideDefaults={guideLibrary.teamGuideDefaults} canManage={canManage} allowBuiltInManagement={data.sync.mode === "device_only"} libraryError={guideLibraryError} onSave={actions.saveConversationGuide} onDelete={actions.deleteConversationGuide} onSetFavorite={actions.setFavoriteConversationGuide} onSetTeamDefault={actions.setTeamConversationGuide} />}
           {view === "leader" && canManage && <LeaderView data={data} coverageByTerritory={coverageByTerritory} membership={workspaceMembership} activeTerritory={activeTerritory} onSelectTerritory={(id) => { actions.selectTerritory(id); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} />}
-          {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} accountEmail={supabaseUser?.email} onSignOut={onSignOut} onUpdatePassword={onUpdatePassword} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onSetFavoriteGuide={actions.setFavoriteConversationGuide} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onClearOutreach={actions.clearOutreachData} onSync={actions.syncNow} />}
+          {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} accountEmail={supabaseUser?.email} onSignOut={onSignOut ? async () => {
+            if (saving) throw new Error("Wait for device saving to finish before signing out.");
+            if ((pendingChanges || data.sync.legacyRecoveryRequired) && !window.confirm("This device has work that is not shared. It will remain here for this same account; another account cannot recover it. Export a recovery copy first if needed. Sign out anyway?")) return;
+            await onSignOut();
+          } : undefined} onUpdatePassword={onUpdatePassword} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onSetFavoriteGuide={actions.setFavoriteConversationGuide} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onClearOutreach={actions.clearOutreachData} onSync={actions.syncNow} />}
         </section>
       </div>
 
       <nav className="mobile-nav" aria-label="Main navigation">
-        <MobileNav active={view === "map"} icon={<MapIcon size={20} />} label="Map" onClick={() => navigate("map")} />
+        <MobileNav active={view === "today"} icon={<Check size={20} />} label="Today" onClick={() => navigate("today")} />
+        <MobileNav active={view === "outreach" || Boolean(fieldOuting)} icon={<MapPinned size={20} />} label="Outreach" onClick={() => navigate("outreach")} />
         <MobileNav active={view === "people"} icon={<Users size={20} />} label="People" count={activePeople} onClick={() => navigate("people")} />
-        <MobileNav active={view === "followups"} icon={<CalendarClock size={20} />} label="Follow-ups" count={openFollowUps} onClick={() => { setFollowUpPersonId(null); navigate("followups"); }} />
-        <MobileNav active={view === "guide"} icon={<BookOpenText size={20} />} label="Guide" onClick={() => navigate("guide")} />
-        {canManage ? <MobileNav active={view === "leader"} icon={<BarChart3 size={20} />} label="Leader" onClick={() => navigate("leader")} /> : <MobileNav active={view === "settings"} icon={<Settings2 size={20} />} label="Settings" onClick={() => navigate("settings")} />}
+        <MobileNav active={["more", "guide", "leader", "settings", "followups", "map", "recovery"].includes(view) && !fieldOuting} icon={<Settings2 size={20} />} label="More" onClick={() => navigate("more")} />
       </nav>
 
       {pendingAdd && <AddPropertyModal intent={pendingAdd} existingDwellingCount={pendingParcelDwellings.length} guideName={favoriteConversationGuide?.title} guideAvailable={Boolean(favoriteConversationGuide?.steps.length)} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
       {selectedParcel && <ParcelSummaryModal selection={selectedParcel} dwellings={selectedParcelDwellings} onClose={() => setSelectedParcel(null)} onOpenDwelling={(propertyId) => { setSelectedParcel(null); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); }} onAddDwelling={beginAddingDwelling} />}
       {territoryPickerOpen && <TerritoryPickerModal data={data} coverageByTerritory={coverageByTerritory} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onEdit={openTerritoryEditor} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
-      {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} territories={territoryEditorTerritories} teams={territoryEditorTeams} boundaryChanged={draftBoundary.length >= 3} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onDelete={editingTerritory ? (destinationTerritoryId) => {
+      {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} territories={territoryEditorTerritories} boundaryChanged={draftBoundary.length >= 3} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onDelete={editingTerritory ? async (destinationTerritoryId) => {
         const destination = data.territories.find((territory) => territory.id === destinationTerritoryId);
-        actions.deleteTerritory(editingTerritory.id, destinationTerritoryId);
+        await actions.deleteTerritory(editingTerritory.id, destinationTerritoryId);
         setSelectedPropertyId(null); setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false); setToast(destination ? `Territory deleted; records moved to ${destination.name}` : "Territory deleted");
-      } : undefined} onSave={(name, color, assignedTeamId) => {
+      } : undefined} onSave={async (name, color) => {
         if (editingTerritory) {
           const replacementBoundary = draftBoundary.length >= 3 ? draftBoundary : undefined;
-          actions.updateTerritory(editingTerritory.id, {
+          await actions.updateTerritory(editingTerritory.id, {
             name,
             color,
-            assignedTeamId: assignedTeamId || undefined,
             boundary: replacementBoundary,
             center: replacementBoundary ? centerForBoundary(replacementBoundary) : undefined,
           });
           setToast("Territory updated");
         } else if (draftBoundary.length >= 3) {
-          actions.addTerritory({ name, color, assignedTeamId: assignedTeamId || undefined, boundary: draftBoundary, center: centerForBoundary(draftBoundary) });
+          await actions.addTerritory({ name, color, boundary: draftBoundary, center: centerForBoundary(draftBoundary) });
           setToast("Territory created");
         }
         setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false);
@@ -625,19 +649,18 @@ function ParcelSummaryModal({ selection, dwellings, onClose, onOpenDwelling, onA
   );
 }
 
-function TerritoryModal({ territory, territories, teams, boundaryChanged, onClose, onRedraw, onDelete, onSave }: {
+function TerritoryModal({ territory, territories, boundaryChanged, onClose, onRedraw, onDelete, onSave }: {
   territory?: Territory;
   territories: NeighborWalkData["territories"];
-  teams: NeighborWalkData["teams"];
   boundaryChanged: boolean;
   onClose: () => void;
   onRedraw?: () => void;
-  onDelete?: (destinationTerritoryId: string) => void;
-  onSave: (name: string, color: string, assignedTeamId: string) => void;
+  onDelete?: (destinationTerritoryId: string) => Promise<unknown>;
+  onSave: (name: string, color: string) => Promise<unknown>;
 }) {
   const [name, setName] = useState(territory?.name ?? "");
   const [color, setColor] = useState(territory?.color ?? "#286c59");
-  const [assignedTeamId, setAssignedTeamId] = useState(territory?.assignedTeamId ?? "");
+  const action = useAsyncAction();
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const editing = Boolean(territory);
@@ -649,30 +672,31 @@ function TerritoryModal({ territory, territories, teams, boundaryChanged, onClos
   return (
     <Modal
       title={editing ? "Edit territory" : "Finish this territory"}
-      description={editing ? "Change how this territory appears and who is assigned to it." : "Name the boundary and choose the team that will cover it."}
-      onClose={onClose}
+      description={editing ? "Change this reusable area’s name or boundary. Assign responsibility within an outing." : "Name this reusable boundary. Assign responsibility when preparing an outing."}
+      onClose={action.busy ? () => undefined : onClose}
     >
       <div className="form-stack">
         <label className="form-field"><span>Territory name</span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: Oakwood North" /></label>
         <div className="territory-form-row">
           <label className="form-field"><span>Map color</span><input className="territory-color-input" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
-          <label className="form-field"><span>Assigned team</span><select value={assignedTeamId} onChange={(event) => setAssignedTeamId(event.target.value)}><option value="">Unassigned</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+          <p>Group and volunteer assignments belong to individual outings.</p>
         </div>
         <div className={`territory-boundary-summary${boundaryChanged ? " changed" : ""}`}>
           <span><MapPinned size={18} /></span>
           <div><strong>{boundaryPoints}</strong><small>Existing locations and visit history stay attached to this territory.</small></div>
           {editing && onRedraw && <button className="button quiet small" onClick={onRedraw}><Edit3 size={14} /> Redraw</button>}
         </div>
-        {editing && deleting && <div className="territory-delete-confirm"><strong>Delete this territory?</strong><p>Nothing recorded here will be deleted. Locations and visit history will move to the territory you choose; follow-ups and people stay with their locations.</p><label className="form-field"><span>Move records to</span><select value={deleteDestinationId} onChange={(event) => setDeleteDestinationId(event.target.value)}>{deleteTargets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="form-field"><span>Type <strong>{territory?.name}</strong> to confirm</span><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} aria-label="Territory name confirmation" /></label></div>}
+        {editing && deleting && <div className="territory-delete-confirm"><strong>Delete this territory?</strong><p>Nothing recorded here will be deleted. Locations will move to the area you choose. Historical encounters keep their original area; follow-ups and people stay with their locations.</p><label className="form-field"><span>Move records to</span><select value={deleteDestinationId} onChange={(event) => setDeleteDestinationId(event.target.value)}>{deleteTargets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="form-field"><span>Type <strong>{territory?.name}</strong> to confirm</span><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} aria-label="Territory name confirmation" /></label></div>}
       </div>
-      <div className="modal-actions split">{editing && onDelete ? <button className="button danger" disabled={!canDelete || (deleting && (deleteConfirmation !== territory?.name || !deleteDestinationId))} onClick={() => deleting ? onDelete(deleteDestinationId) : setDeleting(true)}>{deleting ? "Delete and move records" : "Delete territory"}</button> : <span />}<div><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => onSave(name, color, assignedTeamId)} disabled={name.trim().length < 3}><Check size={15} /> {editing ? "Save changes" : "Create territory"}</button></div></div>
-      {editing && !canDelete && <p className="modal-footnote">Create another territory in this event before deleting its last one.</p>}
+      <div className="modal-actions split">{editing && onDelete ? <button className="button danger" disabled={action.busy || !canDelete || (deleting && (deleteConfirmation !== territory?.name || !deleteDestinationId))} onClick={() => deleting ? void action.run(() => onDelete(deleteDestinationId)) : setDeleting(true)}>{deleting ? "Delete and move records" : "Delete territory"}</button> : <span />}<div><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" onClick={() => void action.run(() => onSave(name, color))} disabled={action.busy || name.trim().length < 3}><Check size={15} /> {editing ? "Save changes" : "Create territory"}</button></div></div>
+      {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+      {editing && !canDelete && <p className="modal-footnote">Create another list or territory before moving records out of this one.</p>}
     </Modal>
   );
 }
 
 function TerritoryPickerModal({ data, coverageByTerritory, activeTerritoryId, canManage, onClose, onSelect, onEdit, onDraw }: { data: NeighborWalkData; coverageByTerritory: TerritoryCoverageById; activeTerritoryId: string; canManage: boolean; onClose: () => void; onSelect: (territoryId: string) => void; onEdit: (territoryId: string) => void; onDraw: () => void }) {
-  const territories = data.territories.filter((territory) => territory.eventId === data.preferences.activeEventId);
+  const territories = data.territories;
   return <Modal title="Choose a territory" description="Switch the map and coverage view for this outreach event." onClose={onClose}><div className="territory-picker-list">{territories.map((territory) => { const coverage = coverageByTerritory[territory.id] ?? coverageForTerritory(data, territory.id); return <div key={territory.id} className={`territory-picker-row${territory.id === activeTerritoryId ? " active" : ""}`}><i style={{ background: territory.color }} /><button className="territory-picker-select" onClick={() => onSelect(territory.id)}><span><strong>{territory.name}</strong><small>{coverage.percent}% covered · {coverage.remaining} residential remaining</small></span>{territory.id === activeTerritoryId && <Check size={16} />}</button>{canManage && <button className="territory-picker-edit" onClick={() => onEdit(territory.id)} aria-label={`Edit ${territory.name}`}><Edit3 size={16} /></button>}</div>; })}</div><div className="modal-actions"><button className="button quiet" onClick={onClose}>Close</button>{canManage && <button className="button primary" onClick={onDraw}><MapPinned size={15} /> Draw a new territory</button>}</div></Modal>;
 }
 
@@ -685,7 +709,7 @@ function MobileNav({ active, icon, label, count, onClick }: { active: boolean; i
 }
 
 function AppLoading() {
-  return <main className="app-loading" role="status"><div className="loading-mark"><Navigation size={23} /></div><strong>Preparing your territory</strong><span>Loading offline records and the neighborhood map…</span></main>;
+  return <main className="app-loading" role="status"><div className="loading-mark"><Navigation size={23} /></div><strong>Preparing your workspace</strong><span>Loading your church workspace and saved records…</span></main>;
 }
 
 function AppFailure({ error }: { error: string }) {

@@ -1,14 +1,19 @@
 "use client";
 
 import { Check, KeyRound, Mail, MapPinned, Navigation, ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
 import { NeighborWalkApp } from "../app/NeighborWalkApp";
 import { authErrorMessage, validAuthEmail } from "../lib/auth";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
 import { isProductionApp } from "../lib/environment";
+import { authenticatedAppPath } from "../lib/auth-navigation";
 
 export function NeighborWalkRoot() {
+  const router = useRouter();
+  const pathname = usePathname();
   const configured = isSupabaseConfigured();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(configured);
@@ -16,6 +21,16 @@ export function NeighborWalkRoot() {
     if (typeof window === "undefined") return false;
     return new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
   });
+  const userId = session?.user.id;
+  const email = session?.user.email ?? "";
+  const fullName = session?.user.user_metadata?.full_name;
+  const displayName = session?.user.user_metadata?.name;
+  const name = typeof fullName === "string" ? fullName : typeof displayName === "string" ? displayName : undefined;
+  const workspaceUser = useMemo(() => userId ? { id: userId, email, name } : null, [userId, email, name]);
+
+  useEffect(() => {
+    if (!loading && session && !passwordRecovery && pathname === "/login") router.replace(authenticatedAppPath(window.location.search));
+  }, [loading, session, passwordRecovery, pathname, router]);
 
   useEffect(() => {
     if (!configured) return;
@@ -49,34 +64,27 @@ export function NeighborWalkRoot() {
     if (error) throw new Error(authErrorMessage(error));
   };
 
-  if (!configured) return <NeighborWalkApp />;
+  if (!configured) return <main className="app-loading"><h1>Workspace connection unavailable</h1><p>Ask the operator to finish connecting this deployment. Real church records will not be replaced with sample data.</p><Link className="button quiet" href="/demo">Explore the separate sample workspace</Link></main>;
   if (loading) return <ConnectionLoading />;
   if (!session) return <SignInScreen />;
   if (passwordRecovery) return <PasswordRecovery email={session.user.email ?? "your account"} onSave={async (password) => { await updatePassword(password); setPasswordRecovery(false); }} />;
+  if (pathname === "/login") return <ConnectionLoading />;
 
   return (
     <NeighborWalkApp
       key={session.user.id}
-      supabaseUser={{
-        id: session.user.id,
-        email: session.user.email ?? "",
-        name: typeof session.user.user_metadata?.full_name === "string"
-          ? session.user.user_metadata.full_name
-          : typeof session.user.user_metadata?.name === "string"
-            ? session.user.user_metadata.name
-            : undefined,
-      }}
+      supabaseUser={workspaceUser}
       onUpdatePassword={updatePassword}
       onSignOut={async () => {
         const client = getSupabaseBrowserClient();
-        if (client) await client.auth.signOut();
+        if (client) { const { error } = await client.auth.signOut(); if (error) throw new Error(authErrorMessage(error)); }
       }}
     />
   );
 }
 
 function authRedirectUrl() {
-  const url = new URL(window.location.origin);
+  const url = new URL("/login", window.location.origin);
   const invitation = new URL(window.location.href).searchParams.get("invite");
   if (invitation) url.searchParams.set("invite", invitation);
   return url.toString();
@@ -190,7 +198,7 @@ function SignInScreen() {
       <section className="auth-card" aria-labelledby="signin-title">
         <div className="auth-route" aria-hidden="true"><span><Navigation size={18} /></span><i /><span><MapPinned size={18} /></span></div>
         <p className="eyebrow">NeighborWalk church workspace</p>
-        <h1 id="signin-title">Keep every doorstep accounted for.</h1>
+        <h1 id="signin-title">Pick up where care left off.</h1>
         <p className="auth-intro">{isProductionApp ? "Google is the quickest way in. Password sign-in is also available and does not send an email each time." : "Use your test account here. This workspace has its own data and sign-in."}</p>
         <div className="auth-form">
           {isProductionApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or use your password</span></div></>}
@@ -207,7 +215,8 @@ function SignInScreen() {
           {error && <p className="auth-error" role="alert">{error}</p>}
           <details className="auth-email-fallback"><summary>Use a one-time email link instead</summary><p>This fallback sends an email and may be unavailable when the project email limit is reached.</p><button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}><Mail size={16} />{action === "link" ? "Sending…" : "Send one-time link"}</button></details>
         </div>
-        <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are private to their owner unless shared. Church leaders can oversee the full workspace.</span></div>
+        <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are visible to their owner, church leaders and explicitly shared teammates. Pending handoff recipients and some historical creators may also have access, as shown on the profile.</span></div>
+        <p><Link href="/help">Sign-in help</Link> · <Link href="/">About NeighborWalk</Link> · <Link href="/privacy">Privacy</Link></p>
       </section>
     </main>
   );

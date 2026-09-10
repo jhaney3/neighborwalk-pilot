@@ -83,9 +83,38 @@ do $$ declare command jsonb; first_result jsonb; visit jsonb; begin
   ]'));
   if (select property_id from public.discipleship_people where id='address-optional') is not null then raise exception 'Address-free person required fabricated location'; end if;
 end $$;
+do $$ declare event_record jsonb; begin
+  event_record := '{"name":"Fictional reusable outing","startsAt":"2026-09-12T14:00:00Z","endsAt":"2026-09-12T16:00:00Z","timezone":"America/Chicago","status":"draft"}';
+  perform public.outreach_apply_command(pg_temp.command('plan-outing',jsonb_build_array(
+    jsonb_build_object('entityType','event','entityId','workflow-outing','operation','upsert','expectedVersion',0,'record',event_record),
+    '{"entityType":"territory","entityId":"list-only","operation":"upsert","expectedVersion":0,"record":{"name":"Fictional address list","kind":"list","boundary":[],"color":"#286c59"}}'::jsonb,
+    '{"entityType":"assignment","entityId":"assigned-area","operation":"upsert","expectedVersion":0,"record":{"eventId":"workflow-outing","territoryId":"list-only","assignedVolunteerId":"volunteer_10000000000040008000000000000013","status":"assigned"}}'::jsonb
+  )));
+  if not exists(select 1 from public.outreach_territories where id='list-only' and kind='list' and longitude is null and latitude is null and boundary='[]') then
+    raise exception 'List fabricated map geometry'; end if;
+  perform pg_temp.expect_denied(pg_temp.command('premature-ready',jsonb_build_array(jsonb_build_object(
+    'entityType','event','entityId','workflow-outing','operation','upsert','expectedVersion',1,'record',event_record || '{"status":"ready"}'
+  ))),'22023');
+  event_record := event_record || '{"status":"ready","purpose":"Listen and follow through","meetingPoint":"Fictional welcome table","leaderContact":"Leader at welcome table"}';
+  perform public.outreach_apply_command(pg_temp.command('prepared-ready',jsonb_build_array(jsonb_build_object(
+    'entityType','event','entityId','workflow-outing','operation','upsert','expectedVersion',1,'record',event_record
+  ))));
+  perform pg_temp.expect_denied(pg_temp.command('duplicate-assignment','[
+    {"entityType":"assignment","entityId":"overlap","operation":"upsert","expectedVersion":0,"record":{"eventId":"workflow-outing","territoryId":"list-only","assignedVolunteerId":"volunteer_10000000000040008000000000000011","status":"assigned"}}
+  ]'),'23505');
+  perform pg_temp.expect_denied(pg_temp.command('invalid-boundary','[
+    {"entityType":"territory","entityId":"bad-boundary","operation":"upsert","expectedVersion":0,"record":{"name":"Invalid boundary","kind":"map","center":[0,0],"color":"#286c59","boundary":[[null,0],[1,1],[2,2]]}}
+  ]'),'22023');
+end $$;
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000013","role":"authenticated","is_anonymous":false}',true);
 do $$ begin
   perform pg_temp.expect_denied(pg_temp.command('volunteer-outing','[{"entityType":"event","entityId":"unauthorized","operation":"upsert","expectedVersion":0,"record":{}}]'),'42501');
+  perform public.outreach_apply_command(pg_temp.command('accept-own-area','[
+    {"entityType":"assignment","entityId":"assigned-area","operation":"upsert","expectedVersion":1,"record":{"eventId":"workflow-outing","territoryId":"list-only","assignedVolunteerId":"volunteer_10000000000040008000000000000013","status":"accepted"}}
+  ]'));
+  perform pg_temp.expect_denied(pg_temp.command('change-own-area-owner','[
+    {"entityType":"assignment","entityId":"assigned-area","operation":"upsert","expectedVersion":2,"record":{"eventId":"workflow-outing","territoryId":"list-only","assignedVolunteerId":"volunteer_10000000000040008000000000000011","status":"accepted"}}
+  ]'),'42501');
   perform pg_temp.expect_denied(pg_temp.command('volunteer-person','[{"entityType":"resident","entityId":"address-optional","operation":"delete","expectedVersion":1}]'),'42501');
   perform pg_temp.expect_denied(pg_temp.command('volunteer-note','[{"entityType":"person_note","entityId":"unauthorized-note","operation":"upsert","expectedVersion":0,"record":{"residentId":"address-optional","kind":"general","body":"Must not save"}}]'),'42501');
   if exists(select 1 from public.discipleship_people where id='address-optional') then raise exception 'Unshared person leaked to volunteer'; end if;

@@ -1,6 +1,7 @@
 import { openDB, type IDBPDatabase } from "idb";
 import {
   APP_SCHEMA_VERSION,
+  createId,
   enforceRetention,
   neighborWalkDataSchema,
   type NeighborWalkData,
@@ -204,16 +205,17 @@ async function parseStoredData(stored: unknown, key: string): Promise<NeighborWa
     const archiveKey = `pre-upgrade:${key}:${stored.schemaVersion}`;
     if (await database.get(STORE, archiveKey) === undefined) await database.put(STORE, stored, archiveKey);
   }
-  const migratedCandidate = migrateNeighborWalkData(stored);
-  const parsed = neighborWalkDataSchema.safeParse(migratedCandidate);
-  if (!parsed.success) {
+  try {
+    const migratedCandidate = migrateNeighborWalkData(stored);
+    const parsed = neighborWalkDataSchema.parse(migratedCandidate);
+    // Retention is an explicit reviewed operation, not a side effect of opening
+    // a device. This also preserves all queued work during an upgrade.
+    return parsed;
+  } catch {
     const backupKey = `quarantine:${key}:${Date.now()}`;
     await database.put(STORE, stored, backupKey);
     throw new StorageRecoveryError(backupKey);
   }
-  // Retention is an explicit reviewed operation, not a side effect of opening
-  // a device. This also preserves all queued work during an upgrade.
-  return parsed.data;
 }
 
 export async function loadNeighborWalkData(): Promise<NeighborWalkData> {
@@ -259,6 +261,42 @@ export async function saveNeighborWalkData(data: NeighborWalkData, scope?: Stora
   if (scope && scope.churchId !== parsed.church.id) throw new Error("Local records belong to a different church. Nothing was overwritten.");
   const database = await getDatabase();
   await database.put(STORE, parsed, scope ? scopedStorageKey(scope) : DATA_KEY);
+}
+
+export async function archiveWorkspaceRecovery(data: NeighborWalkData, scope: StorageScope, reason: string) {
+  if (data.church.id !== scope.churchId) throw new Error("Recovery archive belongs to a different church.");
+  const database = await getDatabase();
+  const key = `recovery:${scopedStorageKey(scope)}:${createId("archive")}`;
+  await database.put(STORE, { data, reason, createdAt: new Date().toISOString(), scope }, key);
+  return key;
+}
+
+export async function recoveryArchives(scope: StorageScope): Promise<{ key: string; reason: string; createdAt: string }[]> {
+  const database = await getDatabase();
+  const keys = await database.getAllKeys(STORE);
+  const scopeKey = scopedStorageKey(scope);
+  const ownsLegacy = await database.get(STORE, "legacy_owner") === scopeKey;
+  const entries = await Promise.all(keys.filter((key) => typeof key === "string" && archiveKeyAllowed(key, scopeKey, ownsLegacy)).map(async (key) => {
+    const entry = await database.get(STORE, key);
+    const raw = !String(key).startsWith("recovery:");
+    return { key: String(key), reason: raw ? "Original device copy preserved before migration or schema recovery." : String(entry.reason), createdAt: raw ? "" : String(entry.createdAt) };
+  }));
+  return entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function exportRecoveryArchive(scope: StorageScope, key: string): Promise<Blob> {
+  const database = await getDatabase();
+  const scopeKey = scopedStorageKey(scope);
+  if (!archiveKeyAllowed(key, scopeKey, await database.get(STORE, "legacy_owner") === scopeKey)) throw new Error("This archive belongs to a different account or church.");
+  const entry = await database.get(STORE, key);
+  if (!entry) throw new Error("The archive is no longer available on this device.");
+  const payload = key.startsWith("recovery:") ? entry : { data: entry, reason: "Original preserved device copy", scope };
+  return new Blob([JSON.stringify({ format: "neighborwalk-recovery", formatVersion: 1, ...payload }, null, 2)], { type: "application/json" });
+}
+
+function archiveKeyAllowed(key: string, scopeKey: string, ownsLegacy: boolean) {
+  return ["recovery:", "pre-upgrade:", "quarantine:"].some((prefix) => key.startsWith(prefix + scopeKey + ":"))
+    || ownsLegacy && ["pre-upgrade:primary:", "quarantine:primary:"].some((prefix) => key.startsWith(prefix));
 }
 
 export async function replaceNeighborWalkData(candidate: unknown): Promise<NeighborWalkData> {

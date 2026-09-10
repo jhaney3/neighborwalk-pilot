@@ -50,6 +50,7 @@ type PeopleViewProps = {
   canManage: boolean;
   activeVolunteerId: string;
   initialSelectedResidentId?: string | null;
+  onSelectResident?: (id?: string) => void;
   onOpenProperty: (propertyId: string) => void;
   onUpsertResident: (propertyId: string | undefined, input: ResidentInput, residentId?: string) => Promise<string>;
   onDeleteResident: (residentId: string) => Promise<unknown>;
@@ -85,15 +86,12 @@ function personInitials(name?: string) {
   return name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
 }
 
-function dueState(followUp?: FollowUp) {
+function dueState(followUp: FollowUp | undefined, timezone: string) {
   if (!followUp || followUp.status !== "scheduled") return "none" as const;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(followUp.dueAt);
-  due.setHours(0, 0, 0, 0);
+  const today = calendarDate(new Date(), timezone);
+  const due = calendarDate(followUp.dueAt, timezone);
   if (due < today) return "overdue" as const;
-  const upcoming = new Date(today);
-  upcoming.setDate(upcoming.getDate() + 7);
+  const upcoming = calendarDaysFromNow(7, timezone);
   return due <= upcoming ? "soon" as const : "later" as const;
 }
 
@@ -102,6 +100,7 @@ export function PeopleView({
   canManage,
   activeVolunteerId,
   initialSelectedResidentId,
+  onSelectResident,
   onOpenProperty,
   onUpsertResident,
   onDeleteResident,
@@ -116,13 +115,9 @@ export function PeopleView({
   const [owner, setOwner] = useState<"all" | "mine">("all");
   const [status, setStatus] = useState<"active" | "paused" | "archived" | "all">("active");
   const [sort, setSort] = useState<SortMode>("next_step");
-  const [selectedId, setSelectedId] = useState<string | null>(() => (
-    data.residents.find((resident) => resident.id === initialSelectedResidentId)?.id
-      ?? data.residents.find((resident) => resident.assignedVolunteerId === activeVolunteerId && resident.status === "active")?.id
-      ?? data.residents.find((resident) => resident.status === "active")?.id
-      ?? data.residents[0]?.id
-      ?? null
-  ));
+  const [localSelectedId, setLocalSelectedId] = useState<string | null>(initialSelectedResidentId ?? null);
+  const selectedId = onSelectResident ? initialSelectedResidentId : localSelectedId;
+  const setSelectedId = (id: string | null) => onSelectResident ? onSelectResident(id ?? undefined) : setLocalSelectedId(id);
   const [editor, setEditor] = useState<PersonEditorState>(null);
 
   const volunteers = useMemo(() => new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer])), [data.volunteers]);
@@ -163,7 +158,7 @@ export function PeopleView({
 
   const selected = data.residents.find((resident) => resident.id === selectedId);
   const mine = data.residents.filter((resident) => resident.assignedVolunteerId === activeVolunteerId && resident.status === "active").length;
-  const due = data.residents.filter((resident) => ["overdue", "soon"].includes(dueState(followUpsByResident.get(resident.id)?.find((followUp) => followUp.status === "scheduled")))).length;
+  const due = data.residents.filter((resident) => ["overdue", "soon"].includes(dueState(followUpsByResident.get(resident.id)?.find((followUp) => followUp.status === "scheduled"), data.church.timezone))).length;
 
   const saveResident = async (propertyId: string | undefined, input: ResidentInput) => {
     const editing = editor && editor !== "new" ? editor : undefined;
@@ -201,7 +196,7 @@ export function PeopleView({
               const ownerRecord = volunteers.get(resident.assignedVolunteerId);
               const latestNote = notesByResident.get(resident.id)?.[0];
               const nextFollowUp = followUpsByResident.get(resident.id)?.find((followUp) => followUp.status === "scheduled");
-              const nextStepState = dueState(nextFollowUp);
+              const nextStepState = dueState(nextFollowUp, data.church.timezone);
               return (
                 <button className={`person-list-card${selectedId === resident.id ? " active" : ""}`} key={resident.id} onClick={() => setSelectedId(resident.id)}>
                   <span className="person-list-avatar">{personInitials(resident.name)}</span>
@@ -274,7 +269,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
   const personFollowUps = data.followUps.filter((followUp) => followUp.residentId === resident.id).sort((left, right) => left.dueAt.localeCompare(right.dueAt));
   const openFollowUps = personFollowUps.filter((followUp) => followUp.status === "scheduled");
   const nextFollowUp = openFollowUps[0];
-  const nextState = dueState(nextFollowUp);
+  const nextState = dueState(nextFollowUp, data.church.timezone);
   const stageIndex = discipleshipStageValues.indexOf(resident.discipleshipStage);
   const noteValid = noteBody.trim().length > 0 && noteBody.length <= data.church.noteCharacterLimit;
   const canEdit = canManage || resident.assignedVolunteerId === activeVolunteerId;

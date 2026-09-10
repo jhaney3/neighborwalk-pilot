@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import { createSeedData } from "../lib/seed";
 import { storageKey } from "../lib/environment";
-import { loadScopedNeighborWalkData, saveNeighborWalkData, scopedStorageKey, StorageRecoveryError } from "../lib/storage";
+import { archiveWorkspaceRecovery, exportRecoveryArchive, recoveryArchives, loadScopedNeighborWalkData, saveNeighborWalkData, scopedStorageKey, StorageRecoveryError } from "../lib/storage";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -49,5 +49,29 @@ describe("account-scoped durable storage", () => {
     const scope = { userId: "large-outbox", churchId: data.church.id };
     await saveNeighborWalkData(data, scope);
     expect((await loadScopedNeighborWalkData(scope))?.sync.pending).toEqual(data.sync.pending);
+  });
+
+  it("retains downloadable recovery work only within the owning account and church", async () => {
+    browser();
+    const data = createSeedData();
+    const scope = { userId: "recovery-owner", churchId: data.church.id };
+    const key = await archiveWorkspaceRecovery(data, scope, "Fictional reviewed recovery");
+    expect(await recoveryArchives(scope)).toHaveLength(1);
+    expect(await recoveryArchives({ ...scope, userId: "someone-else" })).toHaveLength(0);
+    const copy = JSON.parse(await (await exportRecoveryArchive(scope, key)).text());
+    expect(copy.data).toEqual(data);
+    await expect(exportRecoveryArchive({ ...scope, userId: "someone-else" }, key)).rejects.toThrow("different account");
+  });
+
+  it("quarantines failures thrown during date migration, not only schema validation", async () => {
+    browser();
+    const data = { ...createSeedData(), schemaVersion: 10 };
+    data.followUps[0].dueAt = "invalid-date";
+    const scope = { userId: "invalid-migration-date", churchId: data.church.id };
+    const database = await openDB(storageKey("neighborwalk"), 1);
+    await database.put("app_state", data, scopedStorageKey(scope));
+    await expect(loadScopedNeighborWalkData(scope)).rejects.toBeInstanceOf(StorageRecoveryError);
+    expect(await database.get("app_state", scopedStorageKey(scope))).toEqual(data);
+    database.close();
   });
 });

@@ -1,6 +1,6 @@
 const CACHE_SCOPE = new URL(self.location.href).searchParams.has("sandbox") ? "-sandbox" : "";
-const APP_CACHE = `neighborwalk-app-v17${CACHE_SCOPE}`;
-const CORE = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
+const APP_CACHE = `neighborwalk-app-v18${CACHE_SCOPE}`;
+const CORE = ["/", "/app/today", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 const STATIC_DESTINATIONS = new Set(["style", "script", "worker", "image", "font", "manifest"]);
 
 self.addEventListener("install", (event) => {
@@ -24,7 +24,8 @@ async function navigation(request) {
     if (response.ok) await cache.put(request, response.clone());
     return response;
   } catch {
-    return await cache.match(request) || await cache.match("/") ||
+    const fallback = new URL(request.url).pathname.startsWith("/app") ? "/app/today" : "/";
+    return await cache.match(request) || await cache.match(fallback) ||
       new Response("NeighborWalk is offline. Reconnect to prepare this device.", { status: 503 });
   }
 }

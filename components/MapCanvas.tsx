@@ -537,8 +537,8 @@ export function MapCanvas({
   const propertiesRef = useRef(properties);
   const mappedLocationsRef = useRef<FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
-  const territoryLongitude = territory.center[0];
-  const territoryLatitude = territory.center[1];
+  const territoryLongitude = territory.center?.[0] ?? 0;
+  const territoryLatitude = territory.center?.[1] ?? 0;
 
   useEffect(() => {
     callbacksRef.current = { onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange, onViewportChange };

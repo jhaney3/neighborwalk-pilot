@@ -81,6 +81,7 @@ export type TerritoryUpdate = {
   assignedTeamId?: string;
   boundary?: Coordinates[];
   center?: Coordinates;
+  kind?: "map" | "list";
 };
 
 export type Team = NeighborWalkData["teams"][number];
@@ -310,11 +311,12 @@ export const neighborWalkDataSchema = z.object({
     eventId: z.string().optional(),
     name: z.string().min(1).max(120),
     color: z.string().regex(/^#[0-9a-f]{6}$/i),
-    center: coordinatesSchema,
+    center: coordinatesSchema.optional(),
+    kind: z.enum(["map", "list"]).optional(),
     zoom: z.number().min(1).max(22),
-    boundary: z.array(coordinatesSchema).min(3),
+    boundary: z.array(coordinatesSchema),
     assignedTeamId: z.string().optional(),
-  })),
+  }).refine((area) => area.kind === "list" ? !area.center && area.boundary.length === 0 : Boolean(area.center) && area.boundary.length >= 3, "A mapped area needs a center and boundary; an address list has neither.")),
   teams: z.array(z.object({
     id: z.string().min(1),
     churchId: z.string().min(1),
@@ -511,6 +513,7 @@ export function updateTerritoryRecord(
         ...item,
         name: update.name.trim(),
         color: update.color,
+        kind: update.boundary ? "map" as const : update.kind ?? item.kind,
         assignedTeamId,
         boundary: update.boundary ?? item.boundary,
         center: update.center ?? item.center,
@@ -536,7 +539,7 @@ export function deleteTerritoryRecord(
     !territory
     || !destination
     || territory.id === destination.id
-    || territory.eventId !== destination.eventId
+    || (data.sync.mode !== "connected" && territory.eventId !== destination.eventId)
     || data.territories.length <= 1
   ) return data;
 
@@ -550,7 +553,7 @@ export function deleteTerritoryRecord(
     properties: data.properties.map((property) => property.territoryId === territoryId
       ? { ...property, territoryId: destination.id }
       : property),
-    visits: data.visits.map((visit) => visit.territoryId === territoryId
+    visits: data.sync.mode === "connected" ? data.visits : data.visits.map((visit) => visit.territoryId === territoryId
       ? { ...visit, territoryId: destination.id }
       : visit),
     preferences: {

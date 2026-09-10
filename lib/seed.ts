@@ -4,6 +4,7 @@ import {
   type NeighborWalkData,
 } from "./domain";
 import { DEFAULT_MAP_STYLE_URL, MAP_STYLE_CONFIGURATION_REVISION } from "./map-config";
+import { calendarDate } from "./calendar";
 
 const CHURCH_ID = "church_grace_harbor_demo";
 const EVENT_ID = "event_saturday_outreach";
@@ -315,6 +316,7 @@ export function createSeedData(): NeighborWalkData {
       retentionDays: 365,
       defaultFollowUpDays: 3,
       noteCharacterLimit: 500,
+      pathwayEnabled: false,
     },
     volunteers: [
       { id: "volunteer_erica", churchId: CHURCH_ID, name: "Erica", role: "leader", active: true },
@@ -332,8 +334,16 @@ export function createSeedData(): NeighborWalkData {
       startsAt: dayAt(0, 9, 30),
       endsAt: dayAt(0, 12),
       status: "active",
+      timezone: "America/Chicago",
+      purpose: "Listen to neighbors and follow through on the next steps they request.",
+      meetingPoint: "Church welcome table, north entrance",
+      leaderContact: "Erica at the welcome table",
     }],
     territories,
+    assignments: territories.map((area, index) => ({
+      id: "assignment_demo_" + index, churchId: CHURCH_ID, eventId: EVENT_ID, territoryId: area.id,
+      assignedTeamId: ["team_barnabas", "team_priscilla", "team_lydia"][index], status: "assigned" as const,
+    })),
     teams: [
       { id: "team_barnabas", churchId: CHURCH_ID, eventId: EVENT_ID, name: "Team Barnabas", memberIds: ["volunteer_erica", "volunteer_maya", "volunteer_jordan"], territoryIds: [territories[0].id], status: "active" },
       { id: "team_priscilla", churchId: CHURCH_ID, eventId: EVENT_ID, name: "Team Priscilla", memberIds: ["volunteer_sam", "volunteer_ruth"], territoryIds: [territories[1].id], status: "active" },
@@ -341,7 +351,10 @@ export function createSeedData(): NeighborWalkData {
     ],
     properties,
     visits,
-    followUps,
+    followUps: followUps.map((task) => ({ ...task,
+      assignedVolunteerId: residents.find((person) => person.id === task.residentId)?.assignedVolunteerId ?? task.history[0]?.actorId ?? "volunteer_erica",
+      acceptance: "accepted", channel: "visit", eventId: EVENT_ID, dueAt: calendarDate(task.dueAt, "America/Chicago"),
+    })),
     residents,
     personNotes,
     guide: [

@@ -21,7 +21,7 @@ type LoadedTerritoryParcels = {
 
 export function useTerritoryParcels(territories: Territory[]) {
   const [loaded, setLoaded] = useState<Record<string, LoadedTerritoryParcels>>({});
-  const territoryRequests = useMemo(() => territories.map((territory) => ({
+  const territoryRequests = useMemo(() => territories.filter((territory) => territory.kind !== "list" && territory.boundary.length >= 3).map((territory) => ({
     id: territory.id,
     boundary: territory.boundary,
     boundarySignature: territoryBoundarySignature(territory.boundary),
