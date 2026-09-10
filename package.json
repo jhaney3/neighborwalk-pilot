@@ -21,6 +21,8 @@
     "test": "vitest run --config vitest.config.ts",
     "test:database": "node scripts/test-database.mjs",
     "test:browser": "playwright test",
+    "backup:database": "node scripts/backup-database.mjs",
+    "backup:rehearse:local": "node scripts/rehearse-backup.mjs",
     "typecheck": "tsc --noEmit",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "lint": "eslint ."

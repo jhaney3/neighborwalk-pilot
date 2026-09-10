@@ -131,6 +131,15 @@ Restore rehearsal completed in `neighborwalk_rehearsal_20260909`, a separate loc
 - Lint, types, all 165 unit tests / 34 files, and the optimized build passed. The complete eleven-scenario local browser run passed, including duplicate person/location combinations, offline replay, access removal, and cross-tab protection. The final rebuilt duplicate scenario also passed at 390-pixel width, including both preview tables without horizontal page overflow, original-person navigation, and an unavailable deep link with a working return to People.
 - Usage and preservation/incorrect-combination limitations are documented in [reviewed duplicates](duplicate-review.md). No production database mutation or rework deployment occurred.
 
+### September 10 — encrypted operator backup and isolated recovery drill
+
+- Duplicate checkpoint `f44125c` passed hosted CI `34461985625`, including all eleven browser scenarios.
+- Added read-only, consistent-snapshot application-database capture across six declared schemas, including reference parcels and authentication when present. Archives stream through authenticated encryption; keys, credentials and bundles must remain private and outside Git. Interrupted producers, wrong sources, unreviewed extensions, malformed metadata, changed manifests/ciphertext and wrong keys are rejected.
+- Restore accepts only a trusted archive and creates a newly named local database, never overwriting production or the app database. Exact row digests, counts, columns, RLS policies and extension versions are compared. Provider settings, root keys, storage objects, off-site custody and actual sign-in are separate, unverified recovery requirements.
+- The final one-command local drill restored 53 tables / 11,873 records into `nw_restore_20260910102354_7167bd96`; all six rollback-only permission/workflow suites passed against the restored copy. It performed no writes to the source database. Earlier failed local targets remain quarantined; none was promoted.
+- All 173 unit tests / 35 files, lint and standalone type checking passed. The optimized build passed outside the restricted execution sandbox; two sandboxed attempts failed while parsing output from the TypeScript child process. No compiler checks were disabled.
+- [Database recovery](database-recovery.md) documents key custody, scope, exact commands and production cutover gates. This tooling does not turn the earlier partial production export into a fresh complete backup. The production database credential, managed/off-site recovery and migration-history reconciliation remain outstanding.
+
 ## External launch gates — do not claim these are implemented or verified
 
 - Current Vercel team is Hobby. [Its terms restrict that plan to personal, noncommercial use](https://vercel.com/docs/plans/hobby). Commercial-compatible hosting requires an owner-approved billing change or hosting decision.
