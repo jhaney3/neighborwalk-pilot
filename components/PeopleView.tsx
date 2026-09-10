@@ -1,5 +1,7 @@
 "use client";
 
+import { groupBy } from "../lib/collections";
+
 import {
   ArrowLeft,
   CalendarClock,
@@ -41,7 +43,7 @@ import {
   type Resident,
   type ResidentInput,
 } from "../lib/domain";
-import { Modal, ViewHeading } from "./Views";
+import { Modal, ViewHeading } from "./ui";
 
 type PeopleViewProps = {
   data: NeighborWalkData;
@@ -124,17 +126,12 @@ export function PeopleView({
   const volunteers = useMemo(() => new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer])), [data.volunteers]);
   const properties = useMemo(() => new Map(data.properties.map((property) => [property.id, property])), [data.properties]);
   const notesByResident = useMemo(() => {
-    const grouped = new Map<string, NeighborWalkData["personNotes"]>();
-    for (const note of data.personNotes) grouped.set(note.residentId, [...(grouped.get(note.residentId) ?? []), note]);
+    const grouped = groupBy(data.personNotes, (note) => note.residentId);
     for (const notes of grouped.values()) notes.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     return grouped;
   }, [data.personNotes]);
   const followUpsByResident = useMemo(() => {
-    const grouped = new Map<string, FollowUp[]>();
-    for (const followUp of data.followUps) {
-      if (!followUp.residentId) continue;
-      grouped.set(followUp.residentId, [...(grouped.get(followUp.residentId) ?? []), followUp]);
-    }
+    const grouped = groupBy(data.followUps, (followUp) => followUp.residentId);
     for (const followUps of grouped.values()) followUps.sort((left, right) => left.dueAt.localeCompare(right.dueAt));
     return grouped;
   }, [data.followUps]);

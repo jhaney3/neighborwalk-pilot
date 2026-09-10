@@ -108,6 +108,13 @@ $$;
 revoke execute on function private.is_workspace_creator(uuid) from public, anon;
 grant execute on function private.is_workspace_creator(uuid) to authenticated;
 
-revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+-- This helper is supplied by hosted Supabase and may not exist in a fresh local stack.
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+  end if;
+end;
+$$;
 
 commit;

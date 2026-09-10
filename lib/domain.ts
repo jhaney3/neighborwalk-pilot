@@ -13,7 +13,7 @@ export const outcomeValues = [
 ] as const;
 
 export type Outcome = (typeof outcomeValues)[number];
-export type Role = "leader" | "volunteer";
+export type Role = Volunteer["role"];
 export type Coordinates = [longitude: number, latitude: number];
 
 export const outcomeMeta: Record<
@@ -64,44 +64,14 @@ export const outcomeMeta: Record<
   },
 };
 
-export type Church = {
-  id: string;
-  name: string;
-  timezone: string;
-  retentionDays: number;
-  defaultFollowUpDays: number;
-  noteCharacterLimit: number;
-};
+// Runtime validation is the source of truth for persisted record types.
+export type Church = NeighborWalkData["church"];
 
-export type Volunteer = {
-  id: string;
-  churchId: string;
-  name: string;
-  email?: string;
-  role: Role;
-  active: boolean;
-};
+export type Volunteer = NeighborWalkData["volunteers"][number];
 
-export type OutreachEvent = {
-  id: string;
-  churchId: string;
-  name: string;
-  startsAt: string;
-  endsAt: string;
-  status: "scheduled" | "active" | "completed";
-};
+export type OutreachEvent = NeighborWalkData["events"][number];
 
-export type Territory = {
-  id: string;
-  churchId: string;
-  eventId: string;
-  name: string;
-  color: string;
-  center: Coordinates;
-  zoom: number;
-  boundary: Coordinates[];
-  assignedTeamId?: string;
-};
+export type Territory = NeighborWalkData["territories"][number];
 
 export type TerritoryUpdate = {
   name: string;
@@ -111,53 +81,15 @@ export type TerritoryUpdate = {
   center?: Coordinates;
 };
 
-export type Team = {
-  id: string;
-  churchId: string;
-  eventId: string;
-  name: string;
-  memberIds: string[];
-  territoryIds: string[];
-  status: "ready" | "active" | "finished";
-};
+export type Team = NeighborWalkData["teams"][number];
 
 export type TeamUpdate = Pick<Team, "name" | "memberIds" | "status">;
 
-export type ParcelReference = {
-  id?: number;
-  countyFips: string;
-  gislink: string;
-};
+export type ParcelReference = NonNullable<Property["parcel"]>;
 
-export type Property = {
-  id: string;
-  churchId: string;
-  territoryId: string;
-  address: string;
-  unit?: string;
-  coordinates: Coordinates;
-  buildingGeometry?: Coordinates[];
-  parcel?: ParcelReference;
-  currentOutcome: Outcome;
-  lastVisitedAt?: string;
-  visitCount: number;
-  createdAt: string;
-  updatedAt: string;
-  source: "seed" | "map" | "import";
-};
+export type Property = NeighborWalkData["properties"][number];
 
-export type Visit = {
-  id: string;
-  churchId: string;
-  eventId: string;
-  territoryId: string;
-  propertyId: string;
-  volunteerId: string;
-  outcome: Exclude<Outcome, "unvisited">;
-  objectiveNote?: string;
-  recordedAt: string;
-  deviceId: string;
-};
+export type Visit = NeighborWalkData["visits"][number];
 
 export const faithStatusValues = [
   "not_discussed",
@@ -169,7 +101,7 @@ export const faithStatusValues = [
 ] as const;
 
 export type FaithStatus = (typeof faithStatusValues)[number];
-export type ContactPreference = "none" | "text" | "call" | "email";
+export type ContactPreference = Resident["preferredContact"];
 
 export const discipleshipStageValues = [
   "new_connection",
@@ -181,8 +113,8 @@ export const discipleshipStageValues = [
 ] as const;
 
 export type DiscipleshipStage = (typeof discipleshipStageValues)[number];
-export type ResidentStatus = "active" | "paused" | "archived";
-export type PersonNoteKind = "conversation" | "prayer" | "milestone" | "general";
+export type ResidentStatus = Resident["status"];
+export type PersonNoteKind = PersonNote["kind"];
 
 export const discipleshipStageLabels: Record<DiscipleshipStage, string> = {
   new_connection: "New connection",
@@ -209,63 +141,15 @@ export const faithStatusLabels: Record<FaithStatus, string> = {
   prefer_not_to_say: "Prefers not to say",
 };
 
-export type Resident = {
-  id: string;
-  churchId: string;
-  propertyId: string;
-  name?: string;
-  faithStatus: FaithStatus;
-  discipleshipStage: DiscipleshipStage;
-  assignedVolunteerId: string;
-  createdByVolunteerId: string;
-  sharedWithVolunteerIds: string[];
-  sharedWithTeamIds: string[];
-  status: ResidentStatus;
-  phone?: string;
-  email?: string;
-  preferredContact: ContactPreference;
-  lastContactAt?: string;
-  createdAt: string;
-  updatedAt: string;
-};
+export type Resident = NeighborWalkData["residents"][number];
 
 export type ResidentInput = Omit<Resident, "id" | "churchId" | "propertyId" | "createdByVolunteerId" | "createdAt" | "updatedAt">;
 
-export type PersonNote = {
-  id: string;
-  churchId: string;
-  residentId: string;
-  authorId: string;
-  kind: PersonNoteKind;
-  body: string;
-  createdAt: string;
-};
+export type PersonNote = NeighborWalkData["personNotes"][number];
 
-export type FollowUpActivity = {
-  id: string;
-  action: "created" | "rescheduled" | "note" | "completed" | "cancelled";
-  note?: string;
-  dueAt?: string;
-  actorId: string;
-  createdAt: string;
-};
+export type FollowUpActivity = FollowUp["history"][number];
 
-export type FollowUp = {
-  id: string;
-  churchId: string;
-  propertyId: string;
-  residentId?: string;
-  sourceVisitId?: string;
-  assignedTeamId?: string;
-  dueAt: string;
-  status: "scheduled" | "completed" | "cancelled";
-  note?: string;
-  completionNote?: string;
-  parentFollowUpId?: string;
-  history: FollowUpActivity[];
-  createdAt: string;
-  completedAt?: string;
-};
+export type FollowUp = NeighborWalkData["followUps"][number];
 
 export type FollowUpCompletionInput = {
   completionNote?: string;
@@ -276,16 +160,7 @@ export type FollowUpCompletionInput = {
   };
 };
 
-export type GuideStep = {
-  id: string;
-  order: number;
-  eyebrow: string;
-  title: string;
-  coaching: string;
-  sampleWords: string;
-  reminder: string;
-  scriptureReferences: string[];
-};
+export type GuideStep = NeighborWalkData["guide"][number];
 
 export type ConversationGuideScope = "church" | "personal";
 
@@ -307,60 +182,15 @@ export type ConversationGuideInput = Pick<
   "scope" | "title" | "description" | "steps"
 > & { id?: string };
 
-export type AuditEntry = {
-  id: string;
-  action: string;
-  entityType: "property" | "visit" | "follow_up" | "person_follow_up" | "resident" | "person_note" | "team" | "territory" | "settings" | "guide" | "data";
-  entityId: string;
-  actorId: string;
-  createdAt: string;
-  summary: string;
-};
+export type AuditEntry = NeighborWalkData["audit"][number];
 
-export type PendingMutation = {
-  id: string;
-  entityType: AuditEntry["entityType"];
-  entityId: string;
-  operation: "upsert" | "delete";
-  changedAt: string;
-};
+export type PendingMutation = SyncState["pending"][number];
 
-export type AppPreferences = {
-  activeEventId: string;
-  activeTerritoryId: string;
-  activeVolunteerId: string;
-  mapStyleUrl: string;
-  mapStyleRevision: number;
-  compactMapMarkers: boolean;
-  notificationsEnabled: boolean;
-  lastView: string;
-};
+export type AppPreferences = NeighborWalkData["preferences"];
 
-export type SyncState = {
-  mode: "device_only" | "connected";
-  lastSyncedAt?: string;
-  pending: PendingMutation[];
-  lastError?: string;
-};
+export type SyncState = NeighborWalkData["sync"];
 
-export type NeighborWalkData = {
-  schemaVersion: number;
-  church: Church;
-  volunteers: Volunteer[];
-  events: OutreachEvent[];
-  territories: Territory[];
-  teams: Team[];
-  properties: Property[];
-  visits: Visit[];
-  followUps: FollowUp[];
-  residents: Resident[];
-  personNotes: PersonNote[];
-  guide: GuideStep[];
-  audit: AuditEntry[];
-  preferences: AppPreferences;
-  sync: SyncState;
-  updatedAt: string;
-};
+export type NeighborWalkData = z.infer<typeof neighborWalkDataSchema>;
 
 const coordinatesSchema = z.tuple([
   z.number().min(-180).max(180),
@@ -435,7 +265,7 @@ export function formatPhoneNumber(value: string): string {
   return trimmed;
 }
 
-export const neighborWalkDataSchema: z.ZodType<NeighborWalkData> = z.object({
+export const neighborWalkDataSchema = z.object({
   schemaVersion: z.literal(APP_SCHEMA_VERSION),
   church: z.object({
     id: z.string().min(1),
@@ -621,12 +451,6 @@ export function visitsForProperty(data: NeighborWalkData, propertyId: string): V
     .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
 }
 
-export function residentsForProperty(data: NeighborWalkData, propertyId: string): Resident[] {
-  return data.residents
-    .filter((resident) => resident.propertyId === propertyId)
-    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-}
-
 export function centerForBoundary(boundary: Coordinates[]): Coordinates {
   if (!boundary.length) return [0, 0];
   return [
@@ -742,19 +566,7 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
   const keptResidentIds = new Set(keepResidents.map((resident) => resident.id));
   const keepPersonNotes = data.personNotes.filter((note) => keptResidentIds.has(note.residentId));
   const finalFollowUps = keepFollowUps.filter((followUp) => !followUp.residentId || keptResidentIds.has(followUp.residentId));
-  const properties = data.properties.map((property) => {
-    const retainedVisits = keepVisits
-      .filter((visit) => visit.propertyId === property.id)
-      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
-    const latest = retainedVisits[0];
-    if (!latest) return { ...property, currentOutcome: "unvisited" as const, lastVisitedAt: undefined, visitCount: 0 };
-    return {
-      ...property,
-      currentOutcome: latest.outcome,
-      lastVisitedAt: latest.recordedAt,
-      visitCount: retainedVisits.length,
-    };
-  });
+  const properties = summarizePropertyVisits(data.properties, keepVisits);
   return {
     ...data,
     properties,
@@ -764,4 +576,26 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
     personNotes: keepPersonNotes,
     audit: keepAudit,
   };
+}
+
+/** Rebuild location outcomes without scanning and sorting every visit per property. */
+export function summarizePropertyVisits(properties: Property[], visits: Visit[]): Property[] {
+  const summaries = new Map<string, { latest: Visit; count: number }>();
+  for (const visit of visits) {
+    const summary = summaries.get(visit.propertyId);
+    if (!summary) summaries.set(visit.propertyId, { latest: visit, count: 1 });
+    else {
+      summary.count += 1;
+      if (visit.recordedAt > summary.latest.recordedAt) summary.latest = visit;
+    }
+  }
+  return properties.map((property) => {
+    const summary = summaries.get(property.id);
+    return {
+      ...property,
+      currentOutcome: summary?.latest.outcome ?? "unvisited",
+      lastVisitedAt: summary?.latest.recordedAt,
+      visitCount: summary?.count ?? 0,
+    };
+  });
 }

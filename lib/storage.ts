@@ -6,13 +6,15 @@ import {
   type NeighborWalkData,
 } from "./domain";
 import { createSeedData } from "./seed";
+import { storageKey } from "./environment";
 import {
+  DEFAULT_MAP_STYLE_URL,
   isOpenFreeMapStyle,
   MAP_STYLE_CONFIGURATION_REVISION,
   MAPTILER_STREETS_URL,
 } from "./map-config";
 
-const DB_NAME = "neighborwalk";
+const DB_NAME = storageKey("neighborwalk");
 const DB_VERSION = 1;
 const STORE = "app_state";
 const DATA_KEY = "primary";
@@ -40,13 +42,12 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return candidate;
   const data = candidate as Record<string, unknown>;
   const version = typeof data.schemaVersion === "number" ? data.schemaVersion : 1;
-  const defaults = createSeedData();
   const storedPreferences = data.preferences && typeof data.preferences === "object"
     ? data.preferences as Record<string, unknown>
     : {};
   const storedMapStyleUrl = typeof storedPreferences.mapStyleUrl === "string"
     ? storedPreferences.mapStyleUrl
-    : defaults.preferences.mapStyleUrl;
+    : DEFAULT_MAP_STYLE_URL;
   const storedMapStyleRevision = typeof storedPreferences.mapStyleRevision === "number"
     ? storedPreferences.mapStyleRevision
     : 0;
@@ -57,6 +58,7 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   );
   const requiresSchemaMigration = version < APP_SCHEMA_VERSION;
   if (!requiresSchemaMigration && !shouldAdoptMapTiler) return candidate;
+  const defaults = createSeedData();
   const fallbackVolunteerId = typeof storedPreferences.activeVolunteerId === "string"
     ? storedPreferences.activeVolunteerId
     : Array.isArray(data.volunteers) && data.volunteers[0] && typeof data.volunteers[0] === "object"
@@ -209,13 +211,6 @@ export async function replaceNeighborWalkData(candidate: unknown): Promise<Neigh
   const retained = enforceRetention(parsed);
   await saveNeighborWalkData(retained);
   return retained;
-}
-
-export async function resetNeighborWalkData(): Promise<NeighborWalkData> {
-  const database = await getDatabase();
-  const seeded = createSeedData();
-  await database.put(STORE, seeded, DATA_KEY);
-  return seeded;
 }
 
 export function exportNeighborWalkData(data: NeighborWalkData): Blob {

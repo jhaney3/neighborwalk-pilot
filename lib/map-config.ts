@@ -25,17 +25,6 @@ export const DEFAULT_MAP_STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL?.trim
   || MAPTILER_STREETS_URL
   || OPENFREEMAP_BRIGHT_URL;
 
-export const MAP_STYLE_OPTIONS = [
-  ...(MAPTILER_STREETS_URL ? [{
-    label: "MapTiler Streets",
-    description: "Production streets and building footprints",
-    url: MAPTILER_STREETS_URL,
-  }] : []),
-  { label: "Bright", description: "Detailed streets and landmarks", url: OPENFREEMAP_BRIGHT_URL },
-  { label: "Liberty", description: "High-contrast field map", url: "https://tiles.openfreemap.org/styles/liberty" },
-  { label: "Positron", description: "Quiet, minimal basemap", url: "https://tiles.openfreemap.org/styles/positron" },
-] as const;
-
 export function isOpenFreeMapStyle(value: string): boolean {
   try {
     return new URL(value).hostname === "tiles.openfreemap.org";

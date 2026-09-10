@@ -7,8 +7,8 @@ The client and Supabase foundation are ready for an owner-operated connected pil
 - Keep the Supabase migrations in source control and run both Security Advisor and Performance Advisor after every schema change.
 - Set the production Site URL and exact redirect URL in Supabase Auth before testing Google or passwordless sign-in.
 - Configure and test the Google OAuth consent screen, authorized JavaScript origin, Supabase callback URL, Client ID, and Client Secret. Keep the Client Secret only in Supabase.
-- Add a leader-controlled invitation and membership-revocation flow before inviting volunteers.
-- Replace the pilot snapshot sync with entity-level conflict merging before simultaneous multi-device field use; the current revision check safely rejects stale overwrites.
+- Verify the existing leader-controlled invitations, role changes, and membership revocation with separate leader and volunteer accounts.
+- Test the existing revision checks and entity merge/retry flow on two devices. Define how concurrent edits to the same record should resolve; the current client does not merge individual fields or commit protected records and the shared snapshot in one transaction.
 - Add cursor pagination, request body limits, rate limits, structured logs, error tracking, database backups, restore drills, and availability alerts.
 - Add retention and erasure jobs for visits, follow-ups, audit entries, soft-deleted properties, mutation receipts, and backups.
 - Configure trusted custom SMTP before a broad rollout so sign-in emails are branded and deliver reliably.

@@ -14,7 +14,6 @@ import {
   type ConversationGuideInput,
   type Coordinates,
   type FollowUp,
-  type GuideStep,
   type FollowUpCompletionInput,
   type NeighborWalkData,
   type Outcome,
@@ -47,12 +46,15 @@ import {
   saveNeighborWalkData,
 } from "./storage";
 import { getSupabaseBrowserClient, type Json, type NeighborWalkDatabase } from "./supabase";
+import { changeFollowUp, createFollowUp } from "./follow-ups";
+import { isProductionApp, storageKey } from "./environment";
 import { mergePendingWorkspaceChanges } from "./workspace-sync";
 import {
   loadConnectedDiscipleship,
   persistConnectedDiscipleship,
   volunteerIdForUser,
   withAuthenticatedVolunteer,
+  withSnapshotDiscipleship,
   withoutSnapshotDiscipleship,
 } from "./discipleship";
 
@@ -71,7 +73,7 @@ type WorkspaceSnapshotRecord = Pick<
   "church_id" | "schema_version" | "data" | "revision" | "updated_at"
 >;
 
-const WORKSPACE_CACHE_KEY = "neighborwalk-supabase-workspace";
+const WORKSPACE_CACHE_KEY = storageKey("neighborwalk-supabase-workspace");
 const AUTO_SYNC_DELAY_MS = 1200;
 const AUTO_SYNC_MAX_RETRY_MS = 30000;
 
@@ -131,7 +133,7 @@ type NewTerritoryInput = {
 };
 
 function deviceId() {
-  const key = "neighborwalk-device-id";
+  const key = storageKey("neighborwalk-device-id");
   const existing = window.localStorage.getItem(key);
   if (existing) return existing;
   const created = createId("device");
@@ -254,12 +256,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
           const parsedRemote = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(snapshot.data));
           if (!parsedRemote.success) throw new Error("The church workspace contains data from an unsupported app version.");
           const connectedDiscipleship = await loadConnectedDiscipleship(client, membership.church_id);
-          const parsedProtectedRemote = neighborWalkDataSchema.safeParse({
-            ...parsedRemote.data,
-            residents: connectedDiscipleship.residents,
-            personNotes: connectedDiscipleship.personNotes,
-            followUps: [...parsedRemote.data.followUps, ...connectedDiscipleship.personFollowUps],
-          });
+          const parsedProtectedRemote = neighborWalkDataSchema.safeParse(
+            withSnapshotDiscipleship(parsedRemote.data, connectedDiscipleship),
+          );
           if (!parsedProtectedRemote.success) throw new Error("The protected discipleship records contain unsupported data.");
           const protectedRemote = parsedProtectedRemote.data;
           const cachedForUser = readWorkspaceConnection(supabaseUser.id);
@@ -366,8 +365,15 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [data]);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    if (!("serviceWorker" in navigator)) return;
+    if (process.env.NODE_ENV === "production") {
+      navigator.serviceWorker.register(isProductionApp ? "/sw.js" : "/sw.js?sandbox").catch(() => undefined);
+    } else {
+      // A previous local production build must not revive an old connected app offline.
+      void navigator.serviceWorker.getRegistrations().then((registrations) => Promise.all(
+        registrations.filter((registration) => new URL(registration.active?.scriptURL ?? registration.scope).pathname === "/sw.js")
+          .map((registration) => registration.unregister()),
+      )).catch(() => undefined);
     }
   }, []);
 
@@ -393,7 +399,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     setData((current) => {
       if (!current) return current;
       const next = updater(current);
-      return { ...next, updatedAt: new Date().toISOString() };
+      return next === current ? current : { ...next, updatedAt: new Date().toISOString() };
     });
   }, []);
 
@@ -565,60 +571,29 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         }
         const followUpId = createId("followup");
         if (input.residentId) protectedFollowUpMutationIds.add(followUpId);
-        nextFollowUps = [...nextFollowUps.map((followUp) => replacesSameWork(followUp) && followUp.status === "scheduled"
-          ? {
-            ...followUp,
-            status: "cancelled" as const,
-            history: [...followUp.history, {
-              id: createId("activity"),
-              action: "cancelled" as const,
-              note: "Replaced by a new follow-up request.",
-              actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
-              createdAt: now,
-            }],
-          }
-          : followUp), {
+        const actorId = actorIdRef.current ?? current.preferences.activeVolunteerId;
+        nextFollowUps = [...nextFollowUps.map((followUp) => replacesSameWork(followUp)
+          ? changeFollowUp(followUp, { action: "cancelled", note: "Replaced by a new follow-up request." }, actorId, now)
+          : followUp), createFollowUp({
           id: followUpId,
           churchId: current.church.id,
           propertyId: property.id,
           residentId: input.residentId,
           sourceVisitId: visitId,
-          assignedTeamId: linkedResident ? undefined : input.assignedTeamId,
+          assignedTeamId: input.assignedTeamId,
           dueAt: input.followUpDate
             ? new Date(`${input.followUpDate}T17:00:00`).toISOString()
             : dueDateFromNow(current.church.defaultFollowUpDays),
-          status: "scheduled" as const,
           note: objectiveNote,
-          history: [{
-            id: createId("activity"),
-            action: "created" as const,
-            note: objectiveNote,
-            dueAt: input.followUpDate
-              ? new Date(`${input.followUpDate}T17:00:00`).toISOString()
-              : dueDateFromNow(current.church.defaultFollowUpDays),
-            actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
-            createdAt: now,
-          }],
-          createdAt: now,
-        }];
+        }, actorId, now)];
       }
       if (input.outcome === "do_not_visit") {
-        current.followUps
-          .filter((followUp) => followUp.propertyId === property.id && followUp.residentId && followUp.status === "scheduled")
-          .forEach((followUp) => protectedFollowUpMutationIds.add(followUp.id));
-        nextFollowUps = nextFollowUps.map((followUp) => followUp.propertyId === property.id && followUp.status === "scheduled"
-          ? {
-            ...followUp,
-            status: "cancelled" as const,
-            history: [...followUp.history, {
-              id: createId("activity"),
-              action: "cancelled" as const,
-              note: "Location marked do not revisit.",
-              actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
-              createdAt: now,
-            }],
-          }
-          : followUp);
+        const actorId = actorIdRef.current ?? current.preferences.activeVolunteerId;
+        nextFollowUps = nextFollowUps.map((followUp) => {
+          if (followUp.propertyId !== property.id || followUp.status !== "scheduled") return followUp;
+          if (followUp.residentId) protectedFollowUpMutationIds.add(followUp.id);
+          return changeFollowUp(followUp, { action: "cancelled", note: "Location marked do not revisit." }, actorId, now);
+        });
       }
       const result = addAudit({
         ...current,
@@ -647,20 +622,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       const completionNote = input.completionNote?.trim() || undefined;
       if (completionNote && completionNote.length > current.church.noteCharacterLimit) return current;
       const now = new Date().toISOString();
-      let nextFollowUps = current.followUps.map((followUp) => followUp.id === followUpId
-        ? {
-          ...followUp,
-          status: "completed" as const,
-          completionNote,
-          completedAt: now,
-          history: [...followUp.history, {
-            id: createId("activity"),
-            action: "completed" as const,
-            note: completionNote,
-            actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
-            createdAt: now,
-          }],
-        }
+      const actorId = actorIdRef.current ?? current.preferences.activeVolunteerId;
+      const nextFollowUps = current.followUps.map((followUp) => followUp.id === followUpId
+        ? changeFollowUp(followUp, { action: "completed", note: completionNote }, actorId, now)
         : followUp);
       const followUpEntity = existing.residentId ? "person_follow_up" as const : "follow_up" as const;
       let result = addAudit({
@@ -688,7 +652,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       if (Number.isNaN(nextDueAt.getTime())) return result;
       const nextId = createId("followup");
       const note = input.nextFollowUp.note?.trim() || undefined;
-      nextFollowUps = [...result.followUps, {
+      const nextTask = createFollowUp({
         id: nextId,
         churchId: current.church.id,
         propertyId: existing.propertyId,
@@ -696,20 +660,10 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         sourceVisitId: existing.sourceVisitId,
         assignedTeamId: input.nextFollowUp.assignedTeamId,
         dueAt: nextDueAt.toISOString(),
-        status: "scheduled" as const,
         note,
         parentFollowUpId: existing.id,
-        history: [{
-          id: createId("activity"),
-          action: "created" as const,
-          note,
-          dueAt: nextDueAt.toISOString(),
-          actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
-          createdAt: now,
-        }],
-        createdAt: now,
-      }];
-      result = addAudit({ ...result, followUps: nextFollowUps }, followUpEntity, nextId, "follow_up.created", "Additional follow-up scheduled");
+      }, actorId, now);
+      result = addAudit({ ...result, followUps: [...result.followUps, nextTask] }, followUpEntity, nextId, "follow_up.created", "Additional follow-up scheduled");
       return result;
     });
   }, [updateData]);
@@ -723,19 +677,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       const now = new Date().toISOString();
       return addAudit({
         ...current,
-        followUps: current.followUps.map((followUp) => followUp.id === followUpId && followUp.status === "scheduled"
-          ? {
-            ...followUp,
-            dueAt: dueAt.toISOString(),
-            history: [...followUp.history, {
-              id: createId("activity"),
-              action: "rescheduled" as const,
-              note: activityNote,
-              dueAt: dueAt.toISOString(),
-              actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
-              createdAt: now,
-            }],
-          }
+        followUps: current.followUps.map((followUp) => followUp.id === followUpId
+          ? changeFollowUp(followUp, { action: "rescheduled", dueAt: dueAt.toISOString(), note: activityNote }, actorIdRef.current ?? current.preferences.activeVolunteerId, now)
           : followUp),
       }, existing.residentId ? "person_follow_up" : "follow_up", followUpId, "follow_up.rescheduled", "Follow-up date changed");
     });
@@ -749,17 +692,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       return addAudit({
         ...current,
         followUps: current.followUps.map((followUp) => followUp.id === followUpId
-          ? {
-            ...followUp,
-            status: "cancelled",
-            history: [...followUp.history, {
-              id: createId("activity"),
-              action: "cancelled" as const,
-              note: note?.trim() || undefined,
-              actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
-              createdAt: now,
-            }],
-          }
+          ? changeFollowUp(followUp, { action: "cancelled", note: note?.trim() || undefined }, actorIdRef.current ?? current.preferences.activeVolunteerId, now)
           : followUp),
       }, existing.residentId ? "person_follow_up" : "follow_up", followUpId, "follow_up.cancelled", "Follow-up cancelled");
     });
@@ -773,24 +706,14 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       const dueAt = new Date(`${date}T17:00:00`);
       if (!resident || !trimmedNote || trimmedNote.length > current.church.noteCharacterLimit || !date || Number.isNaN(dueAt.getTime())) return current;
       const now = new Date().toISOString();
-      const followUp: FollowUp = {
+      const followUp = createFollowUp({
         id: followUpId,
         churchId: current.church.id,
         propertyId: resident.propertyId,
         residentId,
         dueAt: dueAt.toISOString(),
-        status: "scheduled",
         note: trimmedNote,
-        history: [{
-          id: createId("activity"),
-          action: "created",
-          note: trimmedNote,
-          dueAt: dueAt.toISOString(),
-          actorId: actorIdRef.current ?? current.preferences.activeVolunteerId,
-          createdAt: now,
-        }],
-        createdAt: now,
-      };
+      }, actorIdRef.current ?? current.preferences.activeVolunteerId, now);
       return addAudit({
         ...current,
         followUps: [...current.followUps, followUp],
@@ -898,14 +821,6 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       };
     });
   }, [updateData]);
-
-  const updateGuideStep = useCallback((stepId: string, patch: Partial<GuideStep>) => {
-    if (supabaseUser && roleRef.current !== "leader") return;
-    updateData((current) => addAudit({
-      ...current,
-      guide: current.guide.map((step) => step.id === stepId ? { ...step, ...patch } : step),
-    }, "guide", stepId, "guide.updated", "Conversation guide updated"));
-  }, [supabaseUser, updateData]);
 
   const updateChurch = useCallback((patch: Partial<NeighborWalkData["church"]>) => {
     if (supabaseUser && roleRef.current !== "leader") return;
@@ -1238,11 +1153,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         if (saved) {
           const parsedServerData = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(saved.data));
           if (!parsedServerData.success) throw new Error("Sync returned invalid data.");
-          const protectedServerData = withAuthenticatedVolunteer({
-            ...parsedServerData.data,
-            residents: submittedData.residents,
-            personNotes: submittedData.personNotes,
-          }, workspace);
+          const protectedServerData = withAuthenticatedVolunteer(
+            withSnapshotDiscipleship(parsedServerData.data, submittedData), workspace,
+          );
           const nextConnection = { ...workspace, revision: Number(saved.revision) };
           workspaceRef.current = nextConnection;
           writeWorkspaceConnection(nextConnection);
@@ -1265,12 +1178,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         const parsedLatest = neighborWalkDataSchema.safeParse(migrateNeighborWalkData(latestSnapshot.data));
         if (!parsedLatest.success) throw new Error("The latest church workspace data is invalid.");
         const latestDiscipleship = await loadConnectedDiscipleship(client, workspace.churchId);
-        const parsedProtectedLatest = neighborWalkDataSchema.safeParse({
-          ...parsedLatest.data,
-          residents: latestDiscipleship.residents,
-          personNotes: latestDiscipleship.personNotes,
-          followUps: [...parsedLatest.data.followUps, ...latestDiscipleship.personFollowUps],
-        });
+        const parsedProtectedLatest = neighborWalkDataSchema.safeParse(
+          withSnapshotDiscipleship(parsedLatest.data, latestDiscipleship),
+        );
         if (!parsedProtectedLatest.success) throw new Error("The latest protected discipleship records are invalid.");
         const protectedLatest = withAuthenticatedVolunteer(parsedProtectedLatest.data, workspace);
         workspace = { ...workspace, revision: Number(latestSnapshot.revision) };
@@ -1394,7 +1304,6 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       addPersonNote,
       deletePersonNote,
       deleteResident,
-      updateGuideStep,
       saveConversationGuide,
       deleteConversationGuide,
       setFavoriteConversationGuide,

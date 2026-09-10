@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { storageKey } from "./environment";
 import {
   createId,
   type ConversationGuide,
@@ -17,7 +18,7 @@ export type GuideLibraryState = {
   teamGuideDefaults: Record<string, string>;
 };
 
-const LOCAL_GUIDE_LIBRARY_KEY = "neighborwalk-conversation-guides-v1";
+const LOCAL_GUIDE_LIBRARY_KEY = storageKey("neighborwalk-conversation-guides-v1");
 
 const guideStepSchema: z.ZodType<GuideStep> = z.object({
   id: z.string().min(1),

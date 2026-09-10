@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { assertSafeSupabaseUrl, isProductionApp, storageKey } from "./environment";
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -347,8 +348,10 @@ export function isSupabaseConfigured() {
 
 export function getSupabaseBrowserClient(): SupabaseClient<NeighborWalkDatabase> | null {
   if (!supabaseUrl || !supabasePublishableKey || typeof window === "undefined") return null;
+  assertSafeSupabaseUrl(supabaseUrl, isProductionApp, window.location.hostname);
   browserClient ??= createClient<NeighborWalkDatabase>(supabaseUrl, supabasePublishableKey, {
     auth: {
+      ...(!isProductionApp && { storageKey: storageKey("neighborwalk-auth") }),
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,

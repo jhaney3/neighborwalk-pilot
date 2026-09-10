@@ -29,7 +29,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MapCanvas, type MapSearchTarget } from "../components/MapCanvas";
 import { PropertyDrawer } from "../components/PropertyDrawer";
 import { PeopleView } from "../components/PeopleView";
-import { FollowUpsView, GuideView, LeaderView, Modal, SettingsView } from "../components/Views";
+import { FollowUpsView } from "../components/FollowUpsView";
+import { GuideView } from "../components/GuideView";
+import { LeaderView } from "../components/LeaderView";
+import { SettingsView } from "../components/SettingsView";
+import { Modal } from "../components/ui";
 import {
   centerForBoundary,
   outcomeMeta,
@@ -38,6 +42,7 @@ import {
   type NeighborWalkData,
   type Outcome,
   type ParcelReference,
+  type Property,
   type Territory,
 } from "../lib/domain";
 import { useNeighborWalk, type SupabaseUser } from "../lib/use-neighborwalk";
@@ -54,6 +59,7 @@ type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingG
 type ParcelSelection = { parcel: ParcelReference; situsAddress?: string | null; propertyIds: string[] };
 type SavedAddressResult = { propertyId: string; territoryId: string; label: string; detail: string; coordinates: Coordinates; color: string };
 const EMPTY_TERRITORIES: Territory[] = [];
+const EMPTY_PROPERTIES: Property[] = [];
 
 const PARCEL_COUNTY_NAMES: Record<string, string> = {
   "47055": "Giles County",
@@ -120,24 +126,22 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   const visibleOutcomes = useMemo(() => new Set<Outcome>(
     filter === "all" ? Object.keys(outcomeMeta) as Outcome[] : [filter],
   ), [filter]);
-  const territoryProperties = useMemo(() => (
-    data && activeTerritory
-      ? data.properties.filter((property) => property.territoryId === activeTerritory.id)
-      : []
-  ), [data, activeTerritory]);
-  const territoryParcelResults = useTerritoryParcels(data?.territories ?? EMPTY_TERRITORIES);
+  const territories = data?.territories ?? EMPTY_TERRITORIES;
+  const properties = data?.properties ?? EMPTY_PROPERTIES;
+  const activeTerritoryId = activeTerritory?.id;
+  const territoryProperties = useMemo(() => properties.filter((property) => property.territoryId === activeTerritoryId), [properties, activeTerritoryId]);
+  const territoryParcelResults = useTerritoryParcels(territories);
   const visibleParcelState = useVisibleParcels(mapViewport);
   const mapParcels = useMemo(() => mergeParcelFeatureCollections(
     activeTerritory ? territoryParcelResults[activeTerritory.id]?.parcels : undefined,
     visibleParcelState.parcels,
   ), [activeTerritory, territoryParcelResults, visibleParcelState.parcels]);
   const coverageByTerritory = useMemo<TerritoryCoverageById>(() => {
-    if (!data) return {};
-    return Object.fromEntries(data.territories.map((territory) => [
+    return Object.fromEntries(territories.map((territory) => [
       territory.id,
-      coverageForTerritory(data, territory.id, territoryParcelResults[territory.id]?.parcels),
+      coverageForTerritory({ territories, properties }, territory.id, territoryParcelResults[territory.id]?.parcels),
     ]));
-  }, [data, territoryParcelResults]);
+  }, [properties, territories, territoryParcelResults]);
   const savedAddressResults = useMemo<SavedAddressResult[]>(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!data || normalizedQuery.length < 2) return [];

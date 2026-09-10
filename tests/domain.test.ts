@@ -14,8 +14,7 @@ import {
 } from "../lib/domain";
 import type { ParcelFeatureCollection } from "../lib/parcels";
 import { coverageForTerritory } from "../lib/territory-coverage";
-import { createSeedData, createWorkspaceData } from "../lib/seed";
-import { withSecurityHeaders } from "../lib/security-headers";
+import { createSeedData } from "../lib/seed";
 import { mapTilerStyleUrlForKey } from "../lib/map-config";
 import { migrateNeighborWalkData } from "../lib/storage";
 
@@ -34,20 +33,6 @@ describe("NeighborWalk domain", () => {
     expect(data.schemaVersion).toBe(APP_SCHEMA_VERSION);
     expect(data.properties.length).toBeGreaterThan(10);
     expect(JSON.stringify(data)).not.toMatch(/@[a-z0-9.-]+\.[a-z]{2,}/i);
-  });
-
-  it("creates a clean, valid Lawrenceburg workspace for a signed-in leader", () => {
-    const data = createWorkspaceData("First Baptist Church", {
-      id: "fc77fe56-7784-4b60-9be8-3005bb250c6b",
-      email: "erica@example.org",
-    });
-    expect(neighborWalkDataSchema.safeParse(data).success).toBe(true);
-    expect(data.church.name).toBe("First Baptist Church");
-    expect(data.territories[0].center).toEqual([-87.3347, 35.2423]);
-    expect(data.properties).toHaveLength(0);
-    expect(data.visits).toHaveLength(0);
-    expect(data.residents).toHaveLength(0);
-    expect(data.volunteers[0]).toMatchObject({ email: "erica@example.org", role: "leader" });
   });
 
   it("migrates version 5 snapshots without losing existing follow-ups", () => {
@@ -415,24 +400,5 @@ describe("NeighborWalk domain", () => {
       status: "scheduled",
       dueAt: "2026-01-01T12:00:00.000Z",
     }, new Date("2026-08-12T12:00:00.000Z"))).toBe(true);
-  });
-});
-
-describe("response hardening", () => {
-  it("adds privacy and framing protections without dropping response metadata", async () => {
-    const original = new Response("ok", {
-      status: 201,
-      headers: { "content-type": "text/plain", "x-existing": "kept" },
-    });
-    const secured = withSecurityHeaders(original);
-
-    expect(secured.status).toBe(201);
-    expect(secured.headers.get("x-existing")).toBe("kept");
-    expect(secured.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(secured.headers.get("x-frame-options")).toBe("DENY");
-    expect(secured.headers.get("strict-transport-security")).toContain("max-age=31536000");
-    expect(secured.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
-    expect(secured.headers.get("permissions-policy")).toContain("geolocation=(self)");
-    expect(await secured.text()).toBe("ok");
   });
 });

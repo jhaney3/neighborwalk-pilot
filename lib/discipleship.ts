@@ -158,7 +158,7 @@ function noteFromRow(row: PersonNoteRow): PersonNote | null {
 export async function loadConnectedDiscipleship(
   client: SupabaseClient<NeighborWalkDatabase>,
   churchId: string,
-): Promise<Pick<NeighborWalkData, "residents" | "personNotes"> & { personFollowUps: FollowUp[] }> {
+): Promise<Pick<NeighborWalkData, "residents" | "personNotes" | "followUps">> {
   const [peopleResult, notesResult, followUpsResult] = await Promise.all([
     client.from("discipleship_people").select("*").eq("church_id", churchId).order("updated_at", { ascending: false }),
     client.from("discipleship_person_notes").select("*").eq("church_id", churchId).order("created_at", { ascending: false }),
@@ -180,7 +180,7 @@ export async function loadConnectedDiscipleship(
     const followUp = followUpFromRow(row);
     return followUp && followUp.residentId && visibleIds.has(followUp.residentId) ? [followUp] : [];
   });
-  return { residents, personNotes, personFollowUps };
+  return { residents, personNotes, followUps: personFollowUps };
 }
 
 function personInsert(person: Resident, churchId: string, fallbackUserId: string): PersonInsert {
@@ -345,5 +345,21 @@ export function withoutSnapshotDiscipleship(data: NeighborWalkData): NeighborWal
       ...data.sync,
       pending: data.sync.pending.filter((item) => item.entityType !== "resident" && item.entityType !== "person_note" && item.entityType !== "person_follow_up"),
     },
+  };
+}
+
+/** Rejoin the member-visible records after loading or saving a shared snapshot. */
+export function withSnapshotDiscipleship(
+  snapshot: NeighborWalkData,
+  people: Pick<NeighborWalkData, "residents" | "personNotes" | "followUps">,
+): NeighborWalkData {
+  return {
+    ...snapshot,
+    residents: people.residents,
+    personNotes: people.personNotes,
+    followUps: [
+      ...snapshot.followUps.filter((task) => !task.residentId),
+      ...people.followUps.filter((task) => task.residentId),
+    ],
   };
 }

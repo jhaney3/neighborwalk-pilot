@@ -25,10 +25,11 @@ Requirements: Node.js 22.13 or newer.
 
 ```bash
 npm install
+npm run sandbox:start
 npm run dev
 ```
 
-Then open the local URL shown in the terminal. The app seeds fictional Grace Harbor data the first time it opens.
+Then open the local URL shown in the terminal. Use the separate test account described in [safe local testing](docs/sandbox.md). Local and preview builds block production database connections. Without Supabase settings, the app opens device-only fictional demo data.
 
 Useful checks:
 
@@ -42,7 +43,7 @@ npm run verify
 
 ## Configuration
 
-Copy `.env.example` to `.env.local` for local development. MapTiler browser keys are visible to visitors by design, so use a dedicated key restricted to the deployed and local origins. Never put server secrets in variables prefixed with `NEXT_PUBLIC_`.
+`npm run sandbox:start` writes the local Supabase settings to ignored `.env.local`. Use `.env.example` as a reference for optional providers. MapTiler browser keys are visible to visitors by design, so use a dedicated key restricted to the deployed and local origins. Never put server secrets in variables prefixed with `NEXT_PUBLIC_`.
 
 | Variable | Purpose |
 | --- | --- |
@@ -53,7 +54,7 @@ Copy `.env.example` to `.env.local` for local development. MapTiler browser keys
 | `NEXT_PUBLIC_GEOCODER_URL` | Same-origin or trusted proxy endpoint used for reverse address lookup. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical production origin used for metadata. |
 
-Without both Supabase variables, NeighborWalk intentionally stays in device-only demo mode. With them, the app requires Google or email sign-in and offers the first verified user a clean Lawrenceburg church workspace.
+Without both Supabase variables, NeighborWalk intentionally stays in device-only demo mode. With them, the app requires Google or email sign-in and an active church membership. New members join through a leader-created invitation link; users without membership see an invitation-required screen. Workspace creation is currently an administrative backend operation.
 
 When `NEXT_PUBLIC_MAPTILER_KEY` is configured, new installs use MapTiler Streets and existing version-3 installs migrate once from a bundled OpenFreeMap style. Users can still choose another layer afterward. MapTiler supplies streets and building footprints, not legal parcel boundaries; a separate parcel provider is required for a Zillow-style parcel overlay.
 
@@ -110,4 +111,4 @@ Vercel project: `jhaney3s-projects/neighborwalk-pilot`. Production and Preview b
 npx vercel deploy --prod --yes --scope jhaney3s-projects
 ```
 
-See [`docs/production-checklist.md`](docs/production-checklist.md) before a live canvassing rollout.
+See [`docs/production-checklist.md`](docs/production-checklist.md) before a live canvassing rollout. The [codebase review](docs/codebase-review.md) records the cleanup, verification, and remaining product and reliability issues.

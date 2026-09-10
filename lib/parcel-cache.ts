@@ -1,7 +1,8 @@
 import { openDB, type IDBPDatabase } from "idb";
 import type { TerritoryParcelResult } from "./parcels";
+import { storageKey } from "./environment";
 
-const DB_NAME = "neighborwalk-parcel-cache";
+const DB_NAME = storageKey("neighborwalk-parcel-cache");
 const DB_VERSION = 1;
 const STORE = "territories";
 export const PARCEL_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;

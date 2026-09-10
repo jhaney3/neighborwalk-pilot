@@ -1,5 +1,6 @@
-const APP_CACHE = "neighborwalk-app-v15";
-const MAP_CACHE = "neighborwalk-map-v2";
+const CACHE_SCOPE = new URL(self.location.href).searchParams.has("sandbox") ? "-sandbox" : "";
+const APP_CACHE = `neighborwalk-app-v16${CACHE_SCOPE}`;
+const MAP_CACHE = `neighborwalk-map-v2${CACHE_SCOPE}`;
 const CORE = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 const MAP_CACHE_LIMIT = 180;
 const STATIC_DESTINATIONS = new Set(["style", "script", "worker", "image", "font", "manifest"]);

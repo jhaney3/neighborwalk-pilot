@@ -1,5 +1,6 @@
-import type { Geometry, MultiPolygon, Polygon } from "geojson";
+import type { MultiPolygon, Polygon } from "geojson";
 import type { Coordinates, NeighborWalkData, Property } from "./domain";
+import { geometryContainsPoint, ringContainsPoint } from "./geometry";
 import { parcelKey, propertyParcelKey } from "./parcel-groups";
 import type { ParcelFeature, ParcelFeatureCollection } from "./parcels";
 
@@ -12,32 +13,6 @@ export type TerritoryCoverage = {
 };
 
 export type TerritoryCoverageById = Record<string, TerritoryCoverage>;
-
-function ringContainsPoint(point: Coordinates, ring: number[][]) {
-  let inside = false;
-  for (let current = 0, previous = ring.length - 1; current < ring.length; previous = current++) {
-    const [currentLng, currentLat] = ring[current];
-    const [previousLng, previousLat] = ring[previous];
-    const intersects = (currentLat > point[1]) !== (previousLat > point[1])
-      && point[0] < ((previousLng - currentLng) * (point[1] - currentLat)) / (previousLat - currentLat) + currentLng;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function polygonContainsPoint(point: Coordinates, polygon: number[][][]) {
-  return ringContainsPoint(point, polygon[0])
-    && !polygon.slice(1).some((hole) => ringContainsPoint(point, hole));
-}
-
-function geometryContainsPoint(geometry: Geometry, point: Coordinates) {
-  const polygons = geometry.type === "Polygon"
-    ? [geometry.coordinates]
-    : geometry.type === "MultiPolygon"
-      ? geometry.coordinates
-      : [];
-  return polygons.some((polygon) => polygonContainsPoint(point, polygon));
-}
 
 function ringArea(ring: number[][]) {
   let twiceArea = 0;
@@ -97,7 +72,7 @@ function mappedLocationCoverage(properties: Property[]): TerritoryCoverage {
 }
 
 export function coverageForTerritory(
-  data: NeighborWalkData,
+  data: Pick<NeighborWalkData, "territories" | "properties">,
   territoryId: string,
   parcels?: ParcelFeatureCollection,
 ): TerritoryCoverage {

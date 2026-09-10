@@ -6,6 +6,7 @@ import type { Session } from "@supabase/supabase-js";
 import { NeighborWalkApp } from "../app/NeighborWalkApp";
 import { authErrorMessage, validAuthEmail } from "../lib/auth";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
+import { isProductionApp } from "../lib/environment";
 
 export function NeighborWalkRoot() {
   const configured = isSupabaseConfigured();
@@ -189,10 +190,9 @@ function SignInScreen() {
         <div className="auth-route" aria-hidden="true"><span><Navigation size={18} /></span><i /><span><MapPinned size={18} /></span></div>
         <p className="eyebrow">NeighborWalk church workspace</p>
         <h1 id="signin-title">Keep every doorstep accounted for.</h1>
-        <p className="auth-intro">Google is the quickest way in. Password sign-in is also available and does not send an email each time.</p>
+        <p className="auth-intro">{isProductionApp ? "Google is the quickest way in. Password sign-in is also available and does not send an email each time." : "Use your test account here. This workspace has its own data and sign-in."}</p>
         <div className="auth-form">
-          <button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button>
-          <div className="auth-divider"><span>or use your password</span></div>
+          {isProductionApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or use your password</span></div></>}
           <form className="auth-credentials" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
             <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" /></label>
             <label className="form-field"><span>Password</span><input type="password" minLength={8} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label>

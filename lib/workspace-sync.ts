@@ -1,3 +1,4 @@
+import { summarizePropertyVisits } from "./domain";
 import type {
   AuditEntry,
   FollowUp,
@@ -52,29 +53,18 @@ function mergeVisitSideEffects(
   followUps: FollowUp[],
   affectedPropertyIds: Set<string>,
 ) {
-  const visitsByProperty = new Map<string, Visit[]>();
-  for (const visit of visits) {
-    if (!affectedPropertyIds.has(visit.propertyId)) continue;
-    const grouped = visitsByProperty.get(visit.propertyId) ?? [];
-    grouped.push(visit);
-    visitsByProperty.set(visit.propertyId, grouped);
-  }
-
+  const affected = summarizePropertyVisits(
+    properties.filter((property) => affectedPropertyIds.has(property.id)),
+    visits.filter((visit) => affectedPropertyIds.has(visit.propertyId)),
+  );
+  const byId = new Map(affected.map((property) => [property.id, property]));
   const nextProperties = properties.map((property) => {
-    if (!affectedPropertyIds.has(property.id)) return property;
-    const propertyVisits = (visitsByProperty.get(property.id) ?? [])
-      .sort((left, right) => right.recordedAt.localeCompare(left.recordedAt));
-    const latest = propertyVisits[0];
-    if (!latest) {
-      return { ...property, currentOutcome: "unvisited" as const, visitCount: 0, lastVisitedAt: undefined };
-    }
-    return {
-      ...property,
-      currentOutcome: latest.outcome,
-      lastVisitedAt: latest.recordedAt,
-      visitCount: propertyVisits.length,
-      updatedAt: property.updatedAt > latest.recordedAt ? property.updatedAt : latest.recordedAt,
-    };
+    const updated = byId.get(property.id);
+    return updated ? {
+      ...updated,
+      updatedAt: updated.lastVisitedAt && updated.lastVisitedAt > property.updatedAt
+        ? updated.lastVisitedAt : property.updatedAt,
+    } : property;
   });
 
   const doNotVisitProperties = new Set(nextProperties

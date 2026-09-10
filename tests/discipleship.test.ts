@@ -4,11 +4,26 @@ import {
   userIdForVolunteer,
   volunteerIdForUser,
   withAuthenticatedVolunteer,
+  withSnapshotDiscipleship,
   withoutSnapshotDiscipleship,
 } from "../lib/discipleship";
 import { createSeedData } from "../lib/seed";
 
 describe("protected discipleship records", () => {
+  it("keeps person follow-ups visible after a shared snapshot is saved", () => {
+    const local = createSeedData();
+    const snapshot = withoutSnapshotDiscipleship(local);
+    const restored = withSnapshotDiscipleship(snapshot, local);
+
+    expect(local.followUps.some((task) => task.residentId)).toBe(true);
+    expect(restored.followUps).toHaveLength(local.followUps.length);
+    expect(new Set(restored.followUps.map((task) => task.id))).toEqual(new Set(local.followUps.map((task) => task.id)));
+    expect(restored.residents).toEqual(local.residents);
+    expect(restored.personNotes).toEqual(local.personNotes);
+    expect(snapshot.followUps.every((task) => !task.residentId)).toBe(true);
+    expect(withSnapshotDiscipleship(restored, local).followUps).toEqual(restored.followUps);
+  });
+
   it("converts authenticated users to stable volunteer identifiers", () => {
     const userId = "fc77fe56-7784-4b60-9be8-3005bb250c6b";
     expect(userIdForVolunteer(volunteerIdForUser(userId))).toBe(userId);

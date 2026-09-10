@@ -6,7 +6,8 @@ import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon }
 import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { Coordinates, Outcome, Property, Territory } from "../lib/domain";
 import { outcomeMeta } from "../lib/domain";
-import { shouldNavigateToTerritory } from "../lib/map-camera";
+import { geometryContainsPoint, polygonAtPoint } from "../lib/geometry";
+import { groupBy } from "../lib/collections";
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
 import { parcelKey, parcelProgress, propertyParcelKey } from "../lib/parcel-groups";
 import {
@@ -155,15 +156,8 @@ function searchTargetFeatureCollection(target: MapSearchTarget | null): FeatureC
 }
 
 function mappedParcelFeatureCollection(parcels: ParcelFeatureCollection, properties: Property[]): ParcelFeatureCollection {
-  const grouped = new Map<string, Property[]>();
-  const legacyProperties = properties.filter((property) => !property.parcel);
-  for (const property of properties) {
-    const key = propertyParcelKey(property);
-    if (!key) continue;
-    const group = grouped.get(key) ?? [];
-    group.push(property);
-    grouped.set(key, group);
-  }
+  const grouped = groupBy(properties, propertyParcelKey);
+  const legacyProperties = grouped.get(null) ?? [];
 
   return {
     ...parcels,
@@ -215,43 +209,6 @@ function suggestedAddress(properties: Record<string, unknown> | null | undefined
   if (houseNumber && street) return `${String(houseNumber)} ${String(street)}`;
   if (street) return String(street);
   return `${coordinates[1].toFixed(6)}, ${coordinates[0].toFixed(6)}`;
-}
-
-function ringContainsPoint(point: Coordinates, ring: number[][]) {
-  let inside = false;
-  for (let current = 0, previous = ring.length - 1; current < ring.length; previous = current++) {
-    const [currentLng, currentLat] = ring[current];
-    const [previousLng, previousLat] = ring[previous];
-    const intersects = (currentLat > point[1]) !== (previousLat > point[1])
-      && point[0] < ((previousLng - currentLng) * (point[1] - currentLat)) / (previousLat - currentLat) + currentLng;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function geometryContainsPoint(geometry: Geometry, point: Coordinates) {
-  const polygons = geometry.type === "Polygon"
-    ? [geometry.coordinates]
-    : geometry.type === "MultiPolygon"
-      ? geometry.coordinates
-      : [];
-  return polygons.some((polygon) => (
-    ringContainsPoint(point, polygon[0])
-    && !polygon.slice(1).some((hole) => ringContainsPoint(point, hole))
-  ));
-}
-
-function buildingGeometryAtPoint(geometry: Geometry | undefined, point: Coordinates): Coordinates[] | undefined {
-  const polygons = geometry?.type === "Polygon"
-    ? [geometry.coordinates]
-    : geometry?.type === "MultiPolygon"
-      ? geometry.coordinates
-      : [];
-  const polygon = polygons.find((candidate) => (
-    ringContainsPoint(point, candidate[0])
-      && !candidate.slice(1).some((hole) => ringContainsPoint(point, hole))
-  ));
-  return polygon?.[0].map(([lng, lat]) => [lng, lat] as Coordinates);
 }
 
 function redactMapError(message: string) {
@@ -575,12 +532,7 @@ export function MapCanvas({
   const currentMapStyleUrlRef = useRef(mapStyleUrl);
   const parcelDataRef = useRef<ParcelFeatureCollection>(EMPTY_PARCELS);
   const propertiesRef = useRef(properties);
-  const mappedLocationsRef = useRef<FeatureCollection>(mappedLocationFeatureCollection(
-    properties,
-    selectedPropertyId,
-    visibleOutcomes,
-    compactMarkers,
-  ));
+  const mappedLocationsRef = useRef<FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
   const territoryLongitude = territory.center[0];
   const territoryLatitude = territory.center[1];
@@ -723,7 +675,7 @@ export function MapCanvas({
         const buildingFeature = buildingFeatures.find((candidate) => (
           candidate.geometry.type === "Polygon" || candidate.geometry.type === "MultiPolygon"
         ));
-        const buildingGeometry = buildingGeometryAtPoint(buildingFeature?.geometry, coordinates);
+        const buildingGeometry = polygonAtPoint(buildingFeature?.geometry, coordinates)?.[0].map(([lng, lat]) => [lng, lat] as Coordinates);
 
         const parcelFeature = map.getLayer(PARCEL_FILL_LAYER_ID)
           ? map.queryRenderedFeatures(event.point, { layers: [PARCEL_FILL_LAYER_ID] })[0]
@@ -790,7 +742,7 @@ export function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || mapStatus !== "ready") return;
-    if (!shouldNavigateToTerritory(displayedTerritoryIdRef.current, territory.id)) return;
+    if (displayedTerritoryIdRef.current === territory.id) return;
     displayedTerritoryIdRef.current = territory.id;
     map.flyTo({
       center: [territoryLongitude, territoryLatitude],
