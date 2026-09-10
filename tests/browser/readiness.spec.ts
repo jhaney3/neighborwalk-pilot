@@ -7,9 +7,18 @@ import { randomUUID } from "node:crypto";
 const origin = "http://127.0.0.1:3013";
 const database = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const prefix = "Fictional browser rehearsal " + randomUUID();
+const disconnected = new WeakSet<BrowserContext>();
+
+async function setDisconnected(context: BrowserContext, value: boolean) {
+  // CDP's advisory offline state can change around target/tab replacement.
+  // Keep an independent request boundary across every page in the context.
+  if (value) disconnected.add(context); else disconnected.delete(context);
+  await context.setOffline(value);
+}
 
 async function isolate(context: BrowserContext) {
   await context.route("**/*", (route) => {
+    if (disconnected.has(context)) return route.abort("internetdisconnected");
     const url = new URL(route.request().url());
     return [origin, "http://127.0.0.1:54321"].includes(url.origin) ? route.continue() : route.abort();
   });
@@ -59,7 +68,7 @@ test("cold offline guide, 100 durable encounters, close/reopen and exactly-once 
   const cdp = await context.newCDPSession(page);
   // HTTP memory/disk cache must not disguise missing service-worker preparation.
   await cdp.send("Network.clearBrowserCache");
-  await context.setOffline(true);
+  await setDisconnected(context, true);
   await page.close();
   const offline = await context.newPage();
   await offline.goto(origin + "/app/guides", { waitUntil: "domcontentloaded" });
@@ -68,7 +77,7 @@ test("cold offline guide, 100 durable encounters, close/reopen and exactly-once 
   // navigation while requests remain blocked. Verify the actual network, not
   // that advisory signal (also unreliable behind a real captive portal).
   expect(await offline.evaluate(() => fetch("/manifest.webmanifest?network-probe=offline", { cache: "no-store" }).then(() => "reachable", () => "blocked"))).toBe("blocked");
-  await context.setOffline(true);
+  await setDisconnected(context, true);
   await offline.getByRole("button", { name: "Today", exact: true }).click();
   for (let i = 0; i < 100; i++) await encounter(offline, prefix + " offline /" + i);
   expect(await queued(offline)).toBe(100);
@@ -78,7 +87,7 @@ test("cold offline guide, 100 durable encounters, close/reopen and exactly-once 
   await reopened.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
   await expect(reopened.getByRole("heading", { name: /Hello,/ })).toBeVisible();
   expect(await queued(reopened)).toBe(100);
-  await context.setOffline(false);
+  await setDisconnected(context, false);
   await expect.poll(() => queued(reopened), { timeout: 120_000 }).toBe(0);
   expect(recorded(prefix + " offline")).toBe(100);
 });
@@ -133,7 +142,7 @@ test("quota failure retains the form and never claims a persisted encounter", as
 test("expired access token can explicitly reopen a recently prepared offline workspace", async ({ context, page }) => {
   await isolate(context); await signIn(page);
   await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
-  await context.setOffline(true);
+  await setDisconnected(context, true);
   // Exercise the SDK's expired-session path without emitting the fictional
   // account's credentials into test output or replacing its refresh token.
   await page.evaluate(() => {
@@ -148,11 +157,11 @@ test("expired access token can explicitly reopen a recently prepared offline wor
   await expect(reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toBeVisible();
   await reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true }).click();
   await expect(reopened.getByRole("heading", { name: /Hello,/ })).toBeVisible();
-  await context.setOffline(true);
+  await setDisconnected(context, true);
   await encounter(reopened, prefix + " expired /one");
   expect(await queued(reopened)).toBe(1);
   expect(recorded(prefix + " expired")).toBe(0);
-  await context.setOffline(false);
+  await setDisconnected(context, false);
   await expect.poll(() => queued(reopened), { timeout: 120_000 }).toBe(0);
   expect(recorded(prefix + " expired")).toBe(1);
 });
@@ -167,7 +176,7 @@ test("known access denial locks the cache and prevents a later offline reopen", 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-supabase-workspace:sandbox:http://127.0.0.1:54321")!).verifiedAt)).toBe("");
-  await context.setOffline(true);
+  await setDisconnected(context, true);
   await page.evaluate(() => {
     const key = "neighborwalk-auth:sandbox:http://127.0.0.1:54321";
     const auth = JSON.parse(localStorage.getItem(key)!);
@@ -186,7 +195,7 @@ test("cross-tab session removal hides offline records without clearing authored 
   await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
   const second = await context.newPage(); await second.goto(origin + "/app/today");
   await expect(second.getByText(/already open in another tab or window/)).toBeVisible();
-  await context.setOffline(true);
+  await setDisconnected(context, true);
   await encounter(page, prefix + " signout /one");
   expect(await queued(page)).toBe(1);
   await second.evaluate(() => localStorage.removeItem("neighborwalk-auth:sandbox:http://127.0.0.1:54321"));
@@ -201,7 +210,7 @@ test("cross-tab session removal hides offline records without clearing authored 
 test("a second tab cannot overwrite unsent work and can reopen after the first closes", async ({ context, page }) => {
   await isolate(context); await signIn(page);
   await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
-  await context.setOffline(true);
+  await setDisconnected(context, true);
   await encounter(page, prefix + " tabs /one");
   const second = await context.newPage(); await second.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
   await expect(second.getByText(/already open in another tab or window/)).toBeVisible();
@@ -210,11 +219,11 @@ test("a second tab cannot overwrite unsent work and can reopen after the first c
   await page.close(); await second.reload();
   await expect(second.getByRole("heading", { name: /Hello,/ })).toBeVisible();
   expect(await queued(second)).toBe(1);
-  await context.setOffline(true);
+  await setDisconnected(context, true);
   await encounter(second, prefix + " tabs /two");
   expect(await queued(second)).toBe(2);
   expect(recorded(prefix + " tabs")).toBe(0);
-  await context.setOffline(false);
+  await setDisconnected(context, false);
   await expect.poll(() => queued(second), { timeout: 60_000 }).toBe(0);
   expect(recorded(prefix + " tabs")).toBe(2);
 });

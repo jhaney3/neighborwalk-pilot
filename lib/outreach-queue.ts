@@ -27,6 +27,17 @@ const records = (data: NeighborWalkData, kind: CollectionKind) => (data[collecti
 const comparable = (kind: CollectionKind, record: EntityRecord) => Object.fromEntries(fields[kind].map((key) => [key, record[key]]));
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+/** Mirror the server's person-move effect on still-open tasks. Historical
+ * encounters, resolved tasks and location restrictions stay at their originals.
+ * This projection predicts versions; it never rewrites an immutable command. */
+function movedPersonTasks(before: NeighborWalkData, people: NeighborWalkData["residents"]) {
+  const original = new Map(before.residents.map((person) => [person.id, person]));
+  const destinations = new Map(people.filter((person) => original.has(person.id)
+    && original.get(person.id)!.propertyId !== person.propertyId).map((person) => [person.id, person.propertyId]));
+  return new Map(before.followUps.filter((task) => task.status === "scheduled" && task.residentId && destinations.has(task.residentId))
+    .map((task) => [task.id, destinations.get(task.residentId!)]));
+}
+
 export function commandPending(commands: QueuedCommand[]): PendingMutation[] {
   return commands.flatMap(({ command }) => command.operations.map((op, index) => ({
     id: `${command.id}:${index}`, entityType: op.entityType, entityId: op.entityId,
@@ -38,6 +49,11 @@ export function stageWorkspaceChange(previous: NeighborWalkData, next: NeighborW
   if (previous.sync.legacyRecoveryRequired) throw new Error("Export and review this device’s legacy pending work before making more changes. Nothing was discarded.");
   if (previous.church.id !== scope.churchId || next.church.id !== scope.churchId) throw new Error("The change belongs to a different church.");
   const versions = { ...previous.sync.recordVersions };
+  const movedTasks = movedPersonTasks(previous, next.residents);
+  if (movedTasks.size) {
+    next = { ...next, followUps: next.followUps.map((task) => movedTasks.has(task.id) ? { ...task, propertyId: movedTasks.get(task.id) } : task) };
+    for (const id of movedTasks.keys()) versions[versionKey("follow_up", id)] = (versions[versionKey("follow_up", id)] ?? 0) + 1;
+  }
   const operations: CommandOperation[] = [...extraOperations];
   const archivedPeople = new Set(previous.residents.filter((p) => !next.residents.some((n) => n.id === p.id)).map((p) => p.id));
   const appendedMutations = next.sync.pending.filter((m) => !previous.sync.pending.some((p) => p.id === m.id));
@@ -46,7 +62,10 @@ export function stageWorkspaceChange(previous: NeighborWalkData, next: NeighborW
     const oldRecords = new Map(records(previous, kind).map((r) => [r.id, r]));
     const nextRecords = new Map(records(next, kind).map((r) => [r.id, r]));
     for (const [id, record] of nextRecords) {
-      const old = oldRecords.get(id);
+      const original = oldRecords.get(id);
+      // The server moves the task during the preceding resident operation.
+      // Do not emit a second task relink for that automatic side effect.
+      const old = kind === "follow_up" && original && movedTasks.has(id) ? { ...original, propertyId: movedTasks.get(id) } : original;
       if (old && same(comparable(kind, old), comparable(kind, record))) continue;
       // Restriction side effects are applied by the server across all owners.
       if (kind === "follow_up" && newRestrictionVisit && old && record.status === "cancelled") continue;
@@ -98,6 +117,11 @@ export function reconcileOutreachWorkspace(remote: NeighborWalkData, local: Neig
         const key = collections[op.entityType as CollectionKind];
         const current = (result[key] ?? []) as EntityRecord[];
         const record = op.record as EntityRecord | undefined;
+        if (op.entityType === "resident" && record && op.operation === "upsert") {
+          const movedTasks = movedPersonTasks(result, [record as NeighborWalkData["residents"][number]]);
+          result = { ...result, followUps: result.followUps.map((task) => movedTasks.has(task.id) ? { ...task, propertyId: movedTasks.get(task.id) } : task) };
+          for (const id of movedTasks.keys()) result.sync.recordVersions[versionKey("follow_up", id)] = (result.sync.recordVersions[versionKey("follow_up", id)] ?? 0) + 1;
+        }
         result = { ...result, [key]: op.operation === "delete" ? current.filter((r) => r.id !== op.entityId)
           : [...current.filter((r) => r.id !== op.entityId), record] };
       }

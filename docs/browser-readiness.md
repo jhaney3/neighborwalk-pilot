@@ -14,7 +14,7 @@ npm run test:browser
 
 The browser suite starts and stops its own optimized server on port 3013. It uses `/usr/bin/chromium` when present locally; otherwise install its pinned browser with `npx playwright install chromium`. CI installs Chromium and its dependencies in the disposable Ubuntu runner. Do not run the browser suite against `next dev`: that deliberately unregisters the service worker.
 
-Fictional browser encounters remain in the local fixture church with a generated rehearsal prefix. Assertions query counts only. Repeating the suite creates a new prefix; it does not erase earlier records or reset existing accounts.
+Fictional browser encounters remain in the local fixture church with a generated rehearsal prefix. Assertions query counts and the IDs/statuses of specifically generated test tasks only. Repeating the suite creates a new prefix; it does not erase earlier records or reset existing accounts.
 
 ## Executed scenarios
 
@@ -33,7 +33,7 @@ Fictional browser encounters remain in the local fixture church with a generated
 | Same-account tab handover | Second writer blocked; closing the original allowed reopening with the pending entry intact and both later entries shared once |
 | Leader-to-volunteer task responsibility | Assignment, decline, acceptance and completion matched server state; completion was unavailable before acceptance |
 
-The original three-scenario browser suite passed in hosted CI run `34450072005`. Seven scenarios passed together locally (about two minutes), and the eighth task-responsibility scenario passed separately. The subsequent worker route-boundary hardening has unit coverage and awaits its hosted run. Full verification passes 140 unit tests, lint, types and the optimized build.
+The original three-scenario browser suite passed in hosted CI run `34450072005`. Run `34452002846` found that CDP's simulated offline state allowed a request during tab replacement; its multi-tab zero-server-writes assertion correctly failed. The test now combines CDP offline state with a persistent context-wide request-abort boundary, so a new tab cannot briefly send a request. All eight scenarios subsequently passed together locally (about two minutes), retaining the same assertions. Hosted verification of this fix is pending. Full verification passes 141 unit tests, lint, types and the optimized build.
 
 ## Offline design
 

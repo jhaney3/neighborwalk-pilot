@@ -50,5 +50,20 @@ do $$ declare r jsonb; begin
  perform pg_temp.task_denied(pg_temp.task_command('subsequent-open-parent','task-invalid-next',0,r||'{"parentFollowUpId":"task-next","acceptance":"accepted"}'));
  if (select count(*) from public.outreach_task_activity where task_id='task-a') <> 4 then raise exception 'Task lifecycle history was rewritten or duplicated'; end if;
 end $$;
+do $$ declare r jsonb; person_record jsonb; begin
+ person_record:='{"name":"Fictional moving person","propertyId":"task-location-a"}';
+ perform public.outreach_apply_command(jsonb_set(pg_temp.task_command('create-moving-person','moving-person',0,person_record),'{operations,0,entityType}','"resident"'));
+ r:='{"residentId":"moving-person","propertyId":"task-location-a","dueAt":"2026-09-16","assignedVolunteerId":"volunteer_40000000000040008000000000000012","acceptance":"accepted","status":"scheduled"}';
+ perform public.outreach_apply_command(pg_temp.task_command('create-moving-task','moving-task',0,r));
+ perform public.outreach_apply_command(pg_temp.task_command('create-closed-moving-task','closed-moving-task',0,r));
+ perform public.outreach_apply_command(pg_temp.task_command('complete-before-person-move','closed-moving-task',1,r||'{"status":"completed"}'));
+ perform public.outreach_apply_command(jsonb_set(pg_temp.task_command('move-person','moving-person',1,person_record||'{"propertyId":"task-location-b"}'),'{operations,0,entityType}','"resident"'));
+ if not exists(select 1 from public.outreach_tasks where id='moving-task' and location_id='task-location-b' and version=2)
+   or not exists(select 1 from public.outreach_tasks where id='closed-moving-task' and location_id='task-location-a' and version=2)
+   then raise exception 'Person move did not preserve closed history and increment the open task version exactly once'; end if;
+ perform public.outreach_apply_command(pg_temp.task_command('edit-after-person-move','moving-task',2,r||'{"propertyId":"task-location-b","dueAt":"2026-09-17"}'));
+ if not exists(select 1 from public.outreach_tasks where id='moving-task' and location_id='task-location-b' and version=3 and due_date='2026-09-17')
+   then raise exception 'Follow-up after a person move did not use the predicted server version'; end if;
+end $$;
 rollback;
 \echo 'Follow-up lifecycle guards passed (all fictional changes rolled back).'
