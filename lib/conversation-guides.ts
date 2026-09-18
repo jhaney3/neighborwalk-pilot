@@ -98,6 +98,11 @@ export function makeBlankGuideStep(order: number): GuideStep {
   };
 }
 
+export function parseScriptureReferenceInput(value: string): string[] {
+  return value.split(",").map((reference, index) =>
+    index > 0 ? reference.trimStart() : reference);
+}
+
 export function normalizeGuideSteps(steps: GuideStep[]): GuideStep[] {
   return steps.map((step, index) => ({
     ...step,

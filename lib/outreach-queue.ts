@@ -5,17 +5,19 @@ import type { StorageScope } from "./storage";
 import { projectOutreachWorkspace } from "./outreach-projection";
 
 export const commandCollections = {
-  event: "events", team: "teams", territory: "territories", assignment: "assignments", property: "properties",
+  event: "events", participant: "outingParticipants", team: "teams", territory: "territories", target: "walkTargets", assignment: "assignments", property: "properties",
   visit: "visits", resident: "residents", person_note: "personNotes", follow_up: "followUps", restriction: "restrictions",
 } as const;
 const collections = commandCollections;
 type CollectionKind = keyof typeof collections;
 export const commandFields: Record<CollectionKind, string[]> = {
   event: ["name", "startsAt", "endsAt", "status", "timezone", "purpose", "meetingPoint", "leaderContact", "guideId", "debrief"],
-  team: ["name", "status", "memberIds"], territory: ["name", "kind", "color", "center", "zoom", "boundary"],
-  assignment: ["eventId", "territoryId", "assignedTeamId", "assignedVolunteerId", "status"],
+  participant: ["eventId", "volunteerId", "status"],
+  team: ["name", "status", "eventId", "memberIds"], territory: ["name", "kind", "color", "center", "zoom", "boundary"],
+  target: ["eventId", "territoryId", "name", "color", "selectionKind", "geometry", "streetSelection", "parcels", "rosterState", "frozenAt", "finishedAt"],
+  assignment: ["eventId", "territoryId", "targetId", "assignedTeamId", "assignedVolunteerId", "status"],
   property: ["territoryId", "address", "unit", "coordinates", "buildingGeometry", "parcel", "source"],
-  visit: ["eventId", "territoryId", "propertyId", "residentId", "outcome", "context", "objectiveNote", "recordedAt", "deviceId"],
+  visit: ["eventId", "territoryId", "targetId", "propertyId", "residentId", "outcome", "context", "objectiveNote", "recordedAt", "deviceId"],
   resident: ["propertyId", "name", "assignedVolunteerId", "sharedWithVolunteerIds", "sharedWithTeamIds", "faithStatus", "discipleshipStage", "status", "phone", "email", "preferredContact", "contactPermission", "lastContactAt"],
   person_note: ["residentId", "kind", "body"],
   follow_up: ["propertyId", "residentId", "sourceVisitId", "eventId", "assignedTeamId", "assignedVolunteerId", "dueAt", "status", "channel", "acceptance", "note", "completionNote", "parentFollowUpId", "history"],
@@ -70,6 +72,12 @@ export function stageWorkspaceChange(previous: NeighborWalkData, next: NeighborW
       // Restriction side effects are applied by the server across all owners.
       if (kind === "follow_up" && newRestrictionVisit && old && record.status === "cancelled") continue;
       const payload = { ...record };
+      if (kind === "target" && Array.isArray(payload.parcels)) {
+        // Parcel geometry is an authoritative server snapshot, not client input.
+        // Keep local map geometry in the workspace, but don't duplicate it on wire.
+        payload.parcels = payload.parcels.map((parcel: Record<string, unknown>) => ({ countyFips: parcel.countyFips, gislink: parcel.gislink,
+          datasetRevision: parcel.datasetRevision, inclusionSource: parcel.inclusionSource }));
+      }
       if (kind === "follow_up") {
         payload.dueAt = calendarDate(String(record.dueAt), next.church.timezone);
         if (!old && !payload.assignedVolunteerId) payload.assignedVolunteerId = next.residents.find((p) => p.id === record.residentId)?.assignedVolunteerId ?? next.preferences.activeVolunteerId;
@@ -85,13 +93,17 @@ export function stageWorkspaceChange(previous: NeighborWalkData, next: NeighborW
   if (!same(previous.church, next.church)) operations.push({ entityType: "settings", entityId: next.church.id, operation: "upsert",
     expectedVersion: versions[versionKey("settings", next.church.id)] ?? 0, record: next.church });
   if (!operations.length) return { ...next, sync: previous.sync };
-  const order: Partial<Record<CommandEntity, number>> = { event: 0, team: 1, territory: 2, property: 3, resident: 4, visit: 5, person_note: 6, follow_up: 7, assignment: 8, restriction: 9 };
-  operations.sort((a, b) => (a.operation === "delete" ? 100 - (order[a.entityType] ?? 10) : order[a.entityType] ?? 10)
-    - (b.operation === "delete" ? 100 - (order[b.entityType] ?? 10) : order[b.entityType] ?? 10));
+  const order: Partial<Record<CommandEntity, number>> = { event: 0, participant: 1, team: 2, territory: 3, target: 4, property: 5, resident: 6, assignment: 7, visit: 8, person_note: 9, follow_up: 10, restriction: 11 };
+  // A replacement releases its old assignment before allocating overlapping
+  // work. All operations remain inside the same server transaction and rollback.
+  const operationOrder = (op: CommandOperation) => op.entityType === "assignment" && op.operation === "upsert" && op.record?.status === "cancelled" ? -1
+    : op.operation === "delete" ? 100 - (order[op.entityType] ?? 10) : order[op.entityType] ?? 10;
+  operations.sort((a, b) => operationOrder(a) - operationOrder(b));
   // JSON cloning freezes the exact wire payload. A retry never re-reads edited
   // UI state under an old command ID, and undefined values cannot hash differently.
   const command = outreachCommandSchema.parse(JSON.parse(JSON.stringify({ schemaVersion: 1, id: createId("command"), ...scope,
     createdAt: new Date().toISOString(), operations: operations.map((op) => ({ ...op, reason: reasons[versionKey(op.entityType, op.entityId)] ?? op.reason })) })));
+  if (command.operations.some((op) => op.entityType === "target") && new TextEncoder().encode(JSON.stringify(command)).byteLength > 700_000) throw new Error("This target is too large to save safely. Divide it into smaller nightly targets; your map selection is still here.");
   for (const op of command.operations) versions[versionKey(op.entityType, op.entityId)] = op.expectedVersion + 1;
   const commands: QueuedCommand[] = [...(previous.sync.commands ?? []), { command, state: "queued" }];
   return neighborWalkDataSchema.parse({ ...next, sync: { ...next.sync, commands, pending: commandPending(commands), recordVersions: versions } });
@@ -111,12 +123,26 @@ export function reconcileOutreachWorkspace(remote: NeighborWalkData, local: Neig
     if (queued.state === "needs_review") break;
     for (const op of queued.command.operations) {
       if (op.entityType === "visit" && op.record?.outcome === "do_not_visit" && typeof op.record.propertyId === "string") pendingRestrictedLocations.add(op.record.propertyId);
+      if (op.entityType === "visit" && op.operation === "upsert" && typeof op.record?.targetId === "string" && op.record.targetParcel && typeof op.record.targetParcel === "object") {
+        const parcel = op.record.targetParcel as { countyFips?: unknown; gislink?: unknown };
+        if (typeof parcel.countyFips === "string" && typeof parcel.gislink === "string" && !result.targetProgress.some((touch) => touch.targetId === op.record!.targetId && touch.countyFips === parcel.countyFips && touch.gislink === parcel.gislink)) {
+          result = { ...result, targetProgress: [...result.targetProgress, { targetId: op.record.targetId, countyFips: parcel.countyFips, gislink: parcel.gislink }] };
+        }
+      }
       if (op.entityType === "settings") {
         result = { ...result, church: op.record as NeighborWalkData["church"] };
       } else if (op.entityType in collections) {
         const key = collections[op.entityType as CollectionKind];
         const current = (result[key] ?? []) as EntityRecord[];
-        const record = op.record as EntityRecord | undefined;
+        let record = op.record as EntityRecord | undefined;
+        if (op.entityType === "target" && record && Array.isArray(record.parcels)) {
+          const localTarget = local.walkTargets.find((target) => target.id === op.entityId);
+          const snapshots = new Map(localTarget?.parcels.map((parcel) => [JSON.stringify([parcel.countyFips, parcel.gislink, parcel.datasetRevision]), parcel]));
+          record = { ...record, parcels: record.parcels.map((parcel: Record<string, unknown>) => {
+            const snapshot = snapshots.get(JSON.stringify([parcel.countyFips, parcel.gislink, parcel.datasetRevision]));
+            return { ...parcel, ...(snapshot?.geometry ? { geometry: snapshot.geometry } : {}), ...(snapshot?.representativePoint ? { representativePoint: snapshot.representativePoint } : {}) };
+          }) };
+        }
         if (op.entityType === "resident" && record && op.operation === "upsert") {
           const movedTasks = movedPersonTasks(result, [record as NeighborWalkData["residents"][number]]);
           result = { ...result, followUps: result.followUps.map((task) => movedTasks.has(task.id) ? { ...task, propertyId: movedTasks.get(task.id) } : task) };

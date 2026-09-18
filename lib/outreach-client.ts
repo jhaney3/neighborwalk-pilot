@@ -48,19 +48,20 @@ export async function readOutreachPages(client: Client, churchId: string, kind: 
   }, WORKSPACE_READ_LIMITS, budget);
 }
 
-const kinds = ["event", "team", "team_member", "territory", "assignment", "property", "visit", "follow_up", "task_activity", "resident", "person_note", "restriction", "audit", "migration_issue"] as const;
+const kinds = ["event", "participant", "team", "team_member", "territory", "target", "target_parcel", "target_progress", "parent_progress", "assignment", "property", "visit", "follow_up", "task_activity", "resident", "person_note", "restriction", "audit", "migration_issue"] as const;
 type Records = Record<(typeof kinds)[number], PageRow[]>;
 
 export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Records, preferences?: NeighborWalkData["preferences"]): NeighborWalkData {
   const rows = (kind: keyof Records) => pages[kind].map((entry) => rowSchema.parse(entry.record));
   const versions: Record<string, number> = { [versionKey("settings", info.church.id)]: info.settingsVersion };
   for (const kind of kinds) for (const r of pages[kind]) versions[versionKey(kind, r.id)] = Number(r.version);
-  const assignments = rows("assignment").map((r) => ({ ...common(r), eventId: r.outing_id, territoryId: r.territory_id,
+  const assignments = rows("assignment").map((r) => ({ ...common(r), eventId: r.outing_id, territoryId: r.territory_id, targetId: string(r, "target_id"),
     assignedTeamId: string(r, "team_id"), assignedVolunteerId: user(r, "assignee_id"), status: r.status }));
   const members = rows("team_member");
   const activities = rows("task_activity");
   const membersByTeam = groupBy(members, (row) => row.team_id);
   const activitiesByTask = groupBy(activities, (row) => row.task_id);
+  const parcelsByTarget = groupBy(rows("target_parcel"), (row) => row.target_id);
   const events = rows("event").map((r) => ({ ...common(r), name: r.name, startsAt: iso(r, "starts_at"), endsAt: iso(r, "ends_at"), status: r.status,
     timezone: r.timezone, purpose: r.purpose, meetingPoint: r.meeting_point, leaderContact: r.leader_contact, guideId: string(r, "guide_id"), debrief: r.debrief }));
   const activeEventId = events.some((event) => event.id === preferences?.activeEventId) ? preferences!.activeEventId
@@ -73,7 +74,18 @@ export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Re
   const candidate = neighborWalkDataSchema.parse({
     schemaVersion: APP_SCHEMA_VERSION, church: info.church,
     volunteers: info.volunteers.map((v) => { const r = rowSchema.parse(v); return { ...r, email: string(r, "email") }; }),
-    events, territories, assignments,
+    events,
+    outingParticipants: rows("participant").map((r) => ({ ...common(r), eventId: r.outing_id, volunteerId: r.volunteer_id, status: r.status })),
+    territories, assignments,
+    walkTargets: rows("target").map((r) => ({ ...common(r), eventId: r.outing_id, territoryId: r.territory_id, name: r.name, color: r.color,
+      selectionKind: r.selection_kind, geometry: r.geometry_json, streetSelection: r.street_selection ?? undefined, rosterState: r.roster_state,
+      frozenAt: iso(r, "frozen_at"), finishedAt: iso(r, "finished_at"), parcels: (parcelsByTarget.get(r.id) ?? []).map((p) => ({
+        countyFips: p.county_fips, gislink: p.gislink, datasetRevision: p.dataset_revision, inclusionSource: p.inclusion_source,
+        geometry: p.geometry_json ?? undefined, representativePoint: p.representative_longitude == null ? undefined : [p.representative_longitude, p.representative_latitude],
+      })) })),
+    targetProgress: rows("target_progress").map((r) => ({ targetId: r.target_id, countyFips: r.county_fips, gislink: r.gislink })),
+    parentProgress: rows("parent_progress").map((r) => ({ territoryId: r.territory_id, eventId: string(r, "outing_id"), countyFips: r.county_fips, gislink: r.gislink })),
+    coverageVisibility: info.role === "leader" ? "complete" : "assigned_targets_only",
     teams: rows("team").map((r) => ({ ...common(r), name: r.name, eventId: string(r, "legacy_event_id"), status: r.status,
       memberIds: (membersByTeam.get(r.id) ?? []).map((m) => m.volunteer_id),
       territoryIds: currentAssignments.filter((a) => a.assignedTeamId === r.id).map((a) => a.territoryId) })),
@@ -81,7 +93,8 @@ export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Re
       mergedIntoId: string(r, "merged_into_id"), mergedAt: iso(r, "merged_at"),
       coordinates: r.longitude == null ? undefined : [r.longitude, r.latitude], buildingGeometry: r.building_geometry ?? undefined, parcel: r.parcel_reference ?? undefined,
       currentOutcome: "unvisited", visitCount: 0, source: r.source, createdAt: iso(r, "created_at"), updatedAt: iso(r, "updated_at"), createdByVolunteerId: user(r, "created_by") })),
-    visits: rows("visit").map((r) => ({ ...common(r), eventId: string(r, "outing_id"), territoryId: string(r, "territory_id"), propertyId: string(r, "location_id"),
+    visits: rows("visit").map((r) => ({ ...common(r), eventId: string(r, "outing_id"), territoryId: string(r, "territory_id"), targetId: string(r, "target_id"),
+      targetParcel: string(r, "target_county_fips") && string(r, "target_gislink") ? { countyFips: string(r, "target_county_fips")!, gislink: string(r, "target_gislink")! } : undefined, propertyId: string(r, "location_id"),
       residentId: string(r, "person_id"), volunteerId: r.actor_key, context: r.context, outcome: r.outcome, objectiveNote: string(r, "objective_note"),
       recordedAt: iso(r, "occurred_at"), deviceId: r.device_id,
       corrections: Array.isArray(r.corrections) ? r.corrections.map((item) => { const correction = rowSchema.parse(item); return { ...correction, createdAt: iso(correction, "createdAt") }; }) : undefined })),

@@ -5,6 +5,7 @@ import {
   legacyConversationGuide,
   makeBlankGuideStep,
   normalizeGuideSteps,
+  parseScriptureReferenceInput,
   preferredConversationGuide,
   resolveFieldGuide,
   validGuideInput,
@@ -67,6 +68,15 @@ describe("conversation guides", () => {
 
     expect(normalized.map((item) => item.order)).toEqual([1, 2]);
     expect(normalized[0].scriptureReferences).toEqual(["Romans 6:23"]);
+  });
+
+  it("preserves spaces and an unfinished comma while scripture references are entered", () => {
+    expect(parseScriptureReferenceInput("Romans ")).toEqual(["Romans "]);
+    expect(parseScriptureReferenceInput("Romans 3:23, ")).toEqual(["Romans 3:23", ""]);
+    expect(parseScriptureReferenceInput("1 John 4:8,   Song of Solomon 2:4"))
+      .toEqual(["1 John 4:8", "Song of Solomon 2:4"]);
+    expect(parseScriptureReferenceInput("Romans 3:23, Romans 5:8, Ephesians 2:8–9"))
+      .toEqual(["Romans 3:23", "Romans 5:8", "Ephesians 2:8–9"]);
   });
 
   it("uses the favorite guide and otherwise prefers a church guide", () => {

@@ -78,32 +78,24 @@ or Capacitor wrapper. App Store packaging is future work.
 | People | `components/PeopleView.tsx`, `lib/discipleship.ts` | Ownership/sharing, stages, notes, tasks, protected database persistence |
 | Other views | `components/FollowUpsView.tsx`, `components/GuideView.tsx`, `components/LeaderView.tsx`, `components/SettingsView.tsx`, `components/MembersPanel.tsx` | Follow-up queue, guide editor, leader metrics, membership/invitations, settings |
 | Guide library | `lib/conversation-guides.ts` | Church/personal guides, favorites, group defaults, local and connected storage |
-| Scripture | `components/ScriptureReader.tsx`, `app/api/scripture/route.ts` | ESV reading, validation, server-only provider key, timeout/error handling |
+| Scripture | `components/ScriptureReader.tsx`, `app/api/scripture/route.ts` | Reference-only external links; the retired API route returns a provider-free reference response |
 | Appearance | `app/globals.css`, `app/styles/*.css` | Feature CSS, responsive layout, shared controls; preserve the documented import order |
 | PWA | `public/sw.js`, `public/manifest.webmanifest` | Installation and bounded caching; service worker registers only in production |
 | Database | `supabase/migrations/` | Actual pilot schema history, grants, RLS, guard functions, parcel RPCs |
-| Supporting designs | `docs/database/postgres.sql`, `docs/api/openapi.yaml` | Future normalized backend and API contract, not the implemented backend |
+| Supporting designs | `docs/database/postgres.sql`, `docs/api/openapi.yaml` | Archived proposals, not the implemented backend or an executable migration/API contract |
 
 ## Data flow and boundaries
 
-The local document is `NeighborWalkData`, currently schema version 10. It contains
-church settings, volunteers, events, teams, territories, properties, visits,
-follow-ups, residents, person notes, legacy guide steps, audit entries, preferences,
-and pending mutations. IndexedDB holds the primary document; localStorage holds
-connection metadata and the separate local guide library.
+At this orientation checkpoint, the local document was `NeighborWalkData` schema
+version 10 and connected writes still used a revision-checked shared snapshot plus
+separate protected-person tables. That snapshot merge and its direct protected-
+record persistence were retired by the church-readiness rework.
 
-In connected mode, the browser uses the typed Supabase client directly. Shared
-field data uses `workspace_snapshots`, with revision-checked updates. People,
-person notes, and person-linked follow-ups use separate protected tables and are
-removed from shared snapshots by `withoutSnapshotDiscipleship`. Conversation
-guides, favorites, and group defaults also use separate tables.
-
-`runSync` writes protected mutations before updating the shared snapshot. On a
-revision collision it fetches newer data, merges pending changes by entity, and
-retries once; further failures use automatic backoff. The merge retains distinct
-visits and notes and recalculates visit effects. It is not a general field-level
-conflict resolver, and the protected writes and snapshot update are not one
-transaction. There is no Supabase Realtime subscription in the current client.
+The current branch uses schema version 11 for account/church/environment-scoped
+device state and an immutable outbox. Connected reads use bounded relational
+collections; connected field writes use versioned, transactional commands with
+server receipts. Legacy snapshots remain only as preserved migration evidence.
+See [current architecture](current-architecture.md) for the maintained contract.
 
 Membership roles are leader and volunteer. SQL policies and guards enforce
 membership and privileged operations. Person visibility includes the creator,
@@ -118,9 +110,11 @@ locations otherwise. `scripts/parcel-import/` contains a separate Python importe
 for Giles, Lawrence, Lewis, and Wayne county archives; it needs an external
 authenticated import endpoint and is not required to run the web app.
 
-The service worker caches app assets and up to 180 map responses. It is not a
-complete offline-region download system. Notifications are generated while the
-app runs; no server push-delivery system is present.
+At the recorded baseline, the service worker cached app assets and a bounded set
+of map responses. The current branch prepares build-pinned anonymous app assets
+only; it excludes external map imagery and protected/API responses. Email-reminder
+delivery is separately implemented but remains disabled until its provider and
+scheduler are configured and verified.
 
 ## Documentation differences and follow-up validation
 
@@ -130,10 +124,13 @@ app runs; no server push-delivery system is present.
 - The README now reflects the current UI, which
   displays an invitation-required screen for users without membership. The
   creation RPC remains in migrations; the unused client factory was removed.
-- The OpenAPI routes are design documents. The only implemented Next.js API
-  route is `/api/scripture`; workspace operations go directly to Supabase.
-- The tests mainly cover pure domain, migration, merge, parsing, and route
-  behavior. They do not establish live RLS correctness or browser reliability.
+- The OpenAPI routes are archived design documents. Current Next.js API routes
+  cover the retired reference-only Scripture response and reminder operations;
+  workspace operations use the transactional Supabase contracts.
+- The orientation-era tests mainly covered pure domain, migration, merge,
+  parsing, and route behavior. Current database and browser suites add RLS and
+  end-to-end fictional-workspace evidence; they still do not replace staging,
+  production, physical-device or church-pilot verification.
 - Before release work, validate account switching/cache isolation, sync after
   person-task changes, same-record conflicts, revocation while offline, backup
   completeness across the separate guide library, and real device installation.

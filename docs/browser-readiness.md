@@ -47,6 +47,12 @@ Earlier CI runs `34452002846` and `34453143023` found a request escaping simulat
 
 The delayed-refresh regression installs [Playwright's clock](https://playwright.dev/docs/clock) before application timers exist, holds one actual guide-state request during a sync, saves new fieldwork, and advances only the debounce window. Once released, the work must share before the normal 30-second poll. It does not modify the queue or manufacture a server receipt.
 
+## September 11 audit rerun
+
+All 18 scenarios passed together against the final optimized local build in 6.9 minutes. The first audit run passed 17 scenarios but timed out waiting for the old “Save private guide” label while editing an existing private guide; the interface now correctly says “Save changes.” After the regression selector was updated, the guide scenario passed alone and the complete suite passed.
+
+Separate read-only browser reviews covered every public route and each distinct demo surface at desktop and narrow widths. Final focused checks confirmed that active fieldwork exposes one outing-linked community-encounter launcher, property follow-up dates use the church-local minimum, the mobile recovery page has no horizontal overflow, Settings stays inside the demo route, `/invite` without a token reaches sign-in, changed dialogs contain and restore keyboard focus, and automated accessibility checks found no violations on the exercised People, property and community-encounter surfaces. These checks are Chromium evidence, not the outstanding physical-device or screen-reader matrix.
+
 ## Offline design
 
 `npm run build` generates an ignored `public/sw-build.js` manifest containing only immutable Next.js JS/CSS/font paths. The cache version includes asset content, the worker source, build ID and public icons. Current app assets total roughly 2.9 MiB uncompressed; generation fails above 16 MiB pending review.

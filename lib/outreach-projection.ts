@@ -1,6 +1,7 @@
 import type { NeighborWalkData, Visit } from "./domain";
 import { indexCurrentRecords } from "./record-aliases";
 import { reviewedEncounter } from "./encounter-history";
+import { projectWalkTargetLifecycle } from "./walk-target-lifecycle";
 
 /** Derived displays never become the authority for contact restrictions.
  * Historical do-not-visit encounters remain history after an approved lift. */
@@ -24,7 +25,7 @@ export function projectOutreachWorkspace(data: NeighborWalkData, pendingRestrict
   const areaGroups = new Map(assignments.map((a) => [a.territoryId, a.assignedTeamId]));
   const groupAreas = new Map<string, string[]>();
   for (const a of assignments) if (a.assignedTeamId) groupAreas.set(a.assignedTeamId, [...(groupAreas.get(a.assignedTeamId) ?? []), a.territoryId]);
-  return { ...data,
+  return { ...projectWalkTargetLifecycle(data),
     properties: data.properties.map((p) => {
       const summary = summaries.get(p.id);
       return { ...p, visitCount: summary?.count ?? 0, lastVisitedAt: summary?.latest.recordedAt,

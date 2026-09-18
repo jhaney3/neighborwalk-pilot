@@ -1,6 +1,6 @@
 "use client";
 
-import { Edit3, History, MapPinned, Plus, ShieldCheck } from "lucide-react";
+import { ArrowRight, Edit3, History, MapPinned, Plus, ShieldCheck } from "lucide-react";
 import type { NeighborWalkData, TeamUpdate } from "../lib/domain";
 import type { WorkspaceMembership } from "../lib/use-neighborwalk";
 import { MembersPanel } from "./MembersPanel";
@@ -27,17 +27,19 @@ export function LeaderView(props: Props) {
   const { data, membership } = props;
   const activeOutings = data.events.filter((outing) => ["draft", "ready", "active"].includes(outing.status));
   return <section className="content-view leader-view">
-    <ViewHeading eyebrow="Church coordination" title="Groups & members" description="Prepare reusable groups and areas. Each outing has its own assignments; every next step needs a responsible person." />
+    <ViewHeading eyebrow="Church coordination" title="Groups & members" description="Keep the member roster current. Saved groups are optional presets; build the actual crews when people arrive for a walk." />
 
     <section className="today-card leader-setup">
-      <h2>{data.events.length ? "Keep the church ready" : "Prepare your first outing"}</h2>
-      <p>Start with one small outreach cycle. Use fictional records for volunteer practice before adding a neighbor’s details.</p>
-      <ol>
-        <li><strong>Confirm the basics.</strong> Check the church timezone, minimal-data policy and leader contact. <button className="text-button" onClick={props.onOpenSettings}>Review settings</button></li>
-        <li><strong>Bring the team.</strong> Invite only the members who need access. Reusable groups are optional; a named volunteer can take an assignment.</li>
-        <li><strong>Prepare an outing.</strong> Add its time, purpose and meeting point, then an address list or map area and responsible volunteers. <button className="text-button" onClick={props.onOpenOutreach}>Open outreach ({activeOutings.length} in preparation or active)</button></li>
-        <li><strong>Check the field flow.</strong> Ask a volunteer to accept an assignment, open the list and optional guide, and check the save indicator before going out.</li>
-        <li><strong>Close the loop.</strong> Review unowned work and waiting handoffs after the outing. Agree who will follow through and when. <button className="text-button" onClick={props.onOpenToday}>Review Today</button></li>
+      <header className="leader-setup-header">
+        <div><span className="eyebrow">Readiness checklist</span><h2>{data.events.length ? "Keep the church ready" : "Prepare your first outing"}</h2></div>
+        <p>Start with one small outreach cycle. Use fictional records for volunteer practice before adding a neighbor’s details.</p>
+      </header>
+      <ol className="leader-setup-steps">
+        <li className="has-action"><span className="leader-step-number" aria-hidden="true">01</span><div><strong>Confirm the basics</strong><p>Check the church timezone, minimal-data policy and leader contact.</p></div><button className="button quiet leader-setup-action" onClick={props.onOpenSettings}>Review settings <ArrowRight size={15} /></button></li>
+        <li><span className="leader-step-number" aria-hidden="true">02</span><div><strong>Bring the team</strong><p>Invite the people who need access. Check them in and arrange tonight’s crews at the walk.</p></div></li>
+        <li className="has-action"><span className="leader-step-number" aria-hidden="true">03</span><div><strong>Prepare an outing</strong><p>Add the time, purpose, meeting point, area and responsible volunteers.</p></div><button className="button quiet leader-setup-action" onClick={props.onOpenOutreach}>Open outreach ({activeOutings.length}) <ArrowRight size={15} /></button></li>
+        <li><span className="leader-step-number" aria-hidden="true">04</span><div><strong>Check the field flow</strong><p>Have a volunteer accept an assignment, open the list and check the save indicator.</p></div></li>
+        <li className="has-action"><span className="leader-step-number" aria-hidden="true">05</span><div><strong>Close the loop</strong><p>Review unowned work and waiting handoffs. Agree who follows through and when.</p></div><button className="button quiet leader-setup-action" onClick={props.onOpenToday}>Review Today <ArrowRight size={15} /></button></li>
       </ol>
     </section>
 

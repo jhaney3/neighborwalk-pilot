@@ -47,6 +47,7 @@ async function signIn(page: Page, account = "leader") {
 async function encounter(page: Page, note: string) {
   await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
   const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Add a person or note", exact: true }).click();
   await dialog.getByRole("textbox", { name: "Brief factual note (optional)" }).fill(note);
   await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -77,21 +78,26 @@ test("email reminders require explicit self opt-in and can be turned off without
   await isolate(context); await signIn(page);
   await page.goto(origin + "/app/settings");
   await expect(page.getByRole("heading", { name: "Email reminders", exact: true })).toBeVisible();
+  await expect(page.getByText(/^Reminders are (on|off)\.$/)).toBeVisible();
+  // A prior interrupted local rehearsal may have left this test account opted in.
+  if (await page.getByRole("button", { name: "Turn off email reminders", exact: true }).isVisible()) {
+    await page.getByRole("button", { name: "Turn off email reminders", exact: true }).click();
+  }
   await expect(page.getByRole("button", { name: "Enable daily email reminders", exact: true })).toBeDisabled();
-  await expect(page.getByText(/Email delivery has not been enabled and verified/)).toBeVisible();
+  await expect(page.getByText("Email reminders aren’t available on this deployment.", { exact: true })).toBeVisible();
   // Only the availability response is fictional. Preference writes/reads use
   // the real local RPC; no sender credentials or scheduler are configured.
   await context.route("**/api/reminders/status", (route) => route.fulfill({ contentType: "application/json", body: '{"available":true}' }));
   await page.getByRole("button", { name: "Reload reminder settings", exact: true }).click();
   const enable = page.getByRole("button", { name: "Enable daily email reminders", exact: true });
   await expect(enable).toBeEnabled(); await enable.click();
-  await expect(page.getByText("You have opted in.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reminders are on.", { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByText("You have opted in.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reminders are on.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Turn off email reminders", exact: true }).click();
-  await expect(page.getByText("You have not opted in.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reminders are off.", { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByText("You have not opted in.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reminders are off.", { exact: true })).toBeVisible();
 });
 
 test("a reviewed person move follows open tasks and records its reason in history", async ({ context, page }) => {
@@ -146,8 +152,8 @@ test("a reviewed encounter correction survives a lost response and preserves the
   await page.goto(origin + "/app/today");
   await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
   dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox", { name: "Person (optional)", exact: true }).selectOption({ label });
   await dialog.getByRole("combobox", { name: "What happened?", exact: true }).selectOption("follow_up");
+  await dialog.getByRole("combobox", { name: "Person (optional)", exact: true }).selectOption({ label });
   await dialog.getByRole("textbox", { name: "Requested next step", exact: true }).fill("Fictional promised next step survives correction");
   await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -159,6 +165,8 @@ test("a reviewed encounter correction survives a lost response and preserves the
   await page.goto(origin + "/app/people/" + fixture.personId);
   await expect(page.getByText(/^Last recorded contact:/)).toBeVisible();
   await page.goto(origin + "/app/data");
+  await page.getByRole("button", { name: /^Correct records/ }).click();
+  await page.getByRole("button", { name: /^Correct an encounter/ }).click();
   const review = page.getByRole("region", { name: "Correct an encounter after review", exact: true });
   await review.getByRole("searchbox", { name: "Search encounter date, person, address or ID", exact: true }).fill(fixture.id);
   await review.getByRole("combobox", { name: "Encounter to review", exact: true }).selectOption(fixture.id);
@@ -232,6 +240,8 @@ test("reviewed duplicate people and locations retain history and resolve origina
     await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
   }
   await page.goto(origin + "/app/data");
+  await page.getByRole("button", { name: /^Correct records/ }).click();
+  await page.getByRole("button", { name: /^Combine duplicate records/ }).click();
   const review = page.getByRole("region", { name: "Combine reviewed duplicates", exact: true });
   await expect(review).toBeVisible();
   for (const kind of ["people", "locations"] as const) {
@@ -248,7 +258,7 @@ test("reviewed duplicate people and locations retain history and resolve origina
     await expect(combine).toBeDisabled();
     await review.getByRole("textbox", { name: kind === "people" ? "Type COMBINE SAME PERSON" : "Type COMBINE SAME LOCATION", exact: true }).fill(kind === "people" ? "COMBINE SAME PERSON" : "COMBINE SAME LOCATION");
     await combine.click();
-    await expect(review.getByText(/Reviewed duplicates combined\. Original history/)).toBeVisible();
+    await expect(review.getByText(/Reviewed duplicates combined\. Original history/)).toBeVisible({ timeout: 60_000 });
   }
   await page.goto(origin + "/app/people/" + ids[0]);
   await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
@@ -263,7 +273,7 @@ test("reviewed duplicate people and locations retain history and resolve origina
   await expect(editor.locator(`option[value="${firstLocation}"]`)).toHaveCount(0);
   await editor.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.goto(origin + "/app/followups?person=" + ids[0]);
-  await expect(page.locator(".followup-main > p").filter({ hasText: "Fictional duplicate next step " + fixture })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Follow-up brief", exact: true }).getByRole("paragraph").filter({ hasText: "Fictional duplicate next step " + fixture })).toBeVisible();
   const aggregate = execFileSync("psql", [database, "-X", "-A", "-t", "-c",
     `select count(*) from public.outreach_tasks t join public.discipleship_people p on p.church_id=t.church_id and p.id=t.person_id where p.property_id='${secondLocation}' and p.merged_into_id is null and t.location_id=p.property_id and t.status='scheduled';`], { encoding: "utf8" }).trim();
   expect(Number(aggregate)).toBe(1);
@@ -273,7 +283,7 @@ test("reviewed duplicate people and locations retain history and resolve origina
   await expect(page).toHaveURL(origin + "/app/people");
 });
 
-test("guide coaching and reminders reach fieldwork with keyboard-accessible steps and location tabs", async ({ context, page }) => {
+test("guide words reach fieldwork with keyboard-accessible steps and location tabs", async ({ context, page }) => {
   await isolate(context); await signIn(page, "volunteer");
   const fixture = randomUUID(); const title = "Fictional guide " + fixture;
   const locationId = "browser_guide_" + fixture;
@@ -305,8 +315,7 @@ test("guide coaching and reminders reach fieldwork with keyboard-accessible step
     await expect(secondTab).toBeFocused(); await expect(secondTab).toHaveAttribute("aria-selected", "true");
     await expect(panel).toHaveAttribute("aria-labelledby", (await secondTab.getAttribute("id"))!);
     await secondTab.press("Home"); await expect(firstTab).toBeFocused();
-    await expect(panel.getByText("Fictional coaching: ask permission and listen.", { exact: true })).toBeVisible();
-    await expect(panel.getByText("Fictional reminder: respect their answer.", { exact: true })).toBeVisible();
+    await expect(panel.getByText(/Fictional words for a respectful greeting\./)).toBeVisible();
     await firstTab.press("Tab"); await expect(panel).toBeFocused();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   }
@@ -321,8 +330,7 @@ test("guide coaching and reminders reach fieldwork with keyboard-accessible step
   await history.press("Tab"); await expect(drawer.getByRole("tabpanel")).toBeFocused();
   await history.focus(); await history.press("ArrowRight"); await expect(record).toBeFocused();
   await drawer.locator(".guided-entry-card").click();
-  await expect(drawer.getByText("Fictional coaching: ask permission and listen.", { exact: true })).toBeVisible();
-  await expect(drawer.getByText("Fictional reminder: respect their answer.", { exact: true })).toBeVisible();
+  await expect(drawer.getByText(/Fictional words for a respectful greeting\./)).toBeVisible();
   await page.screenshot({ path: test.info().outputPath("guide-mobile.png") });
   await page.keyboard.press("Escape"); await expect(drawer).toBeHidden();
 });
@@ -383,10 +391,10 @@ test("guide writes survive a lost response and reject stale editors while archiv
     await otherPage.getByRole("button", { name: "Edit guide", exact: true }).click();
     const otherDialog = otherPage.getByRole("dialog");
     await otherDialog.getByRole("textbox", { name: /Words or testimony notes/ }).fill("Fictional second device accepted edit");
-    await otherDialog.getByRole("button", { name: "Save private guide", exact: true }).click();
+    await otherDialog.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(otherDialog).toBeHidden();
     expect(snapshot()).toMatchObject({ version: 2, words: "Fictional second device accepted edit" });
-    await dialog.getByRole("button", { name: "Save private guide", exact: true }).click();
+    await dialog.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(dialog.getByRole("alert")).toContainText(/guide changed or was archived/i);
     expect(snapshot()).toMatchObject({ version: 2, words: "Fictional second device accepted edit" });
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -411,8 +419,12 @@ test("guide writes survive a lost response and reject stale editors while archiv
 test("cold offline guide, 100 durable encounters, close/reopen and exactly-once reconnect", async ({ context, page }) => {
   await isolate(context);
   await signIn(page);
-  await page.getByRole("button", { name: "Conversation guide", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Make room to decline" })).toBeVisible();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("button", { name: "Conversation guides", exact: true }).click();
+  await page.locator(".guide-library-choice").filter({ hasText: "Listen, share, invite" }).click();
+  await expect(page.getByRole("heading", { name: "Make room to decline", exact: true })).toBeVisible();
+  const preparedGuideText = await page.getByRole("tabpanel").innerText();
+  const preparedGuidePath = new URL(page.url()).pathname;
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });
   await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
   const cdp = await context.newCDPSession(page);
@@ -421,14 +433,14 @@ test("cold offline guide, 100 durable encounters, close/reopen and exactly-once 
   await setDisconnected(context, true);
   await page.close();
   const offline = await context.newPage();
-  await offline.goto(origin + "/app/guides", { waitUntil: "domcontentloaded" });
-  await expect(offline.getByRole("heading", { name: "Make room to decline" })).toBeVisible();
+  await offline.goto(origin + preparedGuidePath, { waitUntil: "domcontentloaded" });
+  await expect(offline.getByRole("tabpanel")).toHaveText(preparedGuideText, { useInnerText: true });
   // Some Chromium/CDP versions restore navigator.onLine after new-page
   // navigation while requests remain blocked. Verify the actual network, not
   // that advisory signal (also unreliable behind a real captive portal).
   expect(await offline.evaluate(() => fetch("/manifest.webmanifest?network-probe=offline", { cache: "no-store" }).then(() => "reachable", () => "blocked"))).toBe("blocked");
   await setDisconnected(context, true);
-  await offline.getByRole("button", { name: "Today", exact: true }).click();
+  await offline.getByRole("button", { name: "Home", exact: true }).click();
   for (let i = 0; i < 100; i++) await encounter(offline, prefix + " offline /" + i);
   expect(await queued(offline)).toBe(100);
   expect(recorded(prefix + " offline")).toBe(0);
@@ -504,6 +516,7 @@ test("quota failure retains the form and never claims a persisted encounter", as
   await page.evaluate(() => sessionStorage.setItem("fictional-quota-test", "on"));
   await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
   const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Add a person or note", exact: true }).click();
   await dialog.getByRole("textbox", { name: "Brief factual note (optional)" }).fill(prefix + " quota /one");
   await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
@@ -586,7 +599,7 @@ test("actual session revocation and account switching preserve authored work wit
     expect(await queued(page, session.user)).toBe(1);
     expect(recorded(prefix + " revoked")).toBe(0);
     await page.goto(origin + "/app/recovery");
-    await expect(page.getByRole("heading", { name: "No queued transactions on this device", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Everything is shared", exact: true })).toBeVisible();
     await expect(page.getByText(prefix + " revoked /one", { exact: false })).toHaveCount(0);
     await page.goto(origin + "/app/settings");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -623,12 +636,16 @@ for (const endpoint of ["outreach_workspace_info", "outreach_guide_state"]) {
 test(`known ${endpoint} access denial locks the cache and prevents a later offline reopen`, async ({ context, page }) => {
   await isolate(context); await signIn(page);
   await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  if (endpoint === "outreach_guide_state") {
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("button", { name: "Conversation guides", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Refresh guides", exact: true })).toBeVisible();
+  }
   // Exercise the UI's real API-denial path without suspending the shared fixture
   // account. Actual membership removal is covered by the SQL regression suite.
   await context.route("**/rest/v1/rpc/" + endpoint, (route) => route.fulfill({ status: 403,
     contentType: "application/json", body: JSON.stringify({ code: "42501", message: "Fictional access denial" }) }));
   if (endpoint === "outreach_guide_state") {
-    await page.getByRole("button", { name: "Conversation guide", exact: true }).click();
     await page.getByRole("button", { name: "Refresh guides", exact: true }).click();
   } else await page.reload();
   await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible();
@@ -702,6 +719,14 @@ test("a reassigned next step requires the responsible volunteer to accept before
     "select json_build_object('id',id,'status',status,'acceptance',acceptance) from public.outreach_tasks where note='" + prefix + " task /one';"], { encoding: "utf8" }).trim()) as { id: string; status: string; acceptance: string };
   const id = taskState().id;
   await page.goto(origin + "/app/followups/" + id);
+  await expect(page.getByRole("heading", { name: "Name not known", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "All people", exact: true }).click();
+  await expect(page).toHaveURL(origin + "/app/people?view=all");
+  await page.reload();
+  await expect(page.getByRole("tab", { name: "All people", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.goBack();
+  await expect(page).toHaveURL(origin + "/app/followups/" + id);
+  await page.getByText("More actions", { exact: true }).click();
   await page.getByRole("combobox", { name: "Responsible person" }).selectOption({ label: "Test Volunteer" });
   await expect.poll(() => taskState().acceptance).toBe("pending");
   const other = await browser.newContext();

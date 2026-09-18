@@ -1,5 +1,6 @@
 "use client";
 import { reviewedEncounter } from "../lib/encounter-history";
+import { calendarDaysFromNow } from "../lib/calendar";
 
 import {
   AlertOctagon,
@@ -44,10 +45,8 @@ import {
   type Visit,
 } from "../lib/domain";
 import { ScriptureReader } from "./ScriptureReader";
-import { GuideCoaching } from "./GuideCoaching";
 import { navigateTabs } from "../lib/tab-navigation";
-import { ContactRestrictions } from "./ContactRestrictions";
-import type { RestrictionActions } from "../lib/contact-restrictions";
+import { contactRestricted } from "../lib/contact-restrictions";
 import { useAsyncAction } from "../lib/use-async-action";
 
 type VisitInput = {
@@ -86,7 +85,6 @@ export function PropertyDrawer({
   onDeleteProperty,
   onUpsertResident,
   onDeleteResident,
-  restrictionActions,
 }: {
   property: Property;
   parcelDwellings: Property[];
@@ -106,7 +104,6 @@ export function PropertyDrawer({
   onDeleteProperty: (propertyId: string) => Promise<unknown>;
   onUpsertResident: (propertyId: string, input: ResidentInput, residentId?: string) => Promise<string>;
   onDeleteResident: (residentId: string) => Promise<unknown>;
-  restrictionActions: RestrictionActions;
 }) {
   const drawer = useRef<HTMLDialogElement>(null);
   const action = useAsyncAction();
@@ -114,6 +111,7 @@ export function PropertyDrawer({
     const element = drawer.current;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     element?.showModal();
+    element?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
     return () => { element?.close(); previousFocus?.focus(); };
   }, []);
   const requestClose = () => { if (!action.busy && !drawer.current?.querySelector('[aria-busy="true"]')) onClose(); };
@@ -129,6 +127,7 @@ export function PropertyDrawer({
   const [guidedPersonEntry, setGuidedPersonEntry] = useState(false);
   const [workflowNotice, setWorkflowNotice] = useState("");
   const [outcome, setOutcome] = useState<Exclude<Outcome, "unvisited">>("conversation");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [note, setNote] = useState("");
   const [followUpDate, setFollowUpDate] = useState(dateInputValue(dueDateFromNow(data.church.defaultFollowUpDays, data.church.timezone)));
   const [assignedTeamId, setAssignedTeamId] = useState(property.territoryId ? data.territories.find((territory) => territory.id === property.territoryId)?.assignedTeamId ?? "" : "");
@@ -138,10 +137,14 @@ export function PropertyDrawer({
   const [unit, setUnit] = useState(property.unit ?? "");
   const [editingResident, setEditingResident] = useState<Resident | "new" | null>(null);
   const residents = data.residents.filter((resident) => !resident.mergedIntoId && resident.propertyId === property.id);
+  const selectedResident = residents.find((resident) => resident.id === linkedResidentId);
+  const followUpRestricted = outcome === "follow_up" && Boolean(selectedResident)
+    && contactRestricted(data, selectedResident?.id, "visit", property.id);
 
   const noteRemaining = data.church.noteCharacterLimit - note.length;
   const canSave = !action.busy && property.currentOutcome !== "do_not_visit" && address.trim().length > 2
     && noteRemaining >= 0
+    && !followUpRestricted
     && (outcome !== "follow_up" || Boolean(followUpDate));
 
   const volunteerNames = useMemo(() => new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer.name])), [data.volunteers]);
@@ -171,10 +174,10 @@ export function PropertyDrawer({
     if (!canSave) return;
     void action.run(async () => {
       if (address.trim() !== property.address || unit.trim() !== (property.unit ?? "")) await onUpdateProperty(property.id, { address, unit });
-      await onRecordVisit({ propertyId: property.id, outcome, objectiveNote: note,
+      await onRecordVisit({ propertyId: property.id, outcome, objectiveNote: outcome === "no_answer" ? undefined : note,
         followUpDate: outcome === "follow_up" ? followUpDate : undefined,
         assignedTeamId: outcome === "follow_up" && !linkedResidentId ? assignedTeamId || undefined : undefined,
-        residentId: linkedResidentId || undefined });
+        residentId: ["conversation", "follow_up"].includes(outcome) ? linkedResidentId || undefined : undefined });
     }, onClose);
   };
   const markDoNotVisit = () => {
@@ -257,13 +260,6 @@ export function PropertyDrawer({
           ) : (
             <>
           {workflowNotice && <div className="workflow-notice" role="status"><Check size={15} /><span>{workflowNotice}</span></div>}
-          {guideSteps.length > 0 && (
-            <button className="guided-entry-card" type="button" onClick={beginGuide}>
-              <span><BookOpenText size={17} /></span>
-              <span><strong>Need a prompt?</strong><small>{conversationGuideContext ? `${conversationGuideContext} · ` : ""}Open {conversationGuide?.title ?? "your favorite guide"} at step one.</small></span>
-              <ChevronRight size={16} />
-            </button>
-          )}
           <fieldset className="outcome-fieldset">
             <legend>What happened?</legend>
             <div className="outcome-options">
@@ -273,7 +269,14 @@ export function PropertyDrawer({
                   key={value}
                   className={outcome === value ? "active" : ""}
                   data-outcome={value}
-                  onClick={() => setOutcome(value)}
+                  onClick={() => {
+                    setOutcome(value);
+                    if (value === "no_answer") {
+                      setNote("");
+                      setLinkedResidentId("");
+                      setDetailsOpen(false);
+                    } else if (value === "follow_up") setDetailsOpen(true);
+                  }}
                 >
                   <i />
                   <span>{outcomeMeta[value].short}</span>
@@ -283,28 +286,40 @@ export function PropertyDrawer({
             <p>{outcomeMeta[outcome].description}</p>
           </fieldset>
 
-          <label className="form-field">
-            <span>Visit note <small>Optional · saved only in visit history</small></span>
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              rows={3}
-              maxLength={data.church.noteCharacterLimit + 1}
-              placeholder="A brief fact about this visit—not a person care note."
-            />
-            <em className={noteRemaining < 0 ? "over" : ""}>{noteRemaining} characters remaining</em>
-          </label>
+          {guideSteps.length > 0 && ["conversation", "follow_up"].includes(outcome) && (
+            <button className="guided-entry-card" type="button" onClick={beginGuide}>
+              <span><BookOpenText size={17} /></span>
+              <span><strong>Need a prompt?</strong><small>{conversationGuideContext ? `${conversationGuideContext} · ` : ""}Open {conversationGuide?.title ?? "your favorite guide"} at step one.</small></span>
+              <ChevronRight size={16} />
+            </button>
+          )}
+
+          {outcome !== "no_answer" && outcome !== "follow_up" && <button type="button" className="visit-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>{detailsOpen ? "Hide optional details" : outcome === "conversation" ? "Add a person or note" : "Add a note"}<ChevronDown size={15} /></button>}
+
+          {outcome !== "no_answer" && (detailsOpen || outcome === "follow_up") && <div className="visit-optional-details">
+            {["conversation", "follow_up"].includes(outcome) && <label className="form-field">
+              <span>Person <small>Optional</small></span>
+              <div className="select-wrap"><select value={linkedResidentId} onChange={(event) => setLinkedResidentId(event.target.value)}><option value="">No person record</option>{residents.map((resident) => <option value={resident.id} key={resident.id}>{resident.name || "Name not provided"}</option>)}</select><ChevronDown size={15} /></div>
+            </label>}
+
+            <label className="form-field">
+              <span>{outcome === "follow_up" ? "Requested next step" : "Visit note"} <small>Optional</small></span>
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                rows={3}
+                maxLength={data.church.noteCharacterLimit + 1}
+                placeholder={linkedResidentId ? "Keep person-specific context concise and respectful." : "A brief fact about this visit—not a private care note."}
+              />
+              <em className={noteRemaining < 0 ? "over" : ""}>{noteRemaining} characters remaining</em>
+            </label>
 
           {outcome === "follow_up" && (
             <div className="followup-form">
               <div className="form-row">
                 <label className="form-field">
                   <span>Return date</span>
-                  <input type="date" min={new Date().toISOString().slice(0, 10)} value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} />
-                </label>
-                <label className="form-field">
-                  <span>Who is this for? <small>Optional</small></span>
-                  <div className="select-wrap"><select value={linkedResidentId} onChange={(event) => setLinkedResidentId(event.target.value)}><option value="">Location follow-up</option>{residents.map((resident) => <option value={resident.id} key={resident.id}>{resident.name || "Name not provided"}</option>)}</select><ChevronDown size={15} /></div>
+                  <input type="date" min={calendarDaysFromNow(0, data.church.timezone)} value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} />
                 </label>
                 {!linkedResidentId && <label className="form-field">
                   <span>Assign team</span>
@@ -312,11 +327,13 @@ export function PropertyDrawer({
                 </label>}
               </div>
               <small className="followup-link-help">{linkedResidentId ? "This task will stay private with the person and follow their discipleship owner." : "Location follow-ups remain visible to the assigned outreach team."}</small>
+              {followUpRestricted && <p className="inline-notice" role="status">This person has an active no-contact or no-visit instruction. Record the encounter as a conversation if needed, but do not create this return task.</p>}
             </div>
           )}
+          </div>}
 
           <div className="drawer-actions">
-            <button className="text-danger" onClick={markDoNotVisit}><AlertOctagon size={14} /> Do not revisit</button>
+            {property.currentOutcome !== "do_not_visit" && <button className="text-danger" onClick={markDoNotVisit}><AlertOctagon size={14} /> Do not revisit</button>}
             <button className="button primary" onClick={saveVisit} disabled={!canSave}><Save size={16} /> Save visit</button>
           </div>
 
@@ -382,7 +399,6 @@ export function PropertyDrawer({
           )}
         </div>
       )}
-      <ContactRestrictions data={data} propertyId={property.id} canManage={canManage} actions={restrictionActions} />
     </dialog>
   );
 }
@@ -405,9 +421,9 @@ function GuidedConversation({ guideTitle, guideContext, steps, index: requestedI
     <section className="doorstep-guide" aria-labelledby="doorstep-guide-title">
       <div className="doorstep-guide-heading">
         <div><p>{guideContext ? `${guideContext} · ` : ""}{guideTitle}</p><h2 id="doorstep-guide-title">{step.title}</h2></div>
-        <button type="button" onClick={onRecordWithoutGuide}>Record without guide</button>
+        <button className="button quiet small doorstep-without-guide" type="button" onClick={onRecordWithoutGuide}>Proceed without guide</button>
       </div>
-      <div className="doorstep-progress" aria-label={`Step ${index + 1} of ${steps.length}`}>
+      <div className="doorstep-progress" role="group" aria-label={`Step ${index + 1} of ${steps.length}`}>
         {steps.map((item, itemIndex) => (
           <button
             type="button"
@@ -419,13 +435,11 @@ function GuidedConversation({ guideTitle, guideContext, steps, index: requestedI
           ><span>{itemIndex + 1}</span></button>
         ))}
       </div>
-      <GuideCoaching step={step} />
       {step.sampleWords && <div className="doorstep-script-card">
         <span><MessageCircle size={18} /> Words you can use</span>
         <blockquote>“{step.sampleWords}”</blockquote>
       </div>}
       <ScriptureReader references={step.scriptureReferences} theme="light" />
-      <GuideCoaching step={step} reminder />
       <button className="skip-to-wrap" type="button" onClick={onFinish}>Conversation is wrapping up</button>
       <div className="doorstep-guide-actions">
         <button className="button quiet" type="button" disabled={index === 0} onClick={() => onChangeIndex(Math.max(0, index - 1))}>Previous</button>

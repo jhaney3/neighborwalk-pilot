@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const commandEntitySchema = z.enum([
-  "event", "team", "territory", "assignment", "property", "visit", "resident",
+  "event", "participant", "team", "territory", "target", "assignment", "property", "visit", "resident",
   "person_note", "follow_up", "restriction", "handoff", "settings",
 ]);
 export const commandOperationSchema = z.object({

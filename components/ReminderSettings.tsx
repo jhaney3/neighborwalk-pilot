@@ -47,18 +47,18 @@ export function ReminderSettings({ churchId, timezone, online, connected }: { ch
     const { data, error } = await client.rpc("outreach_reminder_preference", { target_church: churchId, enabled }).abortSignal(AbortSignal.timeout(10000));
     if (error) throw new Error(error.code === "22023" ? error.message : "The change was not confirmed. Reload settings before retrying.");
     setPreference(preferenceSchema.parse(data));
-    setMessage(enabled ? "You opted in to daily email reminders. Delivery depends on the configured service." : "Email reminders are off. A message already in flight may still arrive.");
+    setMessage(enabled ? "Email reminders are on." : "Email reminders are off. A message already in flight may still arrive.");
   };
   return <section className="settings-section">
-    <div className="settings-section-heading"><span><Mail size={18} /></span><div><h2>Email reminders</h2><p>Your own next steps, with neighbor details kept inside the signed-in app.</p></div></div>
+    <div className="settings-section-heading"><span><Mail size={18} /></span><div><h2>Email reminders</h2><p>Daily reminders for your own next steps.</p></div></div>
     <div className="settings-section-body">
-      <p>Receive at most one daily email for due work or a next-step assignment waiting for your acceptance. Checks use {timezone} during daytime hours; delivery time is not guaranteed. Leaders cannot opt you in.</p>
-      <p>The email contains a protected link, not neighbor names, notes, addresses, or prayer details. You can turn it off here or from any reminder email.</p>
-      {!connected ? <p>Reminders are unavailable in the device-only demo.</p> : !online ? <p>Reconnect to view or change your saved email preference.</p> : <>
-        {!available && <p role="status">Email delivery has not been enabled and verified for this deployment. No scheduled reminder delivery is promised.</p>}
+      <p>Get at most one email a day when work is due or a handoff needs your response. Checks run during daytime hours in {timezone}.</p>
+      <p>Only you can opt in. Emails contain a protected link—never neighbor details.</p>
+      {!connected ? <p>Email reminders aren’t available in the demo.</p> : !online ? <p>Reconnect to manage email reminders.</p> : <>
+        {!available && <p role="status">Email reminders aren’t available on this deployment.</p>}
         {error && <p role="alert">{error}</p>}
         {preference && <>
-          <p><strong>{preference.enabled ? "You have opted in." : "You have not opted in."}</strong>{!preference.emailVerified && " Verify your account email before enabling reminders."}{preference.suppressed && " Delivery is paused after an email problem. Contact support before trying to enable it again."}</p>
+          <p><strong>{preference.enabled ? "Reminders are on." : "Reminders are off."}</strong>{!preference.emailVerified && " Verify your email to turn them on."}{preference.suppressed && " Delivery is paused after an email problem. Contact support to resume it."}</p>
           {preference.lastState && <p>Last reminder: {deliveryLabels[preference.lastState] || "Status unavailable"}.</p>}
           <button className="button quiet" disabled={action.busy || (!preference.enabled && (!available || !preference.emailVerified || Boolean(preference.suppressed)))} onClick={() => void action.run(() => save(!preference.enabled))}>{action.busy ? "Saving…" : preference.enabled ? "Turn off email reminders" : "Enable daily email reminders"}</button>
         </>}

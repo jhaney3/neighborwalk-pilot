@@ -1,12 +1,17 @@
 import type { FollowUp, NeighborWalkData } from "./domain";
 export type FollowUpScope = "mine" | "all" | "team" | "unowned" | "declined";
+
+export function activeFollowUpOwner(task: FollowUp, data: NeighborWalkData) {
+  return data.volunteers.find((volunteer) => volunteer.id === task.assignedVolunteerId && volunteer.active);
+}
+
 export function followUpScope(value: string | null | undefined): FollowUpScope {
   return ["all", "team", "unowned", "declined"].includes(value ?? "") ? value as FollowUpScope : "mine";
 }
 export function taskMatchesScope(task: FollowUp, scope: FollowUpScope, data: NeighborWalkData, actor: string) {
   if (scope === "mine") return task.assignedVolunteerId === actor;
   if (scope === "team") return data.teams.some((t) => t.id === task.assignedTeamId && t.memberIds.includes(actor));
-  if (scope === "unowned") return !task.assignedVolunteerId || !data.volunteers.some((v) => v.id === task.assignedVolunteerId && v.active);
+  if (scope === "unowned") return !activeFollowUpOwner(task, data);
   if (scope === "declined") return task.acceptance === "declined";
   return true;
 }

@@ -1,5 +1,10 @@
 \set ON_ERROR_STOP on
 begin;
+do $$ begin
+ if (select indisunique from pg_index where indexrelid='public.outreach_restrictions_active_idx'::regclass) then
+  raise exception 'Reviewed duplicate restrictions still collide on a unique active-restriction index';
+ end if;
+end $$;
 insert into auth.users(id,email) values
  ('60000000-0000-4000-8000-000000000011','merge-leader@neighborwalk.test'),
  ('60000000-0000-4000-8000-000000000012','merge-owner@neighborwalk.test'),

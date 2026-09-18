@@ -596,6 +596,54 @@ export type Database = {
           },
         ]
       }
+      outreach_outing_participants: {
+        Row: {
+          church_id: string
+          deleted_at: string | null
+          id: string
+          outing_id: string
+          status: string
+          user_id: string | null
+          version: number
+          volunteer_id: string
+        }
+        Insert: {
+          church_id: string
+          deleted_at?: string | null
+          id: string
+          outing_id: string
+          status?: string
+          user_id?: string | null
+          version?: number
+          volunteer_id: string
+        }
+        Update: {
+          church_id?: string
+          deleted_at?: string | null
+          id?: string
+          outing_id?: string
+          status?: string
+          user_id?: string | null
+          version?: number
+          volunteer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outreach_outing_participants_church_id_outing_id_fkey"
+            columns: ["church_id", "outing_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_outings"
+            referencedColumns: ["church_id", "id"]
+          },
+          {
+            foreignKeyName: "outreach_outing_participants_church_id_user_id_fkey"
+            columns: ["church_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "church_memberships"
+            referencedColumns: ["church_id", "user_id"]
+          },
+        ]
+      }
       outreach_audit: {
         Row: {
           action: string
@@ -1526,6 +1574,14 @@ export type Database = {
         Args: { target_church: string }
         Returns: Json
       }
+      outreach_target_progress: {
+        Args: { target_church: string }
+        Returns: { target_id: string; county_fips: string; gislink: string }[]
+      }
+      outreach_parent_progress: {
+        Args: { target_church: string }
+        Returns: { territory_id: string; outing_id: string; county_fips: string; gislink: string }[]
+      }
       parcel_dataset_revision_v1: { Args: never; Returns: string }
       parcels_for_territory_v1: {
         Args: {
@@ -1553,6 +1609,22 @@ export type Database = {
           property_class: string
           situs_address: string
         }[]
+      }
+      street_segments_for_boundary_v1: {
+        Args: { territory_boundary: Json }
+        Returns: Json
+      }
+      planning_parcels_for_boundary_v1: {
+        Args: { territory_boundary: Json }
+        Returns: Json
+      }
+      public_map_streets_for_boundary_v1: {
+        Args: { territory_boundary: Json }
+        Returns: Json
+      }
+      public_map_parcels_for_boundary_v1: {
+        Args: { territory_boundary: Json }
+        Returns: Json
       }
       parcels_in_view_v2: {
         Args: {

@@ -2,8 +2,9 @@ import { z } from "zod";
 import { queuedCommandSchema } from "./command-schema";
 import { recordFamilyIds } from "./record-aliases";
 import { calendarDate, calendarDaysFromNow, DEFAULT_CHURCH_TIMEZONE, formatCalendarDate } from "./calendar";
+import { walkTargetSchema } from "./walk-targets";
 
-export const APP_SCHEMA_VERSION = 11;
+export const APP_SCHEMA_VERSION = 13;
 
 export const outcomeValues = [
   "unvisited",
@@ -309,6 +310,13 @@ export const neighborWalkDataSchema = z.object({
     guideId: z.string().optional(),
     debrief: z.string().max(2000).optional(),
   })),
+  outingParticipants: z.array(z.object({
+    id: z.string().min(1).max(240),
+    churchId: z.string().min(1),
+    eventId: z.string().min(1),
+    volunteerId: z.string().min(1),
+    status: z.enum(["invited", "going", "not_going", "checked_in"]),
+  })),
   territories: z.array(z.object({
     id: z.string().min(1),
     churchId: z.string().min(1),
@@ -358,6 +366,8 @@ export const neighborWalkDataSchema = z.object({
     churchId: z.string().min(1),
     eventId: z.string().optional(),
     territoryId: z.string().optional(),
+    targetId: z.string().optional(),
+    targetParcel: z.object({ countyFips: z.string().regex(/^[0-9]{5}$/), gislink: z.string().min(1).max(120) }).optional(),
     propertyId: z.string().optional(),
     residentId: z.string().optional(),
     context: z.enum(["door", "community_meal", "service", "referral", "other"]).optional(),
@@ -394,9 +404,14 @@ export const neighborWalkDataSchema = z.object({
   residents: z.array(residentSchema),
   assignments: z.array(z.object({
     id: z.string(), churchId: z.string(), eventId: z.string(), territoryId: z.string(),
+    targetId: z.string().optional(),
     assignedTeamId: z.string().optional(), assignedVolunteerId: z.string().optional(),
     status: z.enum(["assigned", "accepted", "completed", "declined", "cancelled"]),
   })).optional(),
+  walkTargets: z.array(walkTargetSchema),
+  targetProgress: z.array(z.object({ targetId: z.string().min(1), countyFips: z.string().regex(/^[0-9]{5}$/), gislink: z.string().min(1).max(120) })),
+  parentProgress: z.array(z.object({ territoryId: z.string().min(1), eventId: z.string().min(1).optional(), countyFips: z.string().regex(/^[0-9]{5}$/), gislink: z.string().min(1).max(120) })),
+  coverageVisibility: z.enum(["complete", "assigned_targets_only"]),
   restrictions: z.array(z.object({
     id: z.string(), churchId: z.string(), residentId: z.string().optional(), propertyId: z.string().optional(),
     originResidentId: z.string().optional(), originPropertyId: z.string().optional(),
@@ -426,7 +441,7 @@ export const neighborWalkDataSchema = z.object({
   audit: z.array(z.object({
     id: z.string().min(1),
     action: z.string().min(1),
-    entityType: z.enum(["event", "assignment", "restriction", "handoff", "property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "settings", "guide", "data"]),
+    entityType: z.enum(["event", "participant", "assignment", "restriction", "handoff", "property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "target", "settings", "guide", "data"]),
     entityId: z.string().min(1),
     actorId: z.string().min(1),
     createdAt: z.string().datetime(),
@@ -448,7 +463,7 @@ export const neighborWalkDataSchema = z.object({
     lastSyncedAt: z.string().datetime().optional(),
     pending: z.array(z.object({
       id: z.string().min(1),
-      entityType: z.enum(["event", "assignment", "restriction", "handoff", "property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "settings", "guide", "data"]),
+      entityType: z.enum(["event", "participant", "assignment", "restriction", "handoff", "property", "visit", "follow_up", "person_follow_up", "resident", "person_note", "team", "territory", "target", "settings", "guide", "data"]),
       entityId: z.string().min(1),
       operation: z.enum(["upsert", "delete"]),
       changedAt: z.string().datetime(),

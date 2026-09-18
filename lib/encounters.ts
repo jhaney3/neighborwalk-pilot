@@ -1,10 +1,12 @@
 import { createId, dueDateFromNow, type NeighborWalkData, type Outcome } from "./domain";
 import { calendarDate, requireCalendarDate } from "./calendar";
 import { changeFollowUp, createFollowUp } from "./follow-ups";
+import { propertyInTarget } from "./target-coverage";
 
 export type EncounterInput = {
   propertyId?: string;
   eventId?: string;
+  targetId?: string;
   context?: NonNullable<NeighborWalkData["visits"][number]["context"]>;
   outcome: Exclude<Outcome, "unvisited">;
   objectiveNote?: string;
@@ -31,7 +33,16 @@ export function recordEncounter(current: NeighborWalkData, input: EncounterInput
   if (input.outcome === "follow_up" && due < calendarDate(now, current.church.timezone)) throw new Error("Choose today or a future date in the church’s timezone.");
   const timestamp = now.toISOString();
   const visitId = createId("visit");
-  const visit: NeighborWalkData["visits"][number] = { id: visitId, churchId: current.church.id, eventId: input.eventId, territoryId: property?.territoryId,
+  const target = input.targetId ? current.walkTargets.find((candidate) => candidate.id === input.targetId) : undefined;
+  if (input.targetId && (!target || target.eventId !== input.eventId || (property?.territoryId && target.territoryId !== property.territoryId))) throw new Error("Choose a target from this outing and parent zone.");
+  if (target) {
+    if (!property || !propertyInTarget(property, target)) throw new Error("Choose a residential property in this target’s reviewed roster.");
+    const teams = new Set(current.teams.filter((team) => team.memberIds.includes(actorId)).map((team) => team.id));
+    if (target.finishedAt || !(current.assignments ?? []).some((assignment) => assignment.targetId === target.id && assignment.eventId === target.eventId && assignment.status === "accepted"
+      && (assignment.assignedVolunteerId === actorId || teams.has(assignment.assignedTeamId ?? "")))) throw new Error("Accept your target assignment before recording a visit.");
+  }
+  const visit: NeighborWalkData["visits"][number] = { id: visitId, churchId: current.church.id, eventId: input.eventId, territoryId: property?.territoryId ?? target?.territoryId, targetId: target?.id,
+    targetParcel: target && property?.parcel ? { countyFips: property.parcel.countyFips, gislink: property.parcel.gislink } : undefined,
     propertyId: property?.id, residentId: person?.id, context, volunteerId: actorId, outcome: input.outcome,
     objectiveNote: person ? undefined : note, recordedAt: timestamp, deviceId };
   let tasks = current.followUps;

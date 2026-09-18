@@ -3,9 +3,8 @@
 import { AlertTriangle, ArrowRight, BookOpenText, Check, ChevronDown, ChevronRight, ChevronUp, Church, Copy, Edit3, LockKeyhole, MessageCircle, Plus, Save, Star, Trash2, UserRound, Users } from "lucide-react";
 import { useId, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createId, type ConversationGuide, type ConversationGuideInput, type GuideStep, type NeighborWalkData } from "../lib/domain";
-import { makeBlankGuideStep, validGuideInput } from "../lib/conversation-guides";
+import { makeBlankGuideStep, parseScriptureReferenceInput, validGuideInput } from "../lib/conversation-guides";
 import { ScriptureReader } from "./ScriptureReader";
-import { GuideCoaching } from "./GuideCoaching";
 import { navigateTabs } from "../lib/tab-navigation";
 import { Modal, ViewHeading, EmptyState } from "./ui";
 
@@ -188,10 +187,8 @@ export function GuideView({
             <div className="guide-progress"><span style={{ width: `${((activeStepIndex + 1) / steps.length) * 100}%` }} /></div>
             <p className="eyebrow">Step {activeStepIndex + 1} of {steps.length} · {step.eyebrow}</p>
             <h2>{step.title}</h2>
-            <GuideCoaching step={step} />
             {step.sampleWords && <blockquote><MessageCircle size={20} /><p>“{step.sampleWords}”</p></blockquote>}
             <ScriptureReader references={step.scriptureReferences} />
-            <GuideCoaching step={step} reminder />
             <div className="guide-actions"><button className="button inverted" disabled={activeStepIndex === 0} onClick={() => setIndex(Math.max(0, activeStepIndex - 1))}>Previous</button><button className="button amber" disabled={activeStepIndex === steps.length - 1} onClick={() => setIndex(Math.min(steps.length - 1, activeStepIndex + 1))}>Next step <ArrowRight size={15} /></button></div>
           </article>
         </div>
@@ -249,6 +246,9 @@ function GuideComposer({ guide, scope, copy = false, pendingRequest = false, dem
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
   const valid = validGuideInput(draft);
+  const saveLabel = guide && !copy
+    ? scope === "church" ? "Publish changes" : "Save changes"
+    : scope === "church" ? "Publish guide" : copy ? "Save private copy" : "Save private guide";
 
   const updateStep = (index: number, patch: Partial<GuideStep>) => {
     setDraft((current) => ({ ...current, steps: current.steps.map((step, stepIndex) => stepIndex === index ? { ...step, ...patch } : step) }));
@@ -314,7 +314,7 @@ function GuideComposer({ guide, scope, copy = false, pendingRequest = false, dem
           <label className="form-field"><span>Step title</span><input maxLength={120} value={step.title} onChange={(event) => updateStep(stepIndex, { title: event.target.value })} placeholder="Explain the good news" /></label>
           <label className="form-field full"><span>Coaching before speaking <small>Optional</small></span><textarea maxLength={800} rows={3} value={step.coaching} onChange={(event) => updateStep(stepIndex, { coaching: event.target.value })} placeholder="A practical cue for listening respectfully." /></label>
           <label className="form-field full"><span>Words or testimony notes <small>Optional when scripture is added</small></span><textarea maxLength={1600} rows={4} value={step.sampleWords} onChange={(event) => updateStep(stepIndex, { sampleWords: event.target.value })} placeholder="Write the words you want available at the door. This can be a prompt, your testimony, or a transition." /></label>
-          <label className="form-field full"><span>Scripture references <small>Separate with commas</small></span><input maxLength={1200} value={step.scriptureReferences.join(", ")} onChange={(event) => updateStep(stepIndex, { scriptureReferences: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} placeholder="Romans 3:23, Romans 6:23" /></label>
+          <label className="form-field full"><span>Scripture references <small>Separate with commas</small></span><input maxLength={1200} value={step.scriptureReferences.join(", ")} onChange={(event) => updateStep(stepIndex, { scriptureReferences: parseScriptureReferenceInput(event.target.value) })} placeholder="Romans 3:23, Romans 6:23" /></label>
           <label className="form-field full"><span>Closing reminder <small>Optional</small></span><textarea maxLength={800} rows={3} value={step.reminder} onChange={(event) => updateStep(stepIndex, { reminder: event.target.value })} placeholder="Respect their answer and agree an owned next step only if requested." /></label>
         </div>
       </section>)}
@@ -326,7 +326,7 @@ function GuideComposer({ guide, scope, copy = false, pendingRequest = false, dem
     {confirmDelete && <div className="guide-delete-confirm"><AlertTriangle size={16} /><span><strong>{demo ? "Remove" : "Archive"} “{guide?.title}”?</strong>{demo ? "This removes the guide from this sample device." : "The guide will leave the active library, but its record and historical links remain. Change current outing and group choices first. This is not permanent erasure."}</span></div>}
     <div className="modal-actions split">
       {onDelete ? <button className="button danger" disabled={saving || deleting || pendingRequest} onClick={() => confirmDelete ? void remove() : setConfirmDelete(true)}>{demo ? "Remove sample guide" : confirmDelete ? "Archive guide" : "Archive"}</button> : <span />}
-      <div><button className="button quiet" disabled={saving || deleting} onClick={onClose}>Cancel</button><button className="button primary" disabled={!valid || saving || deleting || pendingRequest} onClick={() => void save()}><Save size={15} /> {saving ? "Saving…" : scope === "church" ? "Publish guide" : "Save private guide"}</button></div>
+      <div><button className="button quiet" disabled={saving || deleting} onClick={onClose}>Cancel</button><button className="button primary" disabled={!valid || saving || deleting || pendingRequest} onClick={() => void save()}><Save size={15} /> {saving ? "Saving…" : saveLabel}</button></div>
     </div>
   </Modal>;
 }

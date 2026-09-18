@@ -67,7 +67,7 @@ describe("complete account-bound workspace reads", () => {
     const result = await loadOutreachWorkspace(client, church, user);
     expect(result.data.properties).toHaveLength(1); expect(result.data.properties[0].address).toBe("Fictional 1");
     expect(result.data.church.id).toBe(church); expect(result.info.userId).toBe(user);
-    expect(maximum).toBe(4); expect(terminal.size).toBe(14);
+    expect(maximum).toBe(4); expect(terminal.size).toBe(19);
   });
   it("restarts a changed revision and refuses continuously changing metadata", async () => {
     let calls = 0;

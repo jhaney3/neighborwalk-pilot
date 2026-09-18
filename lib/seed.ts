@@ -309,6 +309,10 @@ export function createSeedData(): NeighborWalkData {
 
   return {
     schemaVersion: APP_SCHEMA_VERSION,
+    walkTargets: [],
+    targetProgress: [],
+    parentProgress: [],
+    coverageVisibility: "complete",
     church: {
       id: CHURCH_ID,
       name: "Grace Harbor Church",
@@ -339,6 +343,13 @@ export function createSeedData(): NeighborWalkData {
       meetingPoint: "Church welcome table, north entrance",
       leaderContact: "Erica at the welcome table",
     }],
+    outingParticipants: ["volunteer_erica", "volunteer_maya", "volunteer_jordan", "volunteer_sam", "volunteer_noah", "volunteer_ruth", "volunteer_eli"].map((volunteerId, index) => ({
+      id: `participant_demo_${index}`,
+      churchId: CHURCH_ID,
+      eventId: EVENT_ID,
+      volunteerId,
+      status: "checked_in" as const,
+    })),
     territories,
     assignments: territories.map((area, index) => ({
       id: "assignment_demo_" + index, churchId: CHURCH_ID, eventId: EVENT_ID, territoryId: area.id,
@@ -359,18 +370,8 @@ export function createSeedData(): NeighborWalkData {
     personNotes,
     guide: [
       {
-        id: "guide_permission",
-        order: 1,
-        eyebrow: "Start with care",
-        title: "Make room to decline",
-        coaching: "Keep the opening neighborly and give the person an easy way to decline.",
-        sampleWords: "Hi! We’re with Grace Harbor Church nearby, checking in with our neighbors today. Is there anything we could pray about for you?",
-        reminder: "Pause and listen before deciding what to say next.",
-        scriptureReferences: [],
-      },
-      {
         id: "guide_listen",
-        order: 2,
+        order: 1,
         eyebrow: "Make room",
         title: "Listen for their story",
         coaching: "A sincere question is often more helpful than a memorized speech.",
@@ -380,7 +381,7 @@ export function createSeedData(): NeighborWalkData {
       },
       {
         id: "guide_gospel",
-        order: 3,
+        order: 2,
         eyebrow: "Share clearly",
         title: "Explain the good news",
         coaching: "Use your church’s approved wording and avoid pressure or argument.",
@@ -390,7 +391,7 @@ export function createSeedData(): NeighborWalkData {
       },
       {
         id: "guide_invite",
-        order: 4,
+        order: 3,
         eyebrow: "Leave a next step",
         title: "Invite, don’t corner",
         coaching: "Offer a practical next step that matches the conversation.",

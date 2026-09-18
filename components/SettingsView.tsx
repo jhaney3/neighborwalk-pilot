@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAsyncAction } from "../lib/use-async-action";
 import { requestAppInstall } from "../lib/install";
 import { isSafeWebUrl, type ConversationGuide, type NeighborWalkData } from "../lib/domain";
+import { isSupportedMapStyleUrl } from "../lib/map-config";
 import { Modal, ViewHeading } from "./ui";
 import { ReminderSettings } from "./ReminderSettings";
 
@@ -29,6 +30,7 @@ export function SettingsView({
   onPurge,
   onClearOutreach,
   onSync,
+  onOpenRecovery,
 }: {
   data: NeighborWalkData;
   online: boolean;
@@ -49,6 +51,7 @@ export function SettingsView({
   onPurge: () => Promise<unknown>;
   onClearOutreach: () => Promise<unknown>;
   onSync: () => Promise<boolean>;
+  onOpenRecovery: () => void;
 }) {
   const action = useAsyncAction();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -63,6 +66,8 @@ export function SettingsView({
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updatingPassword, setUpdatingPassword] = useState(false);
+  const pendingDeviceChanges = data.sync.commands?.length ?? data.sync.pending.length;
+  const deviceNeedsAttention = Boolean(data.sync.legacyRecoveryRequired || pendingDeviceChanges || data.sync.lastError || (data.sync.mode === "connected" && !online));
 
   const installApp = async () => {
     setMessage(await requestAppInstall());
@@ -93,6 +98,7 @@ export function SettingsView({
   const saveMapStyle = async () => {
     const value = mapStyleUrl.trim();
     if (!isSafeWebUrl(value)) return setMessage("Enter a secure https map style URL (http is allowed only for localhost development).");
+    if (!isSupportedMapStyleUrl(value)) return setMessage("Use OpenFreeMap, MapTiler, or the map provider configured for this deployment.");
     await onSetPreference("mapStyleUrl", new URL(value).toString());
     setMessage("Map style saved. The map will reload when you return to it.");
   };
@@ -128,7 +134,6 @@ export function SettingsView({
       {message && <div className="settings-message" role="status"><Check size={15} />{message}</div>}
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
       {storageError && <div className="settings-message error" role="alert"><AlertTriangle size={15} />{storageError}</div>}
-      <p><Link href="/app/recovery">Open Sync &amp; recovery</Link> to review device work and preserved archives.</p>
       <div className="settings-grid">
         {data.sync.mode === "connected" && <SettingsSection icon={<LockKeyhole size={18} />} title="Account and access" description="Your access level is assigned by a church leader.">
           <div className="connection-card connected"><LockKeyhole size={18} /><span><strong>Signed-in church account</strong>{accountEmail || "Authenticated member"} · {canManage ? "Leader access" : "Volunteer access"}</span></div>
@@ -178,15 +183,16 @@ export function SettingsView({
               ? syncing
                 ? "Updating the shared church workspace now."
                 : !online
-                  ? `${data.sync.pending.length} change${data.sync.pending.length === 1 ? " is" : "s are"} safely stored on this device until the connection returns.`
-                  : data.sync.pending.length > 0
-                    ? `${data.sync.pending.length} change${data.sync.pending.length === 1 ? " is" : "s are"} queued for automatic sync.`
+                  ? `${pendingDeviceChanges} change${pendingDeviceChanges === 1 ? " is" : "s are"} safely stored on this device until the connection returns.`
+                  : pendingDeviceChanges > 0
+                    ? `${pendingDeviceChanges} change${pendingDeviceChanges === 1 ? " is" : "s are"} queued for automatic sharing.`
                     : "This device is up to date with the church workspace."
               : "Records remain on this device until a workspace is connected."}</span>
           </div>
           {data.sync.lastError && <div className="data-note sync-warning"><AlertTriangle size={15} /><span>{data.sync.lastError}</span></div>}
-          {data.sync.mode === "connected" && <button className="button quiet" onClick={() => void action.run(async () => setMessage(await onSync() ? "Refresh completed. Check the last-shared time." : "Not shared yet. Check Sync & recovery; some changes need a decision."))} disabled={!online || saving || syncing}><RefreshCcw size={15} className={syncing ? "spin" : ""} /> {data.sync.pending.length || data.sync.lastError ? "Retry sync" : "Sync now"}</button>}
-          {(canManage || data.sync.mode === "device_only") && <><div className="button-row">{data.sync.mode === "device_only" ? <button className="button quiet" onClick={onExport}><Download size={15} /> Export sample records</button> : <Link className="button quiet" href="/app/data">Reviewed church export &amp; CSV tools</Link>}{data.sync.mode === "device_only" && <button className="button quiet" onClick={() => fileRef.current?.click()}><Upload size={15} /> Import sample backup</button>}<input ref={fileRef} className="visually-hidden" type="file" accept="application/json,.json" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const imported = await onImport(file); applyDataDrafts(imported); setMessage("Backup imported and validated."); } catch (error) { setMessage(error instanceof Error ? error.message : "The backup could not be imported."); } finally { event.target.value = ""; } }} /></div>
+          {data.sync.mode === "connected" && <button className="button quiet" onClick={() => void action.run(async () => setMessage(await onSync() ? "Refresh completed. Check the last-shared time." : "Not shared yet. Open Device status to review what needs attention."))} disabled={!online || saving || syncing}><RefreshCcw size={15} className={syncing ? "spin" : ""} /> {pendingDeviceChanges || data.sync.lastError ? "Retry sharing" : "Check for updates"}</button>}
+          {deviceNeedsAttention && <button className="button danger device-status-link" type="button" onClick={onOpenRecovery}><AlertTriangle size={15} /> Review device status</button>}
+          {(canManage || data.sync.mode === "device_only") && <><div className="button-row">{data.sync.mode === "device_only" ? <button className="button quiet" onClick={onExport}><Download size={15} /> Export sample records</button> : <Link className="button quiet" href="/app/data">Reviewed church export &amp; CSV tools</Link>}{data.sync.mode === "device_only" && <button className="button quiet" onClick={() => fileRef.current?.click()}><Upload size={15} /> Import sample backup</button>}<input ref={fileRef} className="visually-hidden" type="file" tabIndex={-1} aria-label="Import sample backup file" accept="application/json,.json" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const imported = await onImport(file); applyDataDrafts(imported); setMessage("Backup imported and validated."); } catch (error) { setMessage(error instanceof Error ? error.message : "The backup could not be imported."); } finally { event.target.value = ""; } }} /></div>
           <div className="data-note"><FileJson size={15} /><span>This export contains the records visible to this account, including unsent work. It is not a full database, authentication or guide-library backup. Protect the readable JSON file.</span></div></>}
         </SettingsSection>
       </div>

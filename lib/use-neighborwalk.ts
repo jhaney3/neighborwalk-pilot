@@ -65,12 +65,16 @@ import { pendingInvitation, clearPendingInvitation } from "./invitations";
 import { authoredRecovery } from "./device-recovery";
 import { recordEncounter, type EncounterInput } from "./encounters";
 import { requireCalendarDate } from "./calendar";
-import { addContactRestriction, liftContactRestriction, type RestrictionInput } from "./contact-restrictions";
+import { addContactRestriction, contactRestricted, liftContactRestriction, type RestrictionInput } from "./contact-restrictions";
 import { previewDuplicates, previewRetention, submitAdministration, type AdminInput, type DuplicateKind } from "./administration";
 import { applyGuideReceipt, guideSaveInput, savedGuideFromReceipt, submitGuideChange, type GuideChangeInput } from "./guide-changes";
 import { exportCsv, type ImportKind } from "./csv-exchange";
 import { assignFollowUp as assignTask, changeFollowUp, createFollowUp, respondToFollowUp } from "./follow-ups";
 import { isProductionApp, storageKey } from "./environment";
+import { walkTargetSchema, type WalkTargetInput } from "./walk-targets";
+import { assertWalkTargetDoesNotOverlap, projectWalkTargetLifecycle, replaceWalkTarget, type TargetOwner } from "./walk-target-lifecycle";
+import { changeWalkTargetCrew } from "./walk-crews";
+import { changeOutingCheckIn, changeOutingRoster, respondToOutingInvitation, type OutingResponse } from "./outing-participants";
 import {
   volunteerIdForUser,
   withAuthenticatedVolunteer,
@@ -392,7 +396,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         if (changed === current && !extraOperations) return current;
         const updated = { ...changed, updatedAt: new Date().toISOString() };
         const scope = storageScopeRef.current;
-        return scope ? stageWorkspaceChange(current, updated, scope, extraOperations?.(current), reasons) : updated;
+        return projectWalkTargetLifecycle(scope ? stageWorkspaceChange(current, updated, scope, extraOperations?.(current), reasons) : updated);
       });
       setStorageError(null);
       return next;
@@ -639,6 +643,8 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       requireCalendarDate(date);
       if (!resident) throw new Error("This person is no longer available to your account.");
       if (!trimmedNote || trimmedNote.length > current.church.noteCharacterLimit) throw new Error("Describe the next step within the church’s character limit.");
+      const channel = resident.preferredContact === "none" ? "other" : resident.preferredContact;
+      if (contactRestricted(current, residentId, channel, resident.propertyId)) throw new Error("This follow-up conflicts with an active contact restriction.");
       const now = new Date().toISOString();
       const followUp = createFollowUp({
         id: followUpId,
@@ -647,7 +653,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         residentId,
         dueAt: date,
         assignedVolunteerId: resident.assignedVolunteerId,
-        channel: resident.preferredContact === "none" ? "other" : resident.preferredContact,
+        channel,
         note: trimmedNote,
       }, actorIdRef.current ?? current.preferences.activeVolunteerId, now);
       return addAudit({
@@ -795,10 +801,16 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     const id = outingId ?? createId("outing");
     if (!input.name.trim() || !Number.isFinite(Date.parse(input.startsAt)) || !Number.isFinite(Date.parse(input.endsAt)) || Date.parse(input.endsAt) <= Date.parse(input.startsAt)) throw new Error("Choose an outing name and an end time after its start.");
     if (["ready", "active"].includes(input.status) && (!input.purpose?.trim() || !input.meetingPoint?.trim() || !input.leaderContact?.trim())) throw new Error("Add a purpose, meeting point and leader contact before marking the outing ready.");
-    await updateData((current) => addAudit({ ...current, events: [...current.events.filter((event) => event.id !== id),
-      { ...input, id, churchId: current.church.id, name: input.name.trim() }],
-      preferences: { ...current.preferences, activeEventId: id },
-    }, "event", id, outingId ? "event.updated" : "event.created", "Outing preparation saved"));
+    await updateData((current) => {
+      if (["ready", "active"].includes(input.status)
+        && !current.outingParticipants.some((participant) => participant.eventId === id)) {
+        throw new Error("Invite at least one person before sharing this outing.");
+      }
+      return addAudit({ ...current, events: [...current.events.filter((event) => event.id !== id),
+        { ...input, id, churchId: current.church.id, name: input.name.trim() }],
+        preferences: { ...current.preferences, activeEventId: id },
+      }, "event", id, outingId ? "event.updated" : "event.created", "Outing preparation saved");
+    });
     return id;
   }, [supabaseUser, updateData]);
 
@@ -806,14 +818,97 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     const id = assignmentId ?? createId("assignment");
     await updateData((current) => {
       if (!input.assignedTeamId && !input.assignedVolunteerId) throw new Error("Choose a group or responsible volunteer.");
-      if (!assignmentId && current.assignments?.some((a) => a.eventId === input.eventId && a.territoryId === input.territoryId && !["declined", "cancelled"].includes(a.status))) {
-        throw new Error("This list or territory already has an assignment for the outing. Review it before assigning again.");
+      if (!assignmentId && current.assignments?.some((a) => a.eventId === input.eventId && a.territoryId === input.territoryId
+        && a.targetId === input.targetId && !["declined", "cancelled"].includes(a.status))) {
+        throw new Error("This nightly target already has an assignment for the outing. Review it before assigning again.");
       }
       return addAudit({ ...current, assignments: [...(current.assignments ?? []).filter((a) => a.id !== id), { ...input, id, churchId: current.church.id }] },
         "assignment", id, "assignment.updated", "Outing responsibility updated");
     });
     return id;
   }, [updateData]);
+
+  const saveOutingRoster = useCallback(async (eventId: string, memberIds: string[]) => {
+    if (supabaseUser && roleRef.current !== "leader") throw new Error("Only a church leader can manage the outing roster.");
+    const ids = new Map<string, string>();
+    await updateData((current) => {
+      const changed = changeOutingRoster(current, eventId, memberIds, (volunteerId) => {
+        if (!ids.has(volunteerId)) ids.set(volunteerId, createId("participant"));
+        return ids.get(volunteerId)!;
+      });
+      if (changed === current) return current;
+      return addAudit(changed, "event", eventId, "event.roster_updated", `${memberIds.length} people invited to the outing`);
+    });
+  }, [supabaseUser, updateData]);
+
+  const saveOutingResponse = useCallback(async (participantId: string, response: OutingResponse) => {
+    await updateData((current) => {
+      const volunteerId = supabaseUser ? volunteerIdForUser(supabaseUser.id) : current.preferences.activeVolunteerId;
+      const changed = respondToOutingInvitation(current, participantId, volunteerId, response);
+      if (changed === current) return current;
+      return addAudit(changed, "participant", participantId, "participant.response_updated", response === "going" ? "Outing invitation accepted" : "Outing invitation declined");
+    });
+  }, [supabaseUser, updateData]);
+
+  const saveWalkCrews = useCallback(async (eventId: string, crews: Record<string, string[]>, attendingIds: string[]) => {
+    if (supabaseUser && roleRef.current !== "leader") throw new Error("Only a church leader can manage walk crews.");
+    const participantIds = new Map<string, string>();
+    await updateData((current) => {
+      let changed = changeOutingCheckIn(current, eventId, attendingIds, (volunteerId) => {
+        if (!participantIds.has(volunteerId)) participantIds.set(volunteerId, createId("participant"));
+        return participantIds.get(volunteerId)!;
+      });
+      for (const [targetId, memberIds] of Object.entries(crews)) {
+        const crew = changeWalkTargetCrew(changed, targetId, memberIds, {
+          assignmentId: createId("assignment"),
+          teamId: createId("team"),
+        });
+        changed = crew.data;
+      }
+      if (changed === current) return current;
+      return addAudit(changed, "event", eventId, "event.crews_updated", `${attendingIds.length} people checked in; target crews updated`);
+    });
+  }, [supabaseUser, updateData]);
+
+  const saveTarget = useCallback(async (input: WalkTargetInput, targetId?: string) => {
+    if (supabaseUser && roleRef.current !== "leader") throw new Error("Only a church leader can plan nightly targets.");
+    if (storageScopeRef.current && !onlineRef.current) throw new Error("Reconnect to save target planning. Your map selection stays here; accepted fieldwork remains available offline.");
+    const id = targetId ?? createId("target");
+    await updateData((current) => {
+      const existing = current.walkTargets.find((target) => target.id === id);
+      if (existing?.rosterState === "frozen") throw new Error("This nightly target is frozen history. Create a replacement target.");
+      if (!current.events.some((event) => event.id === input.eventId && (existing ? ["draft", "scheduled"] : ["draft", "scheduled", "ready", "active"]).includes(event.status))) throw new Error("Choose an open outing. Frozen targets require a new replacement target.");
+      if (!current.territories.some((territory) => territory.id === input.territoryId && territory.kind !== "list")) throw new Error("Choose an available mapped parent zone.");
+      assertWalkTargetDoesNotOverlap(current, input, id);
+      const target = walkTargetSchema.parse({ ...input, id, churchId: current.church.id, rosterState: "draft", frozenAt: undefined, finishedAt: undefined });
+      return addAudit({ ...current, walkTargets: [...current.walkTargets.filter((candidate) => candidate.id !== id), target] }, "target", id, targetId ? "target.updated" : "target.created", "Nightly target saved");
+    });
+    return id;
+  }, [supabaseUser, updateData]);
+
+  const finishTarget = useCallback(async (targetId: string) => {
+    await updateData((current) => {
+      const actor = actorIdRef.current ?? current.preferences.activeVolunteerId;
+      const canManage = roleRef.current === "leader" || (!supabaseUser && current.volunteers.some((volunteer) => volunteer.id === actor && volunteer.role === "leader"));
+      const teams = new Set(current.teams.filter((team) => team.memberIds.includes(actor)).map((team) => team.id));
+      const assignment = (current.assignments ?? []).find((candidate) => candidate.targetId === targetId
+        && (canManage ? ["assigned", "accepted"].includes(candidate.status) : candidate.status === "accepted")
+        && (canManage || candidate.assignedVolunteerId === actor || teams.has(candidate.assignedTeamId ?? "")));
+      if (!assignment) throw new Error(canManage ? "Open an assigned target before marking it finished." : "Accept your target assignment before marking it finished.");
+      return addAudit({ ...current, assignments: current.assignments!.map((candidate) => candidate.id === assignment.id ? { ...candidate, status: "completed" as const } : candidate) },
+        "assignment", assignment.id, "assignment.completed", "Nightly target marked finished");
+    });
+  }, [supabaseUser, updateData]);
+
+  const replaceTarget = useCallback(async (assignmentId: string, input: WalkTargetInput, owner: TargetOwner) => {
+    if (supabaseUser && roleRef.current !== "leader") throw new Error("Only a church leader can replace nightly targets.");
+    if (storageScopeRef.current && !onlineRef.current) throw new Error("Reconnect to replace a target. The current assignment and your map selection are preserved.");
+    const targetId = createId("target");
+    const newAssignmentId = createId("assignment");
+    await updateData((current) => addAudit(replaceWalkTarget(current, assignmentId, input, owner, { targetId, assignmentId: newAssignmentId }),
+      "target", targetId, "target.replaced", "Prior assignment cancelled and replacement assigned; fresh acceptance required"));
+    return targetId;
+  }, [supabaseUser, updateData]);
 
   const repeatOuting = useCallback(async (outingId: string, startsAt: string, endsAt: string) => {
     if (supabaseUser && roleRef.current !== "leader") throw new Error("Only a church leader can repeat an outing.");
@@ -823,10 +918,9 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       const original = current.events.find((e) => e.id === outingId);
       if (!original) throw new Error("This outing is no longer available.");
       return addAudit({ ...current, events: [...current.events, { ...original, id, startsAt, endsAt, name: original.name,
-        status: "draft", debrief: "" }], assignments: [...(current.assignments ?? []), ...(current.assignments ?? []).filter((a) => a.eventId === outingId && !["cancelled", "declined"].includes(a.status))
-        .map((a) => ({ ...a, id: createId("assignment"), eventId: id, status: "assigned" as const }))],
+        status: "draft", debrief: "" }],
         preferences: { ...current.preferences, activeEventId: id },
-      }, "event", id, "event.repeated", "Outing repeated with reusable assignments; people and history were not copied");
+      }, "event", id, "event.repeated", "Outing preparation repeated; nightly targets, assignments, people and history were not copied");
     });
     return id;
   }, [supabaseUser, updateData]);
@@ -1450,6 +1544,12 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
       handoffPerson,
       saveOuting,
       saveAssignment,
+      saveOutingRoster,
+      saveOutingResponse,
+      saveWalkCrews,
+      saveTarget,
+      finishTarget,
+      replaceTarget,
       repeatOuting,
       addPersonFollowUp,
       upsertResident,

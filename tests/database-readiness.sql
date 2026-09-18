@@ -24,11 +24,20 @@ values ('10000000-0000-4000-8000-000000000002','private-b','Other church outing'
 
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000011","session_id":"10000000-0000-4000-8000-000000000011","role":"authenticated","is_anonymous":false}',true);
 set local role authenticated;
-do $$ declare first_count integer; next_count integer; cursor_id text; tab text; begin
+do $$ declare first_count integer; next_count integer; cursor_id text; tab text; setting_column text; begin
   if has_table_privilege('authenticated','public.workspace_snapshots','UPDATE') then raise exception 'Legacy snapshot replacement remains possible'; end if;
-  foreach tab in array array['outreach_outings','outreach_teams','outreach_locations','outreach_encounters','outreach_tasks','outreach_task_activity','outreach_restrictions','outreach_audit','discipleship_people','discipleship_person_notes'] loop
+  foreach tab in array array['outreach_outings','outreach_outing_participants','outreach_teams','outreach_locations','outreach_encounters','outreach_tasks','outreach_task_activity','outreach_restrictions','outreach_audit','discipleship_people','discipleship_person_notes'] loop
     if has_table_privilege('authenticated','public.'||tab,'INSERT,UPDATE,DELETE') then raise exception 'Direct browser writes are still allowed on %',tab; end if;
   end loop;
+  foreach setting_column in array array['name','timezone','retention_days','default_follow_up_days','note_character_limit','pathway_enabled'] loop
+    if has_column_privilege('authenticated','public.churches',setting_column,'UPDATE') then
+      raise exception 'Direct browser update remains allowed on churches.%',setting_column;
+    end if;
+  end loop;
+  begin
+    update public.churches set name='Bypassed settings' where id='10000000-0000-4000-8000-000000000001';
+    raise exception 'Direct church settings update was allowed';
+  exception when insufficient_privilege then null; end;
   if exists(select 1 from public.outreach_outings where church_id='10000000-0000-4000-8000-000000000002') then raise exception 'Cross-church table read was allowed'; end if;
   begin
     perform public.outreach_workspace_info('10000000-0000-4000-8000-000000000002');
@@ -56,7 +65,21 @@ end $$;
 create function pg_temp.command(command_id text, operations jsonb) returns jsonb language sql as $$
   select jsonb_build_object('id',command_id,'churchId','10000000-0000-4000-8000-000000000001','schemaVersion',1,'operations',operations);
 $$;
-do $$ declare command jsonb; first_result jsonb; visit jsonb; begin
+do $$ declare command jsonb; first_result jsonb; visit jsonb; settings_version bigint; workspace_revision bigint; begin
+  select outreach_version,outreach_revision into settings_version,workspace_revision
+  from public.churches where id='10000000-0000-4000-8000-000000000001';
+  perform public.outreach_apply_command(pg_temp.command('transactional-settings',jsonb_build_array(jsonb_build_object(
+    'entityType','settings','entityId','10000000-0000-4000-8000-000000000001','operation','upsert','expectedVersion',settings_version,
+    'record',jsonb_build_object('name','Readiness Church A','timezone','America/Chicago','retentionDays',365,
+      'defaultFollowUpDays',7,'noteCharacterLimit',500,'pathwayEnabled',false)
+  ))));
+  if (select outreach_version from public.churches where id='10000000-0000-4000-8000-000000000001') <> settings_version+1
+    or (select outreach_revision from public.churches where id='10000000-0000-4000-8000-000000000001') <> workspace_revision+1 then
+    raise exception 'Transactional settings did not advance both versions';
+  end if;
+  if not exists(select 1 from public.outreach_audit where command_id='transactional-settings' and action='settings.upsert') then
+    raise exception 'Transactional settings audit is missing';
+  end if;
   command := pg_temp.command('create-location','[{"entityType":"property","entityId":"location-a","operation":"upsert","expectedVersion":0,"record":{"address":"100 Fictional Lane","source":"manual"}}]');
   first_result := public.outreach_apply_command(command);
   if public.outreach_apply_command(command) <> first_result then raise exception 'Retry did not return the original receipt'; end if;
@@ -112,6 +135,9 @@ end $$;
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000013","session_id":"10000000-0000-4000-8000-000000000013","role":"authenticated","is_anonymous":false}',true);
 do $$ begin
   perform pg_temp.expect_denied(pg_temp.command('volunteer-outing','[{"entityType":"event","entityId":"unauthorized","operation":"upsert","expectedVersion":0,"record":{}}]'),'42501');
+  perform pg_temp.expect_denied(pg_temp.command('finish-unaccepted-area','[
+    {"entityType":"assignment","entityId":"assigned-area","operation":"upsert","expectedVersion":1,"record":{"eventId":"workflow-outing","territoryId":"list-only","assignedVolunteerId":"volunteer_10000000000040008000000000000013","status":"completed"}}
+  ]'),'22023');
   perform public.outreach_apply_command(pg_temp.command('accept-own-area','[
     {"entityType":"assignment","entityId":"assigned-area","operation":"upsert","expectedVersion":1,"record":{"eventId":"workflow-outing","territoryId":"list-only","assignedVolunteerId":"volunteer_10000000000040008000000000000013","status":"accepted"}}
   ]'));
@@ -188,4 +214,4 @@ do $$ begin
 end $$;
 reset role;
 rollback;
-select 'PASS: tenant/role denials, complete pagination, idempotent receipts, atomic rollback, authoritative actors, address-optional people and restriction precedence' as result;
+select 'PASS: tenant/role denials, transactional settings, assignment acknowledgement, complete pagination, idempotent receipts, atomic rollback, authoritative actors, address-optional people and restriction precedence' as result;

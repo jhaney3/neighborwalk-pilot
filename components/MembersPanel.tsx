@@ -234,7 +234,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
 
       <div className="group-management">
         <div className="section-heading"><div><p className="eyebrow">Field organization</p><h2>Outreach groups</h2></div><button className="button quiet small" onClick={() => setEditingTeam("new")}><Plus size={14} /> New group</button></div>
-        <p className="section-description">Place active members into reusable groups, then assign a group for a particular outing. A follow-up still needs a named owner.</p>
+        <p className="section-description">Saved groups are optional starting points for common pairings. At each walk, check in whoever arrives and adjust the actual crews without changing these presets.</p>
         <div className="group-list">
           {teams.map((team) => <article className="group-card" key={team.id}>
             <span className={`team-initial ${team.status}`}>{team.name.charAt(0).toUpperCase()}</span>

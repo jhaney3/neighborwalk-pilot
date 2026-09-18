@@ -99,6 +99,42 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   });
   const storedPersonNotes = Array.isArray(data.personNotes) ? data.personNotes : [];
   const storedFollowUps = Array.isArray(data.followUps) ? data.followUps : [];
+  const storedParticipants = Array.isArray(data.outingParticipants) ? data.outingParticipants : [];
+  const migratedParticipants = version < 13 && storedParticipants.length === 0
+    ? (() => {
+      const assignments = Array.isArray(data.assignments) ? data.assignments : [];
+      const teams = Array.isArray(data.teams) ? data.teams : [];
+      const byOutingAndVolunteer = new Map<string, Record<string, unknown>>();
+      const statusPriority = { not_going: 0, invited: 1, going: 2, checked_in: 3 } as const;
+      assignments.forEach((candidateAssignment, assignmentIndex) => {
+        if (!candidateAssignment || typeof candidateAssignment !== "object" || Array.isArray(candidateAssignment)) return;
+        const assignment = candidateAssignment as Record<string, unknown>;
+        if (assignment.status === "cancelled" || typeof assignment.eventId !== "string") return;
+        const memberIds = typeof assignment.assignedVolunteerId === "string" ? [assignment.assignedVolunteerId]
+          : typeof assignment.assignedTeamId === "string"
+            ? (teams.find((candidateTeam) => candidateTeam && typeof candidateTeam === "object" && !Array.isArray(candidateTeam)
+              && (candidateTeam as Record<string, unknown>).id === assignment.assignedTeamId) as Record<string, unknown> | undefined)?.memberIds
+            : [];
+        if (!Array.isArray(memberIds)) return;
+        const status = assignment.status === "completed" ? "checked_in" : assignment.status === "accepted" ? "going"
+          : assignment.status === "declined" ? "not_going" : "invited";
+        memberIds.forEach((memberId, memberIndex) => {
+          if (typeof memberId !== "string") return;
+          const key = JSON.stringify([assignment.eventId, memberId]);
+          const current = byOutingAndVolunteer.get(key);
+          if (current && statusPriority[current.status as keyof typeof statusPriority] >= statusPriority[status]) return;
+          byOutingAndVolunteer.set(key, {
+            id: `participant_migrated_${assignmentIndex}_${memberIndex}`,
+            churchId: typeof assignment.churchId === "string" ? assignment.churchId : defaults.church.id,
+            eventId: assignment.eventId,
+            volunteerId: memberId,
+            status,
+          });
+        });
+      });
+      return [...byOutingAndVolunteer.values()];
+    })()
+    : storedParticipants;
   const timezone = data.church && typeof data.church === "object" && "timezone" in data.church && typeof data.church.timezone === "string"
     ? data.church.timezone : defaults.church.timezone;
   const defaultFollowUpDays = data.church && typeof data.church === "object" && !Array.isArray(data.church)
@@ -170,6 +206,11 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
     schemaVersion: APP_SCHEMA_VERSION,
     church: withoutLegacyFields(data.church, ["requireFollowUpConsent"]),
     residents: migratedResidents,
+    outingParticipants: migratedParticipants,
+    walkTargets: Array.isArray(data.walkTargets) ? data.walkTargets : [],
+    targetProgress: Array.isArray(data.targetProgress) ? data.targetProgress : [],
+    parentProgress: Array.isArray(data.parentProgress) ? data.parentProgress : [],
+    coverageVisibility: data.coverageVisibility === "complete" ? "complete" : "assigned_targets_only",
     personNotes: [...storedPersonNotes, ...migratedLegacyNotes],
     visits: Array.isArray(data.visits)
       ? data.visits.map((visit) => withoutLegacyFields(visit, ["followUpConsent"]))

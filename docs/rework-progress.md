@@ -25,7 +25,7 @@ Historical fields and access must be preserved during additive migration. Creato
 | --- | --- | --- |
 | 0 — Product decisions and preservation | Core preservation complete; external decisions open | Production checkpoint published; scoped backup restored and compared; commercial hosting/operator details still needed |
 | 1 — Safer baseline | Implemented and CI-verified; production verification incomplete | Patched dependencies, regression coverage, scoped storage and clean-install/database/browser CI jobs; final release and production verification remain |
-| 2 — Durable domain, permissions and migration | Implemented locally in substantial part; not released | Eighteen additive migrations; restored-record fields/relationships compared and staged FKs validated in rehearsal; transactional/coherent guide library implemented; fresh cutover backup, legacy-device reconciliation, staging/cutover and remaining failure/scale matrix still required |
+| 2 — Durable domain, permissions and migration | Implemented locally in substantial part; not released | Nineteen additive migrations; restored-record fields/relationships compared and staged FKs validated in rehearsal; transactional/coherent guide library implemented; fresh cutover backup, legacy-device reconciliation, staging/cutover and remaining failure/scale matrix still required |
 | 3 — Coherent church workflow | Implemented locally in substantial part; not complete | Routed outings, non-map field flow, community encounters, people/tasks, restrictions, reviewed moves/duplicates/encounter corrections and permitted history; actual-phone/accessibility matrix and remaining integration work remain |
 | 4 — Website and controlled pilot | Implemented locally in part; not ready for enrollment | Public site, CSV exchange, admin review, leader setup guide and opt-in reminder implementation; provider activation, operations, owner details, commercial hosting and external pilot gates remain |
 | 5 — Evidence-led growth | Deferred by approved sequencing | Select experiments after core/pilot evidence |
@@ -200,6 +200,83 @@ Restore rehearsal completed in `neighborwalk_rehearsal_20260909`, a separate loc
 - Added an [audit delivery matrix](audit-delivery-status.md) mapping B01–B15 and I01–I15 to branch implementation and explicit gaps. Production was rechecked: original deployment `dpl_C4sMrQ52ewYiZdrAyMF3YCc9qjho`, exact `d94d17c6` commit, READY and HTTP 200. No rework production deployment occurred.
 - Read-only map-provider check: the configured local public key returned 403 for the local origin and 200 for production-origin headers on the app's Streets v4 style endpoint. No keys, provider settings or church data were changed. This narrows the local symptom but does not prove live browser tiles/geocoding or provider/content licensing.
 - [Workspace read reliability](workspace-read-reliability.md) documents the bounds and explicitly separates these tests from the still-required mixed-entity load/physical-phone benchmark. No migration or production mutation was added by this checkpoint.
+
+### September 11 — completed-work audit and remediation
+
+- Page-specific Luna reviews covered every public route and the distinct Today, Outreach, fieldwork, Locations, People, Follow-ups, Guides, Groups & members, Settings, Recovery, community-encounter, invitation and connected-administration boundaries. Reviews used both source inspection and the optimized local build; stale reports from a server whose `.next` output had been replaced were discarded and rerun against the current build.
+- Accessibility and responsive fixes remove invalid ARIA from generic containers, restore a focusable skip-link target, label search/tracking/import controls, expose selected directory state, retain `main` landmarks during loading, enlarge operational microcopy and touch targets, repair the narrow follow-up filters/property sheet/recovery actions and improve mobile navigation contrast. The changed fieldwork and community-encounter dialogs passed keyboard, focus, narrow-width and automated accessibility checks.
+- Workflow fixes require assignment acceptance before completion, preserve a selected address-list territory when returning to the map, keep demo recovery navigation inside the demo, use state-aware guide actions, expose community encounters from an active outing, use the church timezone for follow-up date minima and prevent person follow-up tasks that conflict with an applicable contact restriction. Factual encounter history remains recordable; a restriction is not silently lifted or rewritten.
+- The nineteenth additive migration removes the legacy direct church-settings update path, keeps settings in the versioned/audited command stream, protects assignment acknowledgement in SQL and revokes inherited execution on superseded private helpers. Regression coverage checks the direct-update denial, both version increments, audit creation and the acknowledgement boundary.
+- Configured supported map/geocoder origins are represented in production CSP, unsupported runtime map-style origins are rejected, OpenFreeMap sprite requests are allowed, and the public sitemap now derives from the route registry so Privacy and Terms remain included. Obsolete snapshot-merge and unused connected-discipleship implementations/tests were removed; historical developer documents now defer to the current architecture instead of presenting the prior design as live behavior.
+- Final local lint, TypeScript, all 202 unit tests / 42 files, the optimized 20-route build, offline-manifest generation, sandbox verification and all nine rollback-only database suites passed. Database lint reported no errors; reviewed existing warnings are limited to dynamic-SQL analysis, retired fail-closed parameters and implicit literal casts in exercised functions. Full browser results are recorded in [browser readiness](browser-readiness.md).
+- No production deployment, hosted database mutation, provider activation or real church-data change occurred. The existing staging, device, operator, legal, provider and pilot gates below remain open.
+
+### September 12 — simplicity pass before further feature expansion
+
+- Implemented the approved [simplicity plan](simplicity-plan.md) with three Sol
+  Codex agents in the existing herdr session and coordinator integration.
+- Desktop and mobile now share Home, Walks, People, More. Home chooses personal
+  assignments and requested follow-ups, with exception notices only when needed.
+- People combines Needs follow-up and All people, groups tasks by person, keeps
+  unnamed address-only work actionable, and embeds shared task actions in profiles.
+  Existing person/task links remain usable. Secondary actions and filters are
+  disclosed when needed; calendar-day labels retain their intended date.
+- Walk setup guides When → Where → Who → Review, with direct volunteer selection,
+  optional groups, inline address lists, and checkpointed saves. Fieldwork requires
+  the selected walk's applicable area and preserves assignment acceptance.
+- Website and help use the same simpler workflow. Existing access, data, offline
+  command, and production-release boundaries remain in place; no new migration
+  or production deployment was performed for this pass.
+- Final integration checks pass: lint, TypeScript, 224 unit tests in 45 files,
+  nine local database suites, optimized build, and all 24 browser scenarios
+  across the full run and focused test-only reruns. [Verification notes](simplicity-verification.md)
+  record the exact coverage and remaining limits. Product-owner practice with
+  the fictional workflow remains the usability checkpoint before feature expansion.
+
+### September 12 — map-first zones and nightly targets
+
+- Implemented the approved [map-first zones plan](map-first-zones-plan.md)
+  with Sol lanes coordinated in the existing herdr session. When → Where →
+  Who → Review stays; a saved or newly drawn zone is the lasting goal, and
+  colored polygons, rectangles, street sections or a whole-zone target define
+  one team's work for the night. Address-list construction is not required.
+- Each target has one team or person, an immutable reviewed parcel roster,
+  explicit acceptance and its own field map. Coverage dedupes apartments and
+  repeat visits; manual Finish does not imply 100%. Atomic replacement keeps
+  the old history and requires fresh acceptance. Repeat copies preparation,
+  not old targets or assignments.
+- Server checks enforce ownership, parcel/whole-zone exclusivity, authoritative
+  geometry and parcel identities, frozen history and nonempty accepted/ready
+  rosters. Complete cached planning data supports review; new connected
+  planning requires connectivity, while accepted field records remain durable
+  offline. Privacy-safe progress does not reveal private care notes.
+- A bounded pinned Overture import loaded 16,466 real connector-bounded street
+  sections for the four approved Tennessee counties into the local sandbox.
+  Manifest counts, geometry validity and authenticated bounded RPC reads passed.
+  All ten local database regression suites passed after import.
+- Scoped local verification is complete: 277 unit tests, all ten database suites,
+  optimized build, 11 final-artifact zone/simplicity browser tests and the isolated
+  connected draw → assign → Ready story passed. The 18 connected-readiness tests
+  passed on the preceding artifact; [verification notes](map-first-zones-verification.md)
+  distinguish artifacts, discovered fixes and external limits. The existing MapTiler key rejects
+  localhost; a runtime-only OpenFreeMap demo preference rendered a real basemap.
+  No credentials, hosted database, deployment, commit or production import changed.
+
+### September 12 — Step 2 real-data follow-up
+
+- User testing exposed generated planner geometry and missing Tennessee parcel
+  inventory despite the prior fixture-based workflow checks. Removed runtime
+  placeholder candidates, separated real street/parcel loading, and connected
+  parent-zone drawing to viewport parcel requests.
+- Public GIS-only reads now support the sample workspace without exposing church
+  data. Real Lawrenceburg street selection is browser-verified; 287 unit tests,
+  11 SQL suites, build, 11 deterministic browser scenarios and one unmocked GIS
+  scenario passed. [Follow-up evidence](map-data-loading-fix.md) records distinctions.
+- User subsequently authorized a read-only copy from hosted Supabase. Local
+  Lawrence publication now contains 25,754 original parcels (21,055 residential),
+  with matching source fingerprint and existing sandbox records preserved.
+  The bounded public RPC returns complete real inventory. No further tests were
+  run at the user's request; real-parcel browser verification is not claimed.
 
 ## Remaining engineering and operating work
 

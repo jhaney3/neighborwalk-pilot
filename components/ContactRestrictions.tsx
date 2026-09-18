@@ -11,14 +11,20 @@ export function ContactRestrictions({ data, residentId, propertyId, canManage, a
   const [editing, setEditing] = useState<string | null>(null);
   const family = residentId ? recordFamilyIds(data.residents, residentId) : recordFamilyIds(data.properties, propertyId ?? "");
   const restrictions = (data.restrictions ?? []).filter((r) => residentId ? Boolean(r.residentId && family.has(r.residentId)) : Boolean(r.propertyId && family.has(r.propertyId)));
-  return <section className="contact-restrictions today-card"><h3><ShieldCheck size={19} /> {residentId ? "Contact preferences & restrictions" : "Visit restrictions"}</h3>
-    <p>{residentId ? "Pausing care tracking does not mean do not contact. Record the neighbor’s request here; restrictions take priority over scheduled tasks." : "Respect a no-visit request even when a phone has older task data. Restrictions remain separate from visit history."}</p>
-    {!restrictions.some((r) => r.active) && <p>No active restriction is recorded here. That is not permission to contact someone.</p>}
-    {restrictions.some((r) => r.originResidentId || r.originPropertyId) && <p>Requests preserved from combined records remain independent. Lifting one does not lift any other active restriction.</p>}
-    <ul>{restrictions.map((r) => <li key={r.id}><strong>{r.channel === "all" ? "All contact" : r.channel} · {r.active ? "Restricted" : "Lifted after review"}</strong><p>{r.reason}</p>{r.correctionReason && <p>Review: {r.correctionReason}</p>}{r.active && canManage && <button className="button quiet small" onClick={() => setEditing(r.id)}>Review correction</button>}</li>)}</ul>
-    <button className="button quiet" onClick={() => setEditing("new")}>Record a contact restriction</button>
-    {editing && <RestrictionForm key={editing} data={data} residentId={residentId} propertyId={propertyId} correctionId={editing === "new" ? undefined : editing} actions={actions} onClose={() => setEditing(null)} />}
-  </section>;
+  const activeCount = restrictions.filter((restriction) => restriction.active).length;
+  const title = residentId ? "Contact preferences & restrictions" : "Visit restrictions";
+  return <div className="contact-restrictions">
+    <button className={`button quiet small${activeCount ? " has-active-restriction" : ""}`} onClick={() => setEditing("manage")}><ShieldCheck size={15} /> {residentId ? "Contact restrictions" : "Visit restrictions"}{activeCount ? ` · ${activeCount} active` : ""}</button>
+    {editing === "manage" && <Modal title={title} description={residentId ? "Pausing care tracking does not mean do not contact. Record the neighbor’s request here; restrictions take priority over scheduled tasks." : "Respect a no-visit request even when a phone has older task data. Restrictions remain separate from visit history."} onClose={() => setEditing(null)}>
+      <div className="contact-restrictions-dialog">
+        {!activeCount && <p>No active restriction is recorded here. That is not permission to contact someone.</p>}
+        {restrictions.some((r) => r.originResidentId || r.originPropertyId) && <p>Requests preserved from combined records remain independent. Lifting one does not lift any other active restriction.</p>}
+        <ul>{restrictions.map((r) => <li key={r.id}><strong>{r.channel === "all" ? "All contact" : r.channel} · {r.active ? "Restricted" : "Lifted after review"}</strong><p>{r.reason}</p>{r.correctionReason && <p>Review: {r.correctionReason}</p>}{r.active && canManage && <button className="button quiet small" onClick={() => setEditing(r.id)}>Review correction</button>}</li>)}</ul>
+        <button className="button quiet" onClick={() => setEditing("new")}>Record a contact restriction</button>
+      </div>
+    </Modal>}
+    {editing && editing !== "manage" && <RestrictionForm key={editing} data={data} residentId={residentId} propertyId={propertyId} correctionId={editing === "new" ? undefined : editing} actions={actions} onClose={() => setEditing(null)} />}
+  </div>;
 }
 function RestrictionForm({ data, residentId, propertyId, correctionId, actions, onClose }: { data: NeighborWalkData; residentId?: string; propertyId?: string; correctionId?: string; actions: RestrictionActions; onClose: () => void }) {
   const [channel, setChannel] = useState<RestrictionInput["channel"]>(propertyId ? "visit" : "all");

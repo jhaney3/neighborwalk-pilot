@@ -103,7 +103,7 @@ export function NeighborWalkRoot() {
     if (candidate?.id === offlineCandidate.id) { setOfflineUser(candidate); setConnectionError(""); setLoading(false); }
     else { setOfflineCandidate(null); setConnectionError("This device now needs an online sign-in and membership check. Saved work has not been cleared."); }
   }}>Open prepared offline workspace</button><button className="button quiet" onClick={() => window.location.reload()}>Retry online sign-in</button></section></main>;
-  if (connectionError && !offlineUser) return <main className="auth-shell"><section className="auth-card"><h1>Check your connection or invitation</h1><p role="alert">{connectionError}</p><p>Nothing was cleared. If an email link opened in another tab, sign in there, then reopen your original church invitation.</p><button className="button quiet" onClick={() => window.location.reload()}>Try again</button><Link className="button quiet" href="/login">Open sign-in</Link><Link href="/help">Sign-in help</Link></section></main>;
+  if (connectionError && !offlineUser) return <main className="auth-shell"><section className="auth-card"><h1>Check your connection or invitation</h1><p role="alert">{connectionError}</p><p>Nothing was cleared. If an email link opened in another tab, sign in there, then reopen your original church invitation.</p><div className="auth-connection-actions"><button className="button quiet" onClick={() => window.location.reload()}>Try again</button><Link className="button quiet" href="/login">Open sign-in</Link><Link href="/help">Sign-in help</Link></div></section></main>;
   if (loading && !offlineUser) return <ConnectionLoading />;
   if (!workspaceUser) return <SignInScreen />;
   if (passwordRecovery && session) return <PasswordRecovery email={session.user.email ?? "your account"} onSave={async (password) => { await updatePassword(password); setPasswordRecovery(false); }} />;
@@ -278,5 +278,5 @@ function PasswordRecovery({ email, onSave }: { email: string; onSave: (password:
 }
 
 function ConnectionLoading() {
-  return <main className="app-loading" role="status"><div className="loading-mark"><Navigation size={23} /></div><strong>Opening your church workspace</strong><span>Checking your secure session…</span></main>;
+  return <main className="app-loading"><div className="loading-mark"><Navigation size={23} /></div><h1>Opening your church workspace</h1><span role="status" aria-live="polite">Checking your secure session…</span></main>;
 }
