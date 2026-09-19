@@ -1,4 +1,5 @@
 "use client";
+import { serviceUrl } from "../lib/mobile";
 
 import { BookOpenText, ChevronDown, ChevronUp, ExternalLink, LoaderCircle } from "lucide-react";
 import { useState } from "react";
@@ -30,7 +31,7 @@ export function ScriptureReader({ references, theme = "dark" }: { references: st
 
     setReadings((current) => ({ ...current, [reference]: { status: "loading" } }));
     try {
-      const response = await fetch(`/api/scripture?reference=${encodeURIComponent(reference)}`);
+      const response = await fetch(serviceUrl(`/api/scripture?reference=${encodeURIComponent(reference)}`));
       const payload = await response.json() as { canonical?: string; text?: string; error?: string };
       if (!response.ok || !payload.text) throw new Error(payload.error || "The passage could not be loaded.");
       setReadings((current) => ({ ...current, [reference]: { status: "ready", canonical: payload.canonical || reference, text: payload.text } }));

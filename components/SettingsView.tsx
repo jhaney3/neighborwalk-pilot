@@ -4,6 +4,8 @@ import { AlertTriangle, BookOpenText, Check, Church, CloudOff, Database, Downloa
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useAsyncAction } from "../lib/use-async-action";
+import { isMobileApp } from "../lib/mobile";
+import { AccountDeletion } from "./AccountDeletion";
 import { requestAppInstall } from "../lib/install";
 import { isSafeWebUrl, type ConversationGuide, type NeighborWalkData } from "../lib/domain";
 import { isSupportedMapStyleUrl } from "../lib/map-config";
@@ -138,6 +140,7 @@ export function SettingsView({
         {data.sync.mode === "connected" && <SettingsSection icon={<LockKeyhole size={18} />} title="Account and access" description="Your access level is assigned by a church leader.">
           <div className="connection-card connected"><LockKeyhole size={18} /><span><strong>Signed-in church account</strong>{accountEmail || "Authenticated member"} · {canManage ? "Leader access" : "Volunteer access"}</span></div>
           {onUpdatePassword && <details className="account-password"><summary>Set or change password</summary><div><p>Use a password for routine sign-in without waiting for an email.</p><label className="form-field"><span>New password</span><input type="password" minLength={8} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><label className="form-field"><span>Confirm password</span><input type="password" minLength={8} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label><button className="button quiet" disabled={updatingPassword} onClick={() => void saveAccountPassword()}><Save size={15} /> {updatingPassword ? "Saving…" : "Save password"}</button></div></details>}
+          {isMobileApp && <AccountDeletion />}
           {onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onSignOut)}><LogOut size={15} /> Sign out</button>}
         </SettingsSection>}
 
@@ -171,7 +174,7 @@ export function SettingsView({
           <label className="form-field"><span>Map style URL</span><input inputMode="url" value={mapStyleUrl} onChange={(event) => setMapStyleUrl(event.target.value)} /></label>
           <button className="button quiet" disabled={action.busy} onClick={() => void action.run(saveMapStyle)}><Save size={15} /> Save map style</button>
           <label className="toggle-row"><input type="checkbox" checked={data.preferences.compactMapMarkers} onChange={(event) => { const value = event.target.checked; void action.run(() => onSetPreference("compactMapMarkers", value)); }} /><span><strong>Compact location dots</strong>Use smaller status dots in dense neighborhoods.</span></label>
-          <div className="button-row"><button className="button quiet" onClick={installApp}><Smartphone size={15} /> Install app</button></div>
+          {!isMobileApp && <div className="button-row"><button className="button quiet" onClick={installApp}><Smartphone size={15} /> Install app</button></div>}
         </SettingsSection>
 
         <ReminderSettings key={data.church.id} churchId={data.church.id} timezone={data.church.timezone} online={online} connected={data.sync.mode === "connected"} />

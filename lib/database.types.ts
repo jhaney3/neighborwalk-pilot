@@ -1497,6 +1497,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      request_account_deletion: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       accept_church_invitation: {
         Args: { invitation_token: string }
         Returns: {

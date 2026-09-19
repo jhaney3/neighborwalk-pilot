@@ -1,0 +1,49 @@
+name: Verify iOS app
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - 'ios/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'app/NeighborWalkApp.tsx'
+      - 'app/styles/**'
+      - 'capacitor.config.ts'
+      - 'package*.json'
+      - 'tests/mobile/**'
+      - 'playwright.mobile.config.ts'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run mobile:build:sample
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:mobile
+
+  ios-build:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run mobile:build:sample
+      - run: npx cap sync ios
+      - run: xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build

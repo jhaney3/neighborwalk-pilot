@@ -1,3 +1,4 @@
+import { isMobileApp } from "./mobile";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { assertSafeSupabaseUrl, isProductionApp, storageKey } from "./environment";
 
@@ -18,7 +19,7 @@ export function authStorageKey() {
  * Any HTTP response (including an auth denial) proves connectivity, not access. */
 export async function authServiceUnreachable() {
   if (!supabaseUrl || !supabasePublishableKey) return false;
-  assertSafeSupabaseUrl(supabaseUrl, isProductionApp, window.location.hostname);
+  assertSafeSupabaseUrl(supabaseUrl, isProductionApp, (isMobileApp && window.location.protocol === "capacitor:" && window.location.hostname === "localhost") ? undefined : window.location.hostname);
   try {
     await fetch(`${supabaseUrl}/auth/v1/health`, { headers: { apikey: supabasePublishableKey },
       credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(3000) });
@@ -32,7 +33,7 @@ export function isSupabaseConfigured() {
 
 export function getSupabaseBrowserClient(): SupabaseClient<NeighborWalkDatabase> | null {
   if (!supabaseUrl || !supabasePublishableKey || typeof window === "undefined") return null;
-  assertSafeSupabaseUrl(supabaseUrl, isProductionApp, window.location.hostname);
+  assertSafeSupabaseUrl(supabaseUrl, isProductionApp, (isMobileApp && window.location.protocol === "capacitor:" && window.location.hostname === "localhost") ? undefined : window.location.hostname);
   browserClient ??= createClient<NeighborWalkDatabase>(supabaseUrl, supabasePublishableKey, {
     auth: {
       storageKey: authStorageKey(),

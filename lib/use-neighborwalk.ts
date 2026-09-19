@@ -1,4 +1,5 @@
 "use client";
+import { isMobileApp } from "./mobile";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -372,6 +373,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [data]);
 
   useEffect(() => {
+    if (isMobileApp) { queueMicrotask(() => setOfflineShell("ready")); return; }
     if (!("serviceWorker" in navigator)) { queueMicrotask(() => setOfflineShell("unavailable")); return; }
     if (process.env.NODE_ENV === "production") {
       return observeOfflineShell(isProductionApp ? "/sw.js" : "/sw.js?sandbox", setOfflineShell);

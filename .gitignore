@@ -44,3 +44,13 @@ yarn-error.log*
 /work/
 /supabase/.temp/
 __pycache__/
+
+# iOS generated assets and local signing
+/mobile/dist/
+/mobile/public/
+/ios/App/App/public/
+/ios/App/App/capacitor.config.json
+/ios/App/App/config.xml
+/ios/App/build/
+**/xcuserdata/
+/ios/DerivedData/

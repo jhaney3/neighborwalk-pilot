@@ -8,6 +8,7 @@ import type { Team, TeamUpdate } from "../lib/domain";
 import type { WorkspaceMembership } from "../lib/use-neighborwalk";
 import { getSupabaseBrowserClient, type NeighborWalkDatabase } from "../lib/supabase";
 import { invitationLink } from "../lib/invitations";
+import { isMobileApp, appServiceOrigin } from "../lib/mobile";
 
 type Member = Pick<
   NeighborWalkDatabase["public"]["Tables"]["church_memberships"]["Row"],
@@ -122,7 +123,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
       if (invitationError) throw invitationError;
       const invitation = data?.[0];
       if (!invitation) throw new Error("The invitation link was not created.");
-      setCreatedLink(invitationLink(window.location.origin, invitation.invitation_token));
+      setCreatedLink(invitationLink(isMobileApp ? appServiceOrigin : window.location.origin, invitation.invitation_token));
       setEmail("");
       setMessage(`Invitation ready for ${invitation.email}. It expires in 7 days.`);
       await load();

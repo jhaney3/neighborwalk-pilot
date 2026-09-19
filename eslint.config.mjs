@@ -10,6 +10,9 @@ import tseslint from "typescript-eslint";
 const eslintConfig = defineConfig([
   globalIgnores([
     ".next/**",
+    "mobile/dist/**",
+    "mobile/public/**",
+    "ios/**",
     "out/**",
     "coverage/**",
     "outputs/**",

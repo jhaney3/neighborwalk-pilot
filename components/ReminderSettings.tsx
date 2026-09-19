@@ -1,4 +1,5 @@
 "use client";
+import { serviceUrl } from "../lib/mobile";
 import { Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
@@ -28,7 +29,7 @@ export function ReminderSettings({ churchId, timezone, online, connected }: { ch
     let active = true;
     void Promise.all([
       client.rpc("outreach_reminder_preference", { target_church: churchId }).abortSignal(controller.signal),
-      fetch("/api/reminders/status", { cache: "no-store", signal: controller.signal }).then(async (response) => {
+      fetch(serviceUrl("/api/reminders/status"), { cache: "no-store", signal: controller.signal }).then(async (response) => {
         if (!response.ok) throw new Error("Reminder availability could not be checked.");
         return z.object({ available: z.boolean() }).parse(await response.json());
       }),

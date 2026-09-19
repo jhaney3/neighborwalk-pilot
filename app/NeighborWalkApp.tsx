@@ -29,6 +29,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { followUpScope, followUpsHref, type FollowUpScope } from "../lib/follow-up-filters";
 import Link from "next/link";
+import { isMobileApp } from "../lib/mobile";
+import { MobileInvitation } from "../components/MobileInvitation";
+import { AccountDeletion } from "../components/AccountDeletion";
 import { appHref, appRoute, type AppView } from "../lib/app-routes";
 import { TodayView } from "../components/TodayView";
 import { EncounterComposer } from "../components/EncounterComposer";
@@ -465,7 +468,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
 
   return (
     <main className="app-shell">
-      {data.sync.mode === "device_only" && <div className="demo-notice" role="status">Sample workspace · fictional data only · nothing here is shared with a church. <Link href="/">Return to website</Link></div>}
+      {data.sync.mode === "device_only" && <div className="demo-notice" role="status">Sample workspace · fictional data only · nothing here is shared with a church. <Link href={isMobileApp ? "/login" : "/"}>{isMobileApp ? "Sign in" : "Return to website"}</Link></div>}
       <header className="app-header">
         <button className="brand" onClick={() => navigate("today")} aria-label="Open NeighborWalk Home">
           <span className="brand-mark" aria-hidden="true"><Navigation size={18} /></span>
@@ -725,6 +728,7 @@ function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; er
         <div className="workspace-account"><CircleUserRound size={17} /><span><strong>Signed in</strong>{user.email}</span></div>
         <div className="data-note"><ShieldCheck size={16} /><span>Invitation links expire after 7 days, work once, and cannot be used by a different email.</span></div>
         {error && <p className="auth-error" role="alert">{error}</p>}
+        {isMobileApp && <><MobileInvitation /><AccountDeletion /></>}
         {onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onSignOut)}>Use a different account</button>}
         {action.error && <p role="alert">{action.error}</p>}
       </section>

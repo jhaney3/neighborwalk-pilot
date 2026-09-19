@@ -6,12 +6,14 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
 import { NeighborWalkApp } from "../app/NeighborWalkApp";
+import { isMobileApp } from "../lib/mobile";
 import { authErrorMessage, validAuthEmail } from "../lib/auth";
 import { authServiceUnreachable, authStorageKey, getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
 import { isProductionApp } from "../lib/environment";
 import { authenticatedAppPath, safeAppPath } from "../lib/auth-navigation";
 import { pendingInvitation, rememberBrowserInvitation } from "../lib/invitations";
 import { preparedOfflineIdentity, WORKSPACE_CACHE_KEY, type PreparedIdentity } from "../lib/offline-identity";
+import { MobileInvitation } from "./MobileInvitation";
 
 export function NeighborWalkRoot() {
   const router = useRouter();
@@ -123,7 +125,7 @@ export function NeighborWalkRoot() {
 }
 
 function authRedirectUrl() {
-  const url = new URL("/login", window.location.origin);
+  const url = isMobileApp ? new URL("neighborwalk://auth") : new URL("/login", window.location.origin);
   const next = window.location.pathname.startsWith("/app/") ? safeAppPath(window.location.pathname + window.location.search) : authenticatedAppPath(window.location.search);
   if (next !== "/app/today") url.searchParams.set("next", next);
   return url.toString();
@@ -234,9 +236,9 @@ function SignInScreen() {
         <div className="auth-route" aria-hidden="true"><span><Navigation size={18} /></span><i /><span><MapPinned size={18} /></span></div>
         <p className="eyebrow">NeighborWalk church workspace</p>
         <h1 id="signin-title">Pick up where care left off.</h1>
-        <p className="auth-intro">{isProductionApp ? "Google is the quickest way in. Password sign-in is also available and does not send an email each time." : "Use your test account here. This workspace has its own data and sign-in."}</p>
+        <p className="auth-intro">{isMobileApp ? "Sign in with your church account. Your next walk and the people you care for are right here." : isProductionApp ? "Google is the quickest way in. Password sign-in is also available and does not send an email each time." : "Use your test account here. This workspace has its own data and sign-in."}</p>
         <div className="auth-form">
-          {isProductionApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or use your password</span></div></>}
+          {isProductionApp && !isMobileApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or use your password</span></div></>}
           <form className="auth-credentials" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
             <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" /></label>
             <label className="form-field"><span>Password</span><input type="password" minLength={8} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label>
@@ -249,9 +251,10 @@ function SignInScreen() {
           {confirmation && <div className="auth-confirmation" role="status"><Check size={20} /><div><strong>{confirmation.title}</strong><span>{confirmation.detail}</span></div></div>}
           {error && <p className="auth-error" role="alert">{error}</p>}
           <details className="auth-email-fallback"><summary>Use a one-time email link instead</summary><p>This fallback sends an email and may be unavailable when the project email limit is reached.</p><button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}><Mail size={16} />{action === "link" ? "Sending…" : "Send one-time link"}</button></details>
+          {isMobileApp && <MobileInvitation />}
         </div>
         <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are visible to their owner, church leaders and explicitly shared teammates. Pending handoff recipients and some historical creators may also have access, as shown on the profile.</span></div>
-        <p><Link href="/help">Sign-in help</Link> · <Link href="/">About NeighborWalk</Link> · <Link href="/privacy">Privacy</Link></p>
+        <p><Link href="/help">Sign-in help</Link> · {isMobileApp ? <Link href="/demo">Explore sample workspace</Link> : <Link href="/">About NeighborWalk</Link>} · <Link href="/privacy">Privacy</Link></p>
       </section>
     </main>
   );
