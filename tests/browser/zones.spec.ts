@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 type TargetFixture = {
   eventId: string;
@@ -20,6 +21,13 @@ type TargetFixture = {
 };
 
 type PlanningGisRequest = { pathname: string; boundary: unknown };
+
+function hasGeoJsonPoint(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const point = value as { type?: unknown; coordinates?: unknown };
+  return point.type === "Point" && Array.isArray(point.coordinates) && point.coordinates.length >= 2
+    && point.coordinates.slice(0, 2).every(Number.isFinite);
+}
 
 const TEST_GIS_CENTER = [-87.7824, 41.8856] as const;
 const TEST_STREET_RESPONSE = {
@@ -639,6 +647,12 @@ test("the planner starts from a persistent zone and offers area and street targe
 });
 
 test("real Lawrence parcels support a new zone and ready whole-zone walk without hosted writes", async ({ page }) => {
+  // Fresh CI sandboxes contain only fictional parcels. Keep this real-inventory
+  // check available for operator-loaded local GIS without pretending it ran in CI.
+  const hasRealInventory = execFileSync("psql", ["postgresql://postgres:postgres@127.0.0.1:54322/postgres", "-X", "-Atq", "-v", "ON_ERROR_STOP=1", "-c",
+    "select exists(select 1 from public.parcels where county_fips='47099' and gislink !~* 'demo|fictional|playwright-test') and exists(select 1 from public.outreach_street_releases where source='Overture transportation' and complete);"],
+  { encoding: "utf8" }).trim() === "t";
+  test.skip(!hasRealInventory, "Real Lawrence parcel and street inventory is not installed in this local sandbox.");
   const suffix = randomUUID().slice(0, 8);
   const zoneName = `Lawrence real-data zone ${suffix}`;
   const walkName = `Lawrence real-data walk ${suffix}`;
@@ -689,15 +703,16 @@ test("real Lawrence parcels support a new zone and ready whole-zone walk without
     && Boolean(feature.gislink) && !/demo|fictional|playwright-test/i.test(feature.gislink!)
     && (feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon")
     && Array.isArray(feature.geometry.coordinates)
-    && Array.isArray(feature.representative_point)
-    && (feature.representative_point as unknown[]).length >= 2)).toBe(true);
+    && hasGeoJsonPoint(feature.representative_point))).toBe(true);
   await expect(creator.getByText(`${viewportPayload.features?.length} residential parcels loaded. Draw your zone around the neighborhood.`, { exact: true })).toBeVisible();
 
   await creator.getByRole("textbox", { name: "Zone name", exact: true }).fill(zoneName);
   const creatorMap = creator.getByRole("region", { name: /Interactive map of/ });
   const creatorBounds = await creatorMap.boundingBox();
   expect(creatorBounds).not.toBeNull();
-  await dragAcrossMap(page, creatorMap, [.28, .28], [.72, .72]);
+  await expect(creator.locator(".map-state")).toHaveCount(0);
+  // Keep the gesture clear of the drawing controls overlaid at top left.
+  await dragAcrossMap(page, creatorMap, [.42, .45], [.70, .73]);
   await expect(creator.getByText("Rectangle ready", { exact: true })).toBeVisible();
 
   const createdStreetsPromise = page.waitForResponse((response) => response.url().includes("/rest/v1/rpc/public_map_streets_for_boundary_v1"));
@@ -724,7 +739,7 @@ test("real Lawrence parcels support a new zone and ready whole-zone walk without
     && Boolean(feature.gislink) && !/demo|fictional|playwright-test/i.test(feature.gislink!)
     && (feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon")
     && Array.isArray(feature.geometry.coordinates)
-    && Array.isArray(feature.representative_point))).toBe(true);
+    && hasGeoJsonPoint(feature.representative_point))).toBe(true);
 
   const parentZone = dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true });
   await expect(parentZone.locator("option:checked")).toHaveText(zoneName);

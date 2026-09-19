@@ -10,6 +10,8 @@ const suffix = randomUUID();
 const walkName = `Fictional connected map walk ${suffix}`;
 const zoneName = `Fictional connected Giles zone ${suffix}`;
 const parcelIds = [1, 2, 3].map((number) => `nw-connected-${suffix}-${number}`);
+const streetRelease = `nw-connected-${suffix}`;
+const streetIds = [1, 2, 3, 4].map((number) => `${streetRelease}-street-${number}`);
 const gilesBoundary = [
   [-86.87, 35.25],
   [-86.83, 35.25],
@@ -25,7 +27,7 @@ type PlanningResponse = {
   datasetRevision: string;
   features: Array<{ county_fips: string; gislink: string }>;
 };
-type StreetResponse = { complete: boolean; truncated: boolean; features: unknown[] };
+type StreetResponse = { release: string; complete: boolean; truncated: boolean; features: unknown[] };
 type SavedState = {
   eventCount: number;
   eventId: string;
@@ -46,6 +48,8 @@ type SavedState = {
   assignmentStatus: string;
   assigneeId: string | null;
   teamId: string | null;
+  participantCount: number;
+  participantStatus: string;
 };
 
 function safeLiteral(value: string) {
@@ -65,7 +69,7 @@ function inventoryState(): InventoryState {
   ) from public.parcels;`)) as InventoryState;
 }
 
-function installFictionalParcels() {
+function installFictionalInventory() {
   const values = [
     [parcelIds[0], -86.861, 35.260, -86.859, 35.262],
     [parcelIds[1], -86.851, 35.270, -86.849, 35.272],
@@ -77,6 +81,19 @@ function installFictionalParcels() {
       extensions.st_multi(extensions.st_makeenvelope(fixture.min_x,fixture.min_y,fixture.max_x,fixture.max_y,4326)),revision.imported_at
     from (values ${values.map(([id, ...coordinates]) => `(${safeLiteral(String(id))},${coordinates.join(",")})`).join(",")})
       fixture(gislink,min_x,min_y,max_x,max_y) cross join revision;`);
+  // A complete four-county manifest is required before the street RPC serves
+  // even one segment. These generated lines are only local browser fixtures.
+  sql(`with revision as (select greatest(coalesce(max(imported_at),now()),now()) + interval '1 second' imported_at
+      from public.outreach_street_releases)
+    insert into public.outreach_street_releases(release,source,imported_at,complete,county_fips,expected_rows,imported_rows)
+    select ${safeLiteral(streetRelease)},'Overture transportation',revision.imported_at,true,
+      array['47055','47099','47101','47181']::text[],4,4 from revision;
+    insert into public.outreach_street_segments(release,id,name,road_class,geometry)
+    values
+      (${safeLiteral(streetRelease)},${safeLiteral(streetIds[0])},'Fictional Giles road','residential',extensions.st_multi(extensions.st_geomfromtext('LINESTRING(-86.865 35.265,-86.835 35.285)',4326))),
+      (${safeLiteral(streetRelease)},${safeLiteral(streetIds[1])},'Fictional outside road 1','residential',extensions.st_multi(extensions.st_geomfromtext('LINESTRING(-87.4 35.1,-87.39 35.11)',4326))),
+      (${safeLiteral(streetRelease)},${safeLiteral(streetIds[2])},'Fictional outside road 2','residential',extensions.st_multi(extensions.st_geomfromtext('LINESTRING(-87.5 35.1,-87.49 35.11)',4326))),
+      (${safeLiteral(streetRelease)},${safeLiteral(streetIds[3])},'Fictional outside road 3','residential',extensions.st_multi(extensions.st_geomfromtext('LINESTRING(-87.6 35.1,-87.59 35.11)',4326)));`);
 }
 
 function cleanupFictionalRecords() {
@@ -91,12 +108,18 @@ function cleanupFictionalRecords() {
     create temp table fixture_assignments on commit drop as
       select assignment.church_id,assignment.id from public.outreach_assignments assignment
       join fixture_events event on event.church_id=assignment.church_id and event.id=assignment.outing_id;
+    create temp table fixture_participants on commit drop as
+      select participant.church_id,participant.id from public.outreach_outing_participants participant
+      join fixture_events event on event.church_id=participant.church_id and event.id=participant.outing_id;
     create temp table fixture_commands on commit drop as
       select distinct audit.church_id,audit.actor_id,audit.command_id from public.outreach_audit audit
       where exists(select 1 from fixture_events item where item.church_id=audit.church_id and item.id=audit.entity_id)
         or exists(select 1 from fixture_zones item where item.church_id=audit.church_id and item.id=audit.entity_id)
         or exists(select 1 from fixture_targets item where item.church_id=audit.church_id and item.id=audit.entity_id)
-        or exists(select 1 from fixture_assignments item where item.church_id=audit.church_id and item.id=audit.entity_id);
+        or exists(select 1 from fixture_assignments item where item.church_id=audit.church_id and item.id=audit.entity_id)
+        or exists(select 1 from fixture_participants item where item.church_id=audit.church_id and item.id=audit.entity_id);
+    delete from public.outreach_outing_participants participant using fixture_participants fixture
+      where participant.church_id=fixture.church_id and participant.id=fixture.id;
     delete from public.outreach_assignments assignment using fixture_assignments fixture
       where assignment.church_id=fixture.church_id and assignment.id=fixture.id;
     delete from public.outreach_walk_target_parcels parcel using fixture_targets fixture
@@ -112,6 +135,8 @@ function cleanupFictionalRecords() {
     delete from private.outreach_receipts receipt using fixture_commands fixture
       where receipt.church_id=fixture.church_id and receipt.actor_id=fixture.actor_id and receipt.command_id=fixture.command_id;
     delete from public.parcels where county_fips='47055' and gislink in (${parcelIds.map(safeLiteral).join(",")});
+    delete from public.outreach_street_segments where release=${safeLiteral(streetRelease)};
+    delete from public.outreach_street_releases where release=${safeLiteral(streetRelease)};
     commit;`);
 }
 
@@ -185,6 +210,8 @@ function savedState(): SavedState {
       select item.* from public.outreach_walk_targets item join event on event.church_id=item.church_id and event.id=item.outing_id
     ), assignment as (
       select item.* from public.outreach_assignments item join event on event.church_id=item.church_id and event.id=item.outing_id
+    ), participant as (
+      select item.* from public.outreach_outing_participants item join event on event.church_id=item.church_id and event.id=item.outing_id
     ) select jsonb_build_object(
       'eventCount',(select count(*) from event),'eventId',coalesce((select min(id) from event),''),'eventStatus',coalesce((select min(status) from event),''),
       'territoryCount',(select count(*) from zone),'territoryId',coalesce((select min(id) from zone),''),
@@ -196,14 +223,15 @@ function savedState(): SavedState {
       'targetMatchesParent',coalesce((select extensions.st_equals(target.geometry,private.outreach_boundary_polygon(zone.boundary)) from target join zone using(church_id) limit 1),false),
       'targetParcelIds',coalesce((select jsonb_agg(parcel.gislink order by parcel.gislink) from public.outreach_walk_target_parcels parcel join target on target.church_id=parcel.church_id and target.id=parcel.target_id),'[]'::jsonb),
       'assignmentCount',(select count(*) from assignment),'assignmentId',coalesce((select min(id) from assignment),''),
-      'assignmentStatus',coalesce((select min(status) from assignment),''),'assigneeId',(select min(assignee_id::text) from assignment),'teamId',(select min(team_id) from assignment)
+      'assignmentStatus',coalesce((select min(status) from assignment),''),'assigneeId',(select min(assignee_id::text) from assignment),'teamId',(select min(team_id) from assignment),
+      'participantCount',(select count(*) from participant),'participantStatus',coalesce((select min(status) from participant),'')
     );`)) as SavedState;
 }
 
-test("a connected leader draws a Giles parent and saves one whole-zone target ready", async ({ context, page }) => {
+test("a connected leader draws a Giles parent, readies one whole-zone target, and invites a volunteer", async ({ context, page }) => {
   const baseline = inventoryState();
   expect(baseline.fixtureCount).toBe(0);
-  installFictionalParcels();
+  installFictionalInventory();
   expect(inventoryState()).toEqual({ count: baseline.count + parcelIds.length, revision: baseline.revision, fixtureCount: parcelIds.length });
 
   try {
@@ -245,7 +273,8 @@ test("a connected leader draws a Giles parent and saves one whole-zone target re
     const streets = await streetRpc.json() as StreetResponse;
     expect(planning).toMatchObject({ complete: true, truncated: false, datasetRevision: baseline.revision });
     expect(planning.features.map((feature) => feature.gislink).sort()).toEqual([...parcelIds].sort());
-    expect(streets.complete).toBe(true); expect(streets.truncated).toBe(false); expect(streets.features.length).toBeGreaterThan(0);
+    expect(streets.release).toBe(streetRelease);
+    expect(streets.complete).toBe(true); expect(streets.truncated).toBe(false); expect(streets.features).toHaveLength(1);
 
     const planner = dialog.getByRole("region", { name: `Plan targets inside ${zoneName}`, exact: true });
     const wholeZone = planner.getByRole("button", { name: "Whole zone", exact: true });
@@ -254,10 +283,8 @@ test("a connected leader draws a Giles parent and saves one whole-zone target re
     await expect(planner.locator(".walk-target-list li")).toHaveCount(1);
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
 
-    const owner = dialog.getByRole("combobox", { name: `Owner for ${zoneName}`, exact: true });
-    const individual = await owner.locator('option[value^="volunteer:"]').first().getAttribute("value");
-    expect(individual).toBeTruthy();
-    await owner.selectOption(individual!);
+    await expect(dialog.getByRole("heading", { name: "Invite people to the outing", exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "Invite Test Volunteer", exact: true }).click();
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
     await dialog.getByRole("textbox", { name: "Purpose", exact: true }).fill("Fictional connected map-first verification.");
     await dialog.getByRole("textbox", { name: "Meeting point", exact: true }).fill("Fictional Giles meeting point");
@@ -270,11 +297,10 @@ test("a connected leader draws a Giles parent and saves one whole-zone target re
     expect(saved).toMatchObject({
       eventCount: 1, eventStatus: "ready", territoryCount: 1, boundaryCount: 4, boundaryOpen: true,
       targetCount: 1, targetStatus: "frozen", targetFrozen: true, selectionKind: "whole_zone", targetMatchesParent: true,
-      assignmentCount: 1, assignmentStatus: "assigned", teamId: null,
+      assignmentCount: 0, participantCount: 1, participantStatus: "invited",
     });
     expect(saved.eventId).toMatch(/^outing_/); expect(saved.territoryId).toMatch(/^territory_/);
-    expect(saved.targetId).toMatch(/^target_/); expect(saved.assignmentId).toMatch(/^assignment_/);
-    expect(saved.assigneeId).toBeTruthy();
+    expect(saved.targetId).toMatch(/^target_/);
     expect(saved.targetParcelIds).toEqual([...parcelIds].sort());
   } finally {
     await page.close().catch(() => undefined);

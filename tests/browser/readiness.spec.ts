@@ -129,6 +129,7 @@ test("a reviewed person move follows open tasks and records its reason in histor
   await dialog.getByRole("checkbox", { name: "I have reviewed this location change and its open next steps.", exact: true }).check();
   await save.click(); await expect(dialog).toBeHidden();
   await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
+  await page.getByRole("tab", { name: /^Activity/ }).click();
   await expect(page.getByText("Location changed after review", { exact: true })).toBeVisible();
   await expect(page.getByText(reason, { exact: true })).toBeVisible();
   // Only the specifically generated fictional person's aggregate is read.
@@ -163,7 +164,7 @@ test("a reviewed encounter correction survives a lost response and preserves the
     "select jsonb_build_object('id',e.id,'personId',p.id) from public.outreach_encounters e join public.discipleship_people p on p.id=e.person_id and p.church_id=e.church_id where p.name='" + label + "';"], { encoding: "utf8" }).trim());
   if (!/^[a-zA-Z0-9_-]+$/.test(fixture.id) || !/^[a-zA-Z0-9_-]+$/.test(fixture.personId)) throw new Error("Invalid fixture identifiers");
   await page.goto(origin + "/app/people/" + fixture.personId);
-  await expect(page.getByText(/^Last recorded contact:/)).toBeVisible();
+  await expect(page.locator(".person-context-details").getByText(/^Last contact /)).toBeVisible();
   await page.goto(origin + "/app/data");
   await page.getByRole("button", { name: /^Correct records/ }).click();
   await page.getByRole("button", { name: /^Correct an encounter/ }).click();
@@ -197,7 +198,8 @@ test("a reviewed encounter correction survives a lost response and preserves the
     "select jsonb_build_object('outcome',e.outcome,'corrections',jsonb_array_length(e.corrections),'voided',e.corrections#>>'{0,voided}','tasks',(select count(*) from public.outreach_tasks t where t.encounter_id=e.id and t.status='scheduled')) from public.outreach_encounters e where e.id='" + fixture.id + "';"], { encoding: "utf8" }).trim());
   expect(aggregate).toEqual({ outcome: "follow_up", corrections: 1, voided: "true", tasks: 1 });
   await page.goto(origin + "/app/people/" + fixture.personId);
-  await expect(page.getByText(/^No person-linked contact recorded yet/)).toBeVisible();
+  await expect(page.locator(".person-context-details").getByText("No recorded contact yet", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: /^Activity/ }).click();
   await expect(page.getByText("Encounter reviewed · entered in error", { exact: true })).toBeVisible();
   await expect(page.getByText(reason + " Tasks and restrictions unchanged.", { exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "Note kind", exact: true }).selectOption("prayer");
@@ -230,6 +232,7 @@ test("reviewed duplicate people and locations retain history and resolve origina
     await expect(page).toHaveURL(/\/app\/people\/[^/]+$/);
     ids.push(decodeURIComponent(new URL(page.url()).pathname.split("/").at(-1)!));
     if (ids.length === 1) {
+      await page.getByRole("tab", { name: /^Activity/ }).click();
       await page.getByRole("textbox", { name: "Care note", exact: true }).fill("Fictional original duplicate history " + fixture);
       await page.getByRole("button", { name: "Save note", exact: true }).click();
       await expect(page.locator(".person-profile").getByText("Fictional original duplicate history " + fixture, { exact: true })).toBeVisible();
@@ -262,8 +265,10 @@ test("reviewed duplicate people and locations retain history and resolve origina
   }
   await page.goto(origin + "/app/people/" + ids[0]);
   await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: /^Activity/ }).click();
   await expect(page.locator(".person-profile").getByText("Fictional original duplicate history " + fixture, { exact: true })).toBeVisible();
   await expect(page.getByText("Duplicate profiles combined after review", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Details", exact: true }).click();
   await page.getByText("Preserved original profiles (1)", { exact: true }).click();
   await expect(page.getByText("555-0101", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Edit profile", exact: true }).click();
@@ -421,8 +426,8 @@ test("cold offline guide, 100 durable encounters, close/reopen and exactly-once 
   await signIn(page);
   await page.getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("button", { name: "Conversation guides", exact: true }).click();
-  await page.locator(".guide-library-choice").filter({ hasText: "Listen, share, invite" }).click();
-  await expect(page.getByRole("heading", { name: "Make room to decline", exact: true })).toBeVisible();
+  await page.locator(".guide-library-choice").filter({ hasText: "Test conversation guide" }).click();
+  await expect(page.getByRole("tabpanel")).toBeVisible();
   const preparedGuideText = await page.getByRole("tabpanel").innerText();
   const preparedGuidePath = new URL(page.url()).pathname;
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });

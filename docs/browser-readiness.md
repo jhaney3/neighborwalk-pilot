@@ -16,6 +16,8 @@ The browser suite starts and stops its own optimized server on port 3013. It use
 
 Fictional browser encounters remain in the local fixture church with a generated rehearsal prefix. Assertions query counts and the IDs/statuses of specifically generated test tasks only. Repeating the suite creates a new prefix; it does not erase earlier records or reset existing accounts.
 
+The real Lawrence GIS browser case reads local reference parcels and a complete local street release; it never targets a hosted church. A fresh CI sandbox has no such real inventory, so that case reports an explicit skip there rather than claiming it exercised real parcels. The connected Giles case uses generated local parcel and street fixtures and remains part of CI. On September 19, 2026, all 32 browser cases passed on the operator machine with real Lawrence inventory installed. Hosted CI and production map verification remain separate checks.
+
 ## Executed scenarios
 
 | Scenario | Observed result on September 10 |
