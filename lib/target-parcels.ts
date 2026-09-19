@@ -179,6 +179,26 @@ export function targetParcelKey(parcel: Pick<ParcelFeature["properties"], "count
   return `${parcel.countyFips}:${parcel.gislink}`;
 }
 
+export function planningParcelDisplayCollection(
+  parcels: ParcelFeatureCollection,
+  selectedParcelIds: ReadonlySet<string>,
+  claimedParcelIds: ReadonlySet<string>,
+  visitedParcelIds: ReadonlySet<string>,
+  readOnly = false,
+): ParcelFeatureCollection {
+  return {
+    ...parcels,
+    features: parcels.features.map((feature) => {
+      const id = targetParcelKey(feature.properties);
+      return { ...feature, properties: { ...feature.properties,
+        chosen: readOnly || selectedParcelIds.has(id),
+        claimed: claimedParcelIds.has(id),
+        previouslyVisited: visitedParcelIds.has(id),
+      } };
+    }),
+  };
+}
+
 export function applyParcelSelectionOverrides(automaticIds: ReadonlySet<string>, overrides: ReadonlyMap<string, boolean>) {
   const selected = new Set(automaticIds);
   for (const [id, included] of overrides) {
