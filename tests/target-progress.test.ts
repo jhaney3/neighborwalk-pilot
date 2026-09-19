@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSeedData } from "../lib/seed";
-import { parentZoneCoverage, targetCoverage } from "../lib/target-coverage";
+import { parentZoneCoverage, parentZoneTouchedParcelKeys, targetCoverage } from "../lib/target-coverage";
 import type { WalkTarget } from "../lib/walk-targets";
 
 const parcel = { countyFips: "47055", gislink: "one" };
@@ -18,6 +18,8 @@ describe("privacy-safe operational coverage", () => {
     data.parentProgress = [{ ...parcel, territoryId: "zone", eventId: "yesterday" }, { ...parcel, territoryId: "zone", eventId: "today" }, { ...parcel, gislink: "two", territoryId: "zone", eventId: "yesterday" }, { ...parcel, gislink: "two", territoryId: "other-zone", eventId: "today" }];
     expect(parentZoneCoverage(data, "zone", inventory)).toMatchObject({ touched: 2, percent: 100 });
     expect(parentZoneCoverage(data, "zone", inventory, "today")).toMatchObject({ touched: 1, percent: 50 });
+    expect([...parentZoneTouchedParcelKeys(data, "zone")].sort()).toEqual(["47055:one", "47055:two"]);
+    expect([...parentZoneTouchedParcelKeys(data, "zone", "today")]).toEqual(["47055:one"]);
   });
 
   it("does not claim parent-wide accuracy for an assigned-target-only read", () => {

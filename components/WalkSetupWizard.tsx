@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from "react";
 import { calendarDaysFromNow, localDateTimeValue } from "../lib/calendar";
 import type { ConversationGuide, NeighborWalkData, OutreachEvent, Territory } from "../lib/domain";
 import { snapshotParcelFeatureCollection } from "../lib/target-parcels";
+import { parentZoneTouchedParcelKeys } from "../lib/target-coverage";
 import { parseWalkDateTimes, readyPreparationMissing, saveWalkSetup, targetPlanIssues, type PlannedWalkTarget, type WalkSaveIntent, type WalkSetupCheckpoint } from "../lib/walk-setup";
 import type { SaveTarget, WalkTargetInput } from "../lib/walk-targets";
 import { useAsyncAction } from "../lib/use-async-action";
@@ -54,6 +55,7 @@ function TargetPlanPreview({ data, territory, targets, label }: {
     parcelComplete: false,
   }), [targets]);
   const loadReviewData = useMemo(() => async () => reviewData, [reviewData]);
+  const visitedParcelKeys = useMemo(() => parentZoneTouchedParcelKeys(data, territory.id), [data, territory.id]);
   return <section className="walk-plan-preview" aria-label={label}>
     <WalkTargetPlanner
       parentTerritory={territory}
@@ -64,6 +66,7 @@ function TargetPlanPreview({ data, territory, targets, label }: {
       onSelectedTargetChange={ignoreTargetSelection}
       onChange={ignoreTargetChange}
       loadPlanningData={loadReviewData}
+      visitedParcelKeys={visitedParcelKeys}
       readOnly
     />
     <ul className="walk-plan-preview-legend">
@@ -115,10 +118,12 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
   );
   const territory = data.territories.find((item) => item.id === territoryId && item.kind !== "list")
     ?? (createdZone?.id === territoryId ? createdZone : undefined);
+  const activeTerritoryId = territory?.id;
   const mappedTerritories = createdZone && !data.territories.some((item) => item.id === createdZone.id)
     ? [...data.territories.filter((item) => item.kind !== "list"), createdZone]
     : data.territories.filter((item) => item.kind !== "list");
   const planned = targets.map((draft) => plannedTarget(draft, {}));
+  const visitedParcelKeys = useMemo(() => activeTerritoryId ? parentZoneTouchedParcelKeys(data, activeTerritoryId) : new Set<string>(), [activeTerritoryId, data]);
   const issues = targetPlanIssues(planned);
   const parsedTimes = useMemo(() => parseWalkDateTimes(start, end, selectedTimezone), [start, end, selectedTimezone]);
   const outingInput = parsedTimes.error ? undefined : {
@@ -185,7 +190,7 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
             </>}
             <label><input type="radio" checked={community} onChange={() => setCommunity(true)} /><span><strong>Community setting</strong><small>No mapped assignment is needed.</small></span></label>
           </fieldset>
-          {territory && !community && <WalkTargetPlanner parentTerritory={territory} eventId={outing?.id ?? "draft-event"} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} />}
+          {territory && !community && <WalkTargetPlanner parentTerritory={territory} eventId={outing?.id ?? "draft-event"} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} visitedParcelKeys={visitedParcelKeys} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} />}
         </>}
       </section>}
 

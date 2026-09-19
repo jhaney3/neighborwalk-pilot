@@ -5,7 +5,7 @@ import { calendarDaysFromNow, churchDateTimeToIso, localDateTimeValue } from "..
 import type { ConversationGuide, NeighborWalkData, OutreachEvent, ResidentInput, Territory } from "../lib/domain";
 import type { EncounterInput } from "../lib/encounters";
 import { fetchPlanningParcelsForBoundary, type PlanningParcelResult } from "../lib/target-parcels";
-import { parentZoneCoverage, targetCoverage } from "../lib/target-coverage";
+import { parentZoneCoverage, parentZoneTouchedParcelKeys, targetCoverage } from "../lib/target-coverage";
 import type { SaveTarget, WalkTarget } from "../lib/walk-targets";
 import { useAsyncAction } from "../lib/use-async-action";
 import { reviewedEncounter } from "../lib/encounter-history";
@@ -327,6 +327,7 @@ function TargetReplacementModal({ data, outing, assignment, target, territory, o
   const canReplace = Boolean(replacement?.parcels.length && (assignment.assignedTeamId || assignment.assignedVolunteerId));
   const currentCrewIds = assignment.assignedVolunteerId ? [assignment.assignedVolunteerId] : data.teams.find((team) => team.id === assignment.assignedTeamId)?.memberIds ?? [];
   const currentCrew = currentCrewIds.map((id) => data.volunteers.find((volunteer) => volunteer.id === id)?.name ?? "Unavailable member").join(", ");
+  const visitedParcelKeys = useMemo(() => parentZoneTouchedParcelKeys(data, territory.id), [data, territory.id]);
   const save = () => {
     if (!replacement || !canReplace) return;
     if (!window.confirm(`Replace ${target.name}? Its assignment will be cancelled, but the old target and encounter history will remain available.`)) return;
@@ -341,7 +342,7 @@ function TargetReplacementModal({ data, outing, assignment, target, territory, o
   return <Modal title="Replace frozen target" description="Draw one replacement inside the same parent zone. The old target remains immutable history." onClose={action.busy ? () => undefined : onClose} wide>
     <div className="form-stack walk-replacement" aria-busy={action.busy}>
       <div className="walk-replacement-context"><span>Replacing</span><strong>{target.name}</strong><small>{target.parcels.length} residential properties · {assignment.status}</small></div>
-      <WalkTargetPlanner parentTerritory={territory} eventId={outing.id} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} />
+      <WalkTargetPlanner parentTerritory={territory} eventId={outing.id} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} visitedParcelKeys={visitedParcelKeys} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} />
       <div className="walk-replacement-context"><span>Crew carries over</span><strong>{currentCrew || "Current assigned crew"}</strong><small>You can update the people after replacing the map target.</small></div>
       {targets.length > 1 && <p className="walk-ready-note">Choose exactly one replacement target. Remove the extras before saving.</p>}
       {replacement && !replacement.parcels.length && <p className="walk-ready-note">Review at least one residential property in the replacement target.</p>}

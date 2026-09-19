@@ -34,15 +34,15 @@ export function targetCoverage(data: Pick<NeighborWalkData, "visits"> & Partial<
   return coverage(roster, touched);
 }
 
-/** Pass a complete, parent-clipped inventory, never just the current viewport. */
-export function parentZoneCoverage(
-  data: Pick<NeighborWalkData, "visits" | "properties"> & Partial<Pick<NeighborWalkData, "parentProgress" | "coverageVisibility">>,
+export function parentZoneTouchedParcelKeys(
+  data: Pick<NeighborWalkData, "visits" | "properties"> & Partial<Pick<NeighborWalkData, "parentProgress">>,
   territoryId: string,
-  inventory: { parcels: Array<{ countyFips: string; gislink: string }>; complete: boolean } | undefined,
   eventId?: string,
-): ResidentialCoverage {
+) {
   const properties = new Map(data.properties.map((property) => [property.id, property]));
-  const touched = new Set<string>((data.parentProgress ?? []).filter((touch) => touch.territoryId === territoryId && (!eventId || touch.eventId === eventId)).map(parcelKey));
+  const touched = new Set<string>((data.parentProgress ?? [])
+    .filter((touch) => touch.territoryId === territoryId && (!eventId || touch.eventId === eventId))
+    .map(parcelKey));
   for (const original of data.visits) {
     const visit = reviewedEncounter(original);
     if (visit.voided || (eventId && visit.eventId !== eventId)) continue;
@@ -50,5 +50,16 @@ export function parentZoneCoverage(
     if (visit.targetParcel && visit.territoryId === territoryId) touched.add(parcelKey(visit.targetParcel));
     else if ((visit.territoryId ?? property?.territoryId) === territoryId && property?.parcel) touched.add(parcelKey(property.parcel));
   }
+  return touched;
+}
+
+/** Pass a complete, parent-clipped inventory, never just the current viewport. */
+export function parentZoneCoverage(
+  data: Pick<NeighborWalkData, "visits" | "properties"> & Partial<Pick<NeighborWalkData, "parentProgress" | "coverageVisibility">>,
+  territoryId: string,
+  inventory: { parcels: Array<{ countyFips: string; gislink: string }>; complete: boolean } | undefined,
+  eventId?: string,
+): ResidentialCoverage {
+  const touched = parentZoneTouchedParcelKeys(data, territoryId, eventId);
   return coverage(new Set(inventory?.parcels.map(parcelKey) ?? []), touched, Boolean(inventory?.complete && data.coverageVisibility !== "assigned_targets_only"));
 }

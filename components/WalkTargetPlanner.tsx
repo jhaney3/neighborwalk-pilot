@@ -11,7 +11,7 @@ import type { ParcelFeatureCollection } from "../lib/parcels";
 import { clipLineToBoundary, closeRing, connectedStreetIds, mapLineOffsetForSide, polygonInsideBoundary, polygonSelfIntersects, polygonsOverlap, streetSidePolygons, streetsWithinMeters } from "../lib/planning-geometry";
 import { EMPTY_PLANNING_PARCELS, EMPTY_STREETS, loadPlanningLayers, loadingPlanningParcelLayer, loadingPlanningStreetLayer, planningAvailabilityMessage, planningLayerMatchesIdentity, type PlanningParcelLayer, type PlanningStreetLayer } from "../lib/planning-loader";
 import { OVERTURE_TRANSPORTATION_SOURCE, streetSegmentDisplayLines, streetSegmentLines, type StreetSegmentCollection } from "../lib/street-segments";
-import { applyParcelSelectionOverrides, parcelInsideZone, planningDatasetIdentity, planningParcelRoster, polygonParcelKeys, snapshotParcelFeatureCollection, STREET_PARCEL_CORRIDOR_METERS, streetParcelKeys, toggleParcelSelectionOverride } from "../lib/target-parcels";
+import { applyParcelSelectionOverrides, parcelInsideZone, planningDatasetIdentity, planningParcelDisplayCollection, planningParcelRoster, polygonParcelKeys, snapshotParcelFeatureCollection, STREET_PARCEL_CORRIDOR_METERS, streetParcelKeys, toggleParcelSelectionOverride } from "../lib/target-parcels";
 import type { WalkTargetGeometry, WalkTargetInput } from "../lib/walk-targets";
 import { MapDrawingModeControl } from "./MapDrawingModeControl";
 
@@ -26,6 +26,7 @@ export type WalkTargetPlannerProps = {
   onSelectedTargetChange: (id?: string) => void;
   onChange: (targets: WalkTargetDraft[]) => void;
   loadPlanningData?: (territory: Territory) => Promise<PlanningMapData>;
+  visitedParcelKeys?: ReadonlySet<string>;
   demo: boolean;
   readOnly?: boolean;
 };
@@ -34,6 +35,7 @@ type Mode = "select" | "polygon" | "rectangle" | "streets";
 type DraftKind = MapDrawingMode | "streets";
 const TARGET_COLORS = ["#286c59", "#a9660d", "#376f9e", "#95598a", "#8a593e"];
 const PLANNING_LOAD_TIMEOUT_MS = 20_000;
+const EMPTY_PARCEL_KEYS = new Set<string>();
 
 function polygon(points: Coordinates[]): Extract<WalkTargetGeometry, { type: "Polygon" }> { return { type: "Polygon", coordinates: [closeRing(points)] }; }
 function collection(features: Feature<Geometry>[]): FeatureCollection { return { type: "FeatureCollection", features }; }
@@ -72,11 +74,11 @@ function planningLayerSummary(label: "Streets" | "Parcels", layer: PlanningStree
   return layerSummary(label, layer.status, count, noun);
 }
 
-export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedTargetId, mapStyleUrl, onSelectedTargetChange, onChange, loadPlanningData, demo, readOnly = false }: WalkTargetPlannerProps) {
+export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedTargetId, mapStyleUrl, onSelectedTargetChange, onChange, loadPlanningData, visitedParcelKeys = EMPTY_PARCEL_KEYS, demo, readOnly = false }: WalkTargetPlannerProps) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const stateRef = useRef({ mode: "select" as Mode, points: [] as Coordinates[], streets: EMPTY_STREETS, parcels: EMPTY_PLANNING_PARCELS,
-    connected: false, streetIds: new Set<string>(), automaticParcelIds: new Set<string>(), parcelIds: new Set<string>(), claimedParcelIds: new Set<string>(), targets, selectedTargetId, parentTerritory, readOnly });
+    connected: false, streetIds: new Set<string>(), automaticParcelIds: new Set<string>(), parcelIds: new Set<string>(), claimedParcelIds: new Set<string>(), visitedParcelKeys, targets, selectedTargetId, parentTerritory, readOnly });
   const dragVertex = useRef<number | null>(null);
   const rectangleStart = useRef<Coordinates | null>(null);
   const rectanglePointerStart = useRef<[number, number] | null>(null);
@@ -122,6 +124,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
   const automaticParcelIds = useMemo(() => new Set([...candidateAutomaticParcelIds].filter((id) => !claimedParcelIds.has(id))), [candidateAutomaticParcelIds, claimedParcelIds]);
   const parcelIds = useMemo(() => new Set([...applyParcelSelectionOverrides(automaticParcelIds, parcelOverrides)].filter((id) => !claimedParcelIds.has(id))), [automaticParcelIds, claimedParcelIds, parcelOverrides]);
   const excludedParcelCount = useMemo(() => [...candidateAutomaticParcelIds].filter((id) => claimedParcelIds.has(id)).length, [candidateAutomaticParcelIds, claimedParcelIds]);
+  const visitedParcelCount = useMemo(() => eligibleParcels.features.filter((feature) => visitedParcelKeys.has(`${feature.properties.countyFips}:${feature.properties.gislink}`)).length, [eligibleParcels.features, visitedParcelKeys]);
 
   useEffect(() => {
     if (!overlapNotice) return;
@@ -129,7 +132,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
     return () => window.clearTimeout(timeout);
   }, [overlapNotice]);
 
-  useEffect(() => { stateRef.current = { mode, points, streets, parcels: displayedParcels, connected, streetIds, automaticParcelIds, parcelIds, claimedParcelIds, targets, selectedTargetId, parentTerritory, readOnly }; }, [automaticParcelIds, claimedParcelIds, connected, displayedParcels, mode, parentTerritory, parcelIds, points, readOnly, selectedTargetId, streetIds, streets, targets]);
+  useEffect(() => { stateRef.current = { mode, points, streets, parcels: displayedParcels, connected, streetIds, automaticParcelIds, parcelIds, claimedParcelIds, visitedParcelKeys, targets, selectedTargetId, parentTerritory, readOnly }; }, [automaticParcelIds, claimedParcelIds, connected, displayedParcels, mode, parentTerritory, parcelIds, points, readOnly, selectedTargetId, streetIds, streets, targets, visitedParcelKeys]);
   const updateSource = useCallback((id: string, data: FeatureCollection) => {
     const source = mapRef.current?.getSource(id) as { setData: (data: FeatureCollection) => void } | undefined;
     source?.setData(data);
@@ -196,8 +199,8 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
         const add = (layer: Parameters<MapLibreMap["addLayer"]>[0]) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
         add({ id: "plan-parent-fill", type: "fill", source: "plan-parent", paint: { "fill-color": ["get", "color"], "fill-opacity": .06 } });
         add({ id: "plan-parent-line", type: "line", source: "plan-parent", paint: { "line-color": ["get", "color"], "line-width": 3 } });
-        add({ id: "plan-parcels-fill", type: "fill", source: "plan-parcels", paint: { "fill-color": ["case", ["==", ["get", "chosen"], true], "#e9a84a", ["==", ["get", "claimed"], true], "#6f7773", "#315c50"], "fill-opacity": ["case", ["==", ["get", "chosen"], true], .3, ["==", ["get", "claimed"], true], .12, .04] } });
-        add({ id: "plan-parcels-line", type: "line", source: "plan-parcels", paint: { "line-color": "#56776c", "line-width": 1 } });
+        add({ id: "plan-parcels-fill", type: "fill", source: "plan-parcels", paint: { "fill-color": ["case", ["==", ["get", "chosen"], true], "#e9a84a", ["==", ["get", "previouslyVisited"], true], "#286c59", ["==", ["get", "claimed"], true], "#6f7773", "#315c50"], "fill-opacity": ["case", ["==", ["get", "chosen"], true], .3, ["==", ["get", "previouslyVisited"], true], .28, ["==", ["get", "claimed"], true], .12, .04] } });
+        add({ id: "plan-parcels-line", type: "line", source: "plan-parcels", paint: { "line-color": ["case", ["==", ["get", "previouslyVisited"], true], "#174d3f", "#56776c"], "line-width": ["case", ["==", ["get", "previouslyVisited"], true], 2.25, 1] } });
         add({ id: "plan-streets-hit", type: "line", source: "plan-streets", paint: { "line-color": "#000", "line-opacity": .01, "line-width": 18 } });
         add({ id: "plan-streets-line", type: "line", source: "plan-streets", paint: { "line-color": ["case", ["==", ["get", "chosen"], true], "#e28f16", "#53796d"], "line-width": ["case", ["==", ["get", "chosen"], true], 7, 2], "line-opacity": ["case", ["==", ["get", "chosen"], true], .9, .55] } });
         add({ id: "plan-target-fill", type: "fill", source: "plan-targets", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": ["get", "color"], "fill-opacity": ["case", ["get", "selected"], .34, .18] } });
@@ -212,7 +215,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
         updateSource("plan-targets", targetFeatures(current.targets, current.selectedTargetId));
         updateSource("plan-draft", draftFeatures(current.points));
         updateSource("plan-streets", { ...displayStreets, features: displayStreets.features.map((feature) => ({ ...feature, properties: { ...feature.properties, chosen: current.streetIds.has(String(feature.properties?.id)) } })) });
-        updateSource("plan-parcels", { ...current.parcels, features: current.parcels.features.map((feature) => { const id = `${feature.properties.countyFips}:${feature.properties.gislink}`; return { ...feature, properties: { ...feature.properties, chosen: current.readOnly || current.parcelIds.has(id), claimed: current.claimedParcelIds.has(id) } }; }) });
+        updateSource("plan-parcels", planningParcelDisplayCollection(current.parcels, current.parcelIds, current.claimedParcelIds, current.visitedParcelKeys, current.readOnly));
         setStatus("ready");
       };
       map.on("style.load", configure);
@@ -308,7 +311,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
   useEffect(() => updateSource("plan-targets", targetFeatures(targets, selectedTargetId)), [selectedTargetId, targets, updateSource]);
   useEffect(() => updateSource("plan-draft", draftFeatures(points)), [points, updateSource]);
   useEffect(() => { const display = streetDisplayCollection(streets, parentTerritory.boundary); updateSource("plan-streets", { ...display, features: display.features.map((feature) => ({ ...feature, properties: { ...feature.properties, chosen: streetIds.has(String(feature.properties?.id)) } })) }); }, [parentTerritory.boundary, streetIds, streets, updateSource]);
-  useEffect(() => updateSource("plan-parcels", { ...displayedParcels, features: displayedParcels.features.map((feature) => { const id = `${feature.properties.countyFips}:${feature.properties.gislink}`; return { ...feature, properties: { ...feature.properties, chosen: readOnly || parcelIds.has(id), claimed: claimedParcelIds.has(id) } }; }) }), [claimedParcelIds, displayedParcels, parcelIds, readOnly, updateSource]);
+  useEffect(() => updateSource("plan-parcels", planningParcelDisplayCollection(displayedParcels, parcelIds, claimedParcelIds, visitedParcelKeys, readOnly)), [claimedParcelIds, displayedParcels, parcelIds, readOnly, updateSource, visitedParcelKeys]);
 
   const duplicateStreet = useMemo(() => targets.some((target) => target.streetSelection?.segmentIds.some((id) => streetIds.has(id))), [streetIds, targets]);
   const overlapsArea = useMemo(() => points.length >= 3 && targets.some((target) => target.geometry.type === "Polygon" && polygonsOverlap(points, target.geometry.coordinates[0])), [points, targets]);
@@ -350,6 +353,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
     {!readOnly && <div className="walk-target-options" aria-live="polite">
       <span>{planningLayerSummary("Streets", currentStreetLayer, streets.features.length, "section")}</span>
       <span>{planningLayerSummary("Parcels", currentParcelLayer, eligibleParcels.features.length, "residential parcel")}</span>
+      {visitedParcelCount > 0 && <span>Previously visited: {visitedParcelCount} green {visitedParcelCount === 1 ? "parcel" : "parcels"}</span>}
       {retryAvailable && <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry</button>}
     </div>}
     {mode === "polygon" && <p className="walk-target-instruction">{drawingInstruction("polygon", points)} Undo removes the last corner.</p>}
