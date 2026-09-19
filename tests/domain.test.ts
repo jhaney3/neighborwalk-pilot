@@ -136,7 +136,7 @@ describe("NeighborWalk domain", () => {
       id: `followup_next_step_${person.id}`,
       residentId: person.id,
       propertyId: person.propertyId,
-      dueAt,
+      dueAt: dueAt.slice(0, 10),
       status: "scheduled",
       note: "Invite them to coffee and check in about their prayer request.",
     });
@@ -348,7 +348,7 @@ describe("NeighborWalk domain", () => {
 
   it("sorts property history newest first", () => {
     const data = createSeedData();
-    const propertyId = data.visits[0].propertyId;
+    const propertyId = data.visits[0].propertyId!;
     const visits = visitsForProperty(data, propertyId);
     expect(visits.every((visit) => visit.propertyId === propertyId)).toBe(true);
     expect(visits.map((visit) => visit.recordedAt)).toEqual(

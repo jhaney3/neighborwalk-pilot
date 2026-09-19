@@ -5,7 +5,9 @@ import {
   legacyConversationGuide,
   makeBlankGuideStep,
   normalizeGuideSteps,
+  parseScriptureReferenceInput,
   preferredConversationGuide,
+  resolveFieldGuide,
   validGuideInput,
 } from "../lib/conversation-guides";
 import type { ConversationGuide, GuideStep, Team } from "../lib/domain";
@@ -68,6 +70,15 @@ describe("conversation guides", () => {
     expect(normalized[0].scriptureReferences).toEqual(["Romans 6:23"]);
   });
 
+  it("preserves spaces and an unfinished comma while scripture references are entered", () => {
+    expect(parseScriptureReferenceInput("Romans ")).toEqual(["Romans "]);
+    expect(parseScriptureReferenceInput("Romans 3:23, ")).toEqual(["Romans 3:23", ""]);
+    expect(parseScriptureReferenceInput("1 John 4:8,   Song of Solomon 2:4"))
+      .toEqual(["1 John 4:8", "Song of Solomon 2:4"]);
+    expect(parseScriptureReferenceInput("Romans 3:23, Romans 5:8, Ephesians 2:8–9"))
+      .toEqual(["Romans 3:23", "Romans 5:8", "Ephesians 2:8–9"]);
+  });
+
   it("uses the favorite guide and otherwise prefers a church guide", () => {
     const personal = guide("personal", "personal");
     const church = guide("church", "church");
@@ -82,6 +93,17 @@ describe("conversation guides", () => {
 
     expect(preferredConversationGuide([personal, church], personal.id, church.id)?.id).toBe(church.id);
     expect(preferredConversationGuide([personal, church], personal.id, personal.id)?.id).toBe(personal.id);
+  });
+
+  it("labels the actual field guide, preserving precedence without treating stale/private IDs as church assignments", () => {
+    const personal = guide("personal", "personal"); const church = guide("church", "church"); const outing = guide("outing", "church");
+    const library = [personal, church, outing];
+    expect(resolveFieldGuide(library, { outingGuideId: outing.id, teamDefaultGuideId: church.id, favoriteGuideId: personal.id })).toEqual({ guide: outing, source: "outing" });
+    expect(resolveFieldGuide(library, { outingGuideId: "unavailable", teamDefaultGuideId: church.id, favoriteGuideId: personal.id })).toEqual({ guide: church, source: "group" });
+    expect(resolveFieldGuide(library, { outingGuideId: personal.id, teamDefaultGuideId: personal.id, favoriteGuideId: personal.id })).toEqual({ guide: personal, source: "favorite" });
+    expect(resolveFieldGuide(library, { favoriteGuideId: "unavailable" })).toEqual({ guide: church, source: "church" });
+    expect(resolveFieldGuide([personal], {})).toEqual({ guide: personal, source: "personal" });
+    expect(resolveFieldGuide([], {})).toEqual({ guide: undefined, source: undefined });
   });
 
   it("prefers the volunteer's territory group, then their active group", () => {
@@ -102,7 +124,7 @@ describe("conversation guides", () => {
     expect(legacy.steps).toHaveLength(1);
   });
 
-  it("creates a blank editable step with stable hidden fields", () => {
+  it("creates a blank editable step with optional coaching and reminder fields", () => {
     expect(makeBlankGuideStep(2)).toMatchObject({
       order: 2,
       eyebrow: "Step 2",
@@ -110,6 +132,14 @@ describe("conversation guides", () => {
       reminder: "",
       scriptureReferences: [],
     });
+  });
+
+  it("preserves useful coaching/reminders and enforces their editable limits", () => {
+    const input = { scope: "church" as const, title: "Fictional guide", description: "", steps: [step({ coaching: "  Listen before speaking.  ", reminder: "  Respect their answer.  " })] };
+    expect(normalizeGuideSteps(input.steps)[0]).toMatchObject({ coaching: "Listen before speaking.", reminder: "Respect their answer." });
+    expect(validGuideInput(input)).toBe(true);
+    expect(validGuideInput({ ...input, steps: [step({ coaching: "a".repeat(801) })] })).toBe(false);
+    expect(validGuideInput({ ...input, steps: [step({ reminder: "a".repeat(801) })] })).toBe(false);
   });
 
   it("reads Supabase timestamps that include a UTC offset", () => {

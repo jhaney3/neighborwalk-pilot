@@ -17,6 +17,7 @@ const eslintConfig = defineConfig([
     "supabase/.temp/**",
     "public/maplibre-gl-worker.mjs",
     "public/maplibre-gl-shared.mjs",
+    "public/sw-build.js",
     "next-env.d.ts",
   ]),
   eslint.configs.recommended,

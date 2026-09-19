@@ -14,7 +14,8 @@ describe("location visit summaries", () => {
     const original = structuredClone({ properties: data.properties, visits });
     const expected = data.properties.map((property) => {
       const history = visits.filter((visit) => visit.propertyId === property.id).sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
-      return { ...property, currentOutcome: history[0]?.outcome ?? "unvisited", lastVisitedAt: history[0]?.recordedAt, visitCount: history.length };
+      const restricted = property.currentOutcome === "do_not_visit" || history.some((visit) => visit.outcome === "do_not_visit");
+      return { ...property, currentOutcome: restricted ? "do_not_visit" : history[0]?.outcome ?? "unvisited", lastVisitedAt: history[0]?.recordedAt, visitCount: history.length };
     });
 
     expect(summarizePropertyVisits(data.properties, visits)).toEqual(expected);

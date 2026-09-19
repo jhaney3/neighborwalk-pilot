@@ -11,6 +11,10 @@
 @import "./styles/auth.css";
 @import "./styles/responsive.css";
 @import "./styles/controls.css";
+@import "./styles/readiness.css";
+@import "./styles/website.css";
+@import "./styles/walk-setup.css";
+@import "./styles/walk-target-planner.css";
 
 .sandbox-banner {
   position: fixed;
@@ -25,7 +29,7 @@
   border-radius: 6px;
   background: #fff3cd;
   color: #5c3d00;
-  font-size: 11px;
+  font-size: var(--text-caption);
   line-height: 1.3;
   text-align: center;
   pointer-events: none;

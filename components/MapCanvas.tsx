@@ -3,18 +3,21 @@
 import { AlertTriangle, LoaderCircle, MapPin, MousePointerClick } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon } from "geojson";
-import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
+import type { Map as MapLibreMap, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
 import type { Coordinates, Outcome, Property, Territory } from "../lib/domain";
 import { outcomeMeta } from "../lib/domain";
 import { geometryContainsPoint, polygonAtPoint } from "../lib/geometry";
 import { groupBy } from "../lib/collections";
+import { drawingGestureIntent, drawingInstruction, moveDrawingCorner, rectangleBoundary, rectangleHasArea, type MapDrawingMode } from "../lib/map-drawing";
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
 import { parcelKey, parcelProgress, propertyParcelKey } from "../lib/parcel-groups";
+import type { WalkTarget } from "../lib/walk-targets";
 import {
   type MapViewport,
   type ParcelDetails,
   type ParcelFeatureCollection,
 } from "../lib/parcels";
+import { MapDrawingModeControl } from "./MapDrawingModeControl";
 
 const BUILDING_OUTLINE_LAYER_ID = "neighborwalk-building-outlines";
 const BUILDING_NUMBER_MIN_ZOOM = 16;
@@ -33,6 +36,8 @@ const LOCATION_DOT_LAYER_ID = "mapped-location-dot";
 const SEARCH_SOURCE_ID = "address-search-target";
 const SEARCH_HALO_LAYER_ID = "address-search-target-halo";
 const SEARCH_DOT_LAYER_ID = "address-search-target-dot";
+const FIELD_TARGET_SOURCE_ID = "field-walk-target";
+const DRAFT_VERTEX_HIT_LAYER_ID = "draft-territory-vertex-hit";
 const EMPTY_PARCELS: ParcelFeatureCollection = { type: "FeatureCollection", features: [] };
 type MapStyleLayer = ReturnType<MapLibreMap["getStyle"]>["layers"][number];
 type BuildingFootprintLayer = Extract<MapStyleLayer, { type: "fill" }> | Extract<MapStyleLayer, { type: "fill-extrusion" }>;
@@ -60,16 +65,20 @@ type Props = {
   searchTarget: MapSearchTarget | null;
   addMode: boolean;
   drawMode: boolean;
+  drawShape: MapDrawingMode;
   drawModeLabel?: string;
   draftBoundary: Coordinates[];
   compactMarkers: boolean;
   mapStyleUrl: string;
   parcels?: ParcelFeatureCollection;
+  target?: WalkTarget;
   onSelectProperty: (id: string) => void;
   onAddIntent: (intent: AddIntent) => void;
   onAssociatePropertiesWithParcel: (propertyIds: string[], parcel: ParcelDetails) => void;
+  onDrawShapeChange: (mode: MapDrawingMode) => void;
   onDraftBoundaryChange: (points: Coordinates[]) => void;
   onViewportChange: (viewport: MapViewport) => void;
+  onUseAddressList?: () => void;
 };
 
 function polygonFeature(points: Coordinates[]): Feature<Polygon> | null {
@@ -116,6 +125,7 @@ function mappedLocationFeatureCollection(
     if (key) parcelDwellingCounts.set(key, (parcelDwellingCounts.get(key) ?? 0) + 1);
   }
   for (const property of properties) {
+    if (!property.coordinates) continue;
     const visible = visibleOutcomes.has(property.currentOutcome);
     const selected = selectedPropertyId === property.id;
     const visited = property.currentOutcome !== "unvisited";
@@ -164,7 +174,7 @@ function mappedParcelFeatureCollection(parcels: ParcelFeatureCollection, propert
     features: parcels.features.map((feature) => {
       const key = parcelKey(feature.properties);
       const linked = grouped.get(key) ?? [];
-      const inferred = legacyProperties.filter((property) => geometryContainsPoint(feature.geometry, property.coordinates));
+      const inferred = legacyProperties.filter((property) => property.coordinates && geometryContainsPoint(feature.geometry, property.coordinates));
       const progress = parcelProgress([...linked, ...inferred]);
       return {
         ...feature,
@@ -187,7 +197,7 @@ function legacyParcelAssociations(parcels: ParcelFeatureCollection, properties: 
   const associations: Array<{ parcel: ParcelDetails; propertyIds: string[] }> = [];
   for (const feature of parcels.features) {
     const propertyIds = [...unlinked.values()]
-      .filter((property) => geometryContainsPoint(feature.geometry, property.coordinates))
+      .filter((property) => property.coordinates && geometryContainsPoint(feature.geometry, property.coordinates))
       .map((property) => property.id);
     if (!propertyIds.length) continue;
     associations.push({ parcel: feature.properties, propertyIds });
@@ -262,6 +272,7 @@ function configureNeighborWalkLayers(
   parcels: ParcelFeatureCollection,
   mappedLocations: FeatureCollection,
   searchTarget: MapSearchTarget | null,
+  target?: WalkTarget,
 ) {
   configureBuildingDetails(map);
   if (!map.getSource(PARCEL_SOURCE_ID)) {
@@ -324,6 +335,12 @@ function configureNeighborWalkLayers(
       data: { type: "FeatureCollection", features: [] },
     });
   }
+  if (!map.getSource(FIELD_TARGET_SOURCE_ID)) map.addSource(FIELD_TARGET_SOURCE_ID, { type: "geojson", data: featureCollection() });
+  if (!map.getLayer("field-walk-target-fill")) map.addLayer({ id: "field-walk-target-fill", type: "fill", source: FIELD_TARGET_SOURCE_ID,
+    filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": target?.color ?? "#e9a84a", "fill-opacity": .23 } });
+  if (!map.getLayer("field-walk-target-line")) map.addLayer({ id: "field-walk-target-line", type: "line", source: FIELD_TARGET_SOURCE_ID,
+    paint: { "line-color": target?.color ?? "#a9660d", "line-width": 5, "line-opacity": .95,
+      "line-offset": target?.streetSelection?.side === "left" ? -5 : target?.streetSelection?.side === "right" ? 5 : 0 } });
   if (!map.getLayer("active-territory-fill")) {
     map.addLayer({
       id: "active-territory-fill",
@@ -481,6 +498,15 @@ function configureNeighborWalkLayers(
       paint: { "line-color": "#b47417", "line-width": 3 },
     });
   }
+  if (!map.getLayer(DRAFT_VERTEX_HIT_LAYER_ID)) {
+    map.addLayer({
+      id: DRAFT_VERTEX_HIT_LAYER_ID,
+      type: "circle",
+      source: "draft-territory",
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: { "circle-radius": 18, "circle-color": "#b47417", "circle-opacity": 0.01 },
+    });
+  }
   if (!map.getLayer("draft-territory-vertices")) {
     map.addLayer({
       id: "draft-territory-vertices",
@@ -488,7 +514,7 @@ function configureNeighborWalkLayers(
       source: "draft-territory",
       filter: ["==", ["geometry-type"], "Point"],
       paint: {
-        "circle-radius": 6,
+        "circle-radius": 8,
         "circle-color": "#fff8e8",
         "circle-stroke-color": "#b47417",
         "circle-stroke-width": 3,
@@ -500,6 +526,11 @@ function configureNeighborWalkLayers(
   updateGeoJsonSource(map, PARCEL_SOURCE_ID, parcels);
   updateGeoJsonSource(map, LOCATION_SOURCE_ID, mappedLocations);
   updateGeoJsonSource(map, SEARCH_SOURCE_ID, searchTargetFeatureCollection(searchTarget));
+  updateGeoJsonSource(map, FIELD_TARGET_SOURCE_ID, target ? collectionForTarget(target) : featureCollection());
+}
+
+function collectionForTarget(target: WalkTarget): FeatureCollection {
+  return featureCollection({ type: "Feature", properties: { id: target.id }, geometry: target.geometry } as Feature<Geometry>);
 }
 
 export function MapCanvas({
@@ -510,32 +541,49 @@ export function MapCanvas({
   searchTarget,
   addMode,
   drawMode,
+  drawShape,
   drawModeLabel,
   draftBoundary,
   compactMarkers,
   mapStyleUrl,
   parcels,
+  target,
   onSelectProperty,
   onAddIntent,
   onAssociatePropertiesWithParcel,
+  onDrawShapeChange,
   onDraftBoundaryChange,
   onViewportChange,
+  onUseAddressList,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const callbacksRef = useRef({ onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange, onViewportChange });
-  const modesRef = useRef({ addMode, drawMode, draftBoundary });
+  const modesRef = useRef({ addMode, drawMode, drawShape, draftBoundary });
+  const dragVertexRef = useRef<number | null>(null);
+  const rectangleDragStartRef = useRef<Coordinates | null>(null);
+  const rectangleDragPointRef = useRef<[number, number] | null>(null);
+  const pointerMovedRef = useRef(false);
+  const suppressMapClickRef = useRef(false);
   const territoryRef = useRef(territory);
   const searchTargetRef = useRef(searchTarget);
+  const targetRef = useRef(target);
   const displayedTerritoryIdRef = useRef(territory.id);
+  const displayedTargetIdRef = useRef<string | null>(null);
   const displayedSearchTargetIdRef = useRef<string | null>(null);
   const currentMapStyleUrlRef = useRef(mapStyleUrl);
   const parcelDataRef = useRef<ParcelFeatureCollection>(EMPTY_PARCELS);
   const propertiesRef = useRef(properties);
   const mappedLocationsRef = useRef<FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
-  const territoryLongitude = territory.center[0];
-  const territoryLatitude = territory.center[1];
+  const territoryLongitude = territory.center?.[0] ?? 0;
+  const territoryLatitude = territory.center?.[1] ?? 0;
+  const changeDrawShape = (mode: MapDrawingMode) => {
+    if (mode === drawShape) return;
+    suppressMapClickRef.current = false;
+    onDraftBoundaryChange([]);
+    onDrawShapeChange(mode);
+  };
 
   useEffect(() => {
     callbacksRef.current = { onSelectProperty, onAddIntent, onAssociatePropertiesWithParcel, onDraftBoundaryChange, onViewportChange };
@@ -545,10 +593,17 @@ export function MapCanvas({
     searchTargetRef.current = searchTarget;
   }, [searchTarget]);
 
+  useEffect(() => { targetRef.current = target; }, [target]);
+
   useEffect(() => {
-    modesRef.current = { addMode, drawMode, draftBoundary };
+    modesRef.current = { addMode, drawMode, drawShape, draftBoundary };
     if (mapRef.current) mapRef.current.getCanvas().style.cursor = addMode || drawMode ? "crosshair" : "grab";
-  }, [addMode, drawMode, draftBoundary]);
+  }, [addMode, drawMode, drawShape, draftBoundary]);
+
+  useEffect(() => {
+    rectangleDragStartRef.current = null;
+    dragVertexRef.current = null;
+  }, [drawMode, drawShape]);
 
   useEffect(() => {
     const nextParcels = parcels ?? EMPTY_PARCELS;
@@ -615,6 +670,7 @@ export function MapCanvas({
           mappedParcelFeatureCollection(parcelDataRef.current, propertiesRef.current),
           mappedLocationsRef.current,
           searchTargetRef.current,
+          targetRef.current,
         );
       });
 
@@ -626,8 +682,65 @@ export function MapCanvas({
       });
       map.on("moveend", publishViewport);
 
-      map.on("mousemove", (event: MapMouseEvent) => {
-        if (!map || modesRef.current.addMode || modesRef.current.drawMode) return;
+      const draftVertexAt = (event: MapMouseEvent | MapTouchEvent) => {
+        if (!map?.getLayer(DRAFT_VERTEX_HIT_LAYER_ID)) return undefined;
+        return map.queryRenderedFeatures(event.point, { layers: [DRAFT_VERTEX_HIT_LAYER_ID] })[0];
+      };
+
+      const startDrawingGesture = (event: MapMouseEvent | MapTouchEvent) => {
+        if (!map || !modesRef.current.drawMode) return;
+        if ("points" in event && event.points.length !== 1) return;
+        pointerMovedRef.current = false;
+        const vertex = draftVertexAt(event);
+        const vertexIndex = vertex?.properties?.index === undefined ? undefined : Number(vertex.properties.index);
+        const intent = drawingGestureIntent(
+          modesRef.current.draftBoundary,
+          modesRef.current.drawShape,
+          vertexIndex,
+          [event.lngLat.lng, event.lngLat.lat],
+        );
+        if (intent.kind === "move-corner") {
+          if ("points" in event) event.preventDefault();
+          dragVertexRef.current = intent.index;
+          map.dragPan.disable();
+          map.getCanvas().style.cursor = "grabbing";
+          return;
+        }
+        if (intent.kind === "create-rectangle") {
+          if ("points" in event) event.preventDefault();
+          rectangleDragStartRef.current = intent.start;
+          rectangleDragPointRef.current = [event.point.x, event.point.y];
+          map.dragPan.disable();
+        }
+      };
+
+      const continueDrawingGesture = (event: MapMouseEvent | MapTouchEvent) => {
+        if (!map) return;
+        if (modesRef.current.drawMode) {
+          const coordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
+          if (rectangleDragStartRef.current) {
+            const startPoint = rectangleDragPointRef.current;
+            if (startPoint && Math.hypot(event.point.x - startPoint[0], event.point.y - startPoint[1]) < 5) return;
+            pointerMovedRef.current = true;
+            const rectangle = rectangleBoundary(rectangleDragStartRef.current, coordinates);
+            if (rectangleHasArea(rectangle)) callbacksRef.current.onDraftBoundaryChange(rectangle);
+            return;
+          }
+          if (dragVertexRef.current !== null) {
+            pointerMovedRef.current = true;
+            callbacksRef.current.onDraftBoundaryChange(moveDrawingCorner(
+              modesRef.current.draftBoundary,
+              modesRef.current.drawShape,
+              dragVertexRef.current,
+              coordinates,
+            ));
+            return;
+          }
+          map.getCanvas().style.cursor = draftVertexAt(event) ? "move" : "crosshair";
+          return;
+        }
+        if ("points" in event) return;
+        if (modesRef.current.addMode) return;
         const interactiveLayers = [
           LOCATION_POINT_HIT_LAYER_ID,
           LOCATION_AREA_HIT_LAYER_ID,
@@ -637,7 +750,28 @@ export function MapCanvas({
           ? map.queryRenderedFeatures(event.point, { layers: interactiveLayers })[0]
           : undefined;
         map.getCanvas().style.cursor = feature ? "pointer" : "grab";
-      });
+      };
+
+      const finishDrawingGesture = () => {
+        if (!map || !modesRef.current.drawMode) return;
+        if (pointerMovedRef.current && (rectangleDragStartRef.current || dragVertexRef.current !== null)) {
+          suppressMapClickRef.current = true;
+          window.setTimeout(() => { suppressMapClickRef.current = false; }, 350);
+        }
+        rectangleDragStartRef.current = null;
+        rectangleDragPointRef.current = null;
+        dragVertexRef.current = null;
+        map.dragPan.enable();
+        map.getCanvas().style.cursor = "crosshair";
+      };
+
+      map.on("mousedown", startDrawingGesture);
+      map.on("touchstart", startDrawingGesture);
+      map.on("mousemove", continueDrawingGesture);
+      map.on("touchmove", continueDrawingGesture);
+      map.on("mouseup", finishDrawingGesture);
+      map.on("touchend", finishDrawingGesture);
+      map.on("touchcancel", finishDrawingGesture);
 
       map.on("error", (event) => {
         if (!event.error) return;
@@ -651,7 +785,14 @@ export function MapCanvas({
         if (!map) return;
         const coordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
         if (modesRef.current.drawMode) {
-          callbacksRef.current.onDraftBoundaryChange([...modesRef.current.draftBoundary, coordinates]);
+          if (suppressMapClickRef.current) {
+            suppressMapClickRef.current = false;
+            return;
+          }
+          if (draftVertexAt(event)) return;
+          if (modesRef.current.drawShape === "polygon") {
+            callbacksRef.current.onDraftBoundaryChange([...modesRef.current.draftBoundary, coordinates]);
+          }
           return;
         }
 
@@ -687,7 +828,7 @@ export function MapCanvas({
             suggestedAddress: String(properties?.situsAddress || `${coordinates[1].toFixed(6)}, ${coordinates[0].toFixed(6)}`),
             buildingGeometry,
             legacyPropertyIds: propertiesRef.current
-              .filter((property) => !property.parcel && geometryContainsPoint(parcelFeature.geometry, property.coordinates))
+              .filter((property) => !property.parcel && property.coordinates && geometryContainsPoint(parcelFeature.geometry, property.coordinates))
               .map((property) => property.id),
             parcel: {
               id: Number(properties?.id),
@@ -769,6 +910,28 @@ export function MapCanvas({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || mapStatus !== "ready") return;
+    updateGeoJsonSource(map, FIELD_TARGET_SOURCE_ID, target ? collectionForTarget(target) : featureCollection());
+    if (map.getLayer("active-territory-fill")) map.setPaintProperty("active-territory-fill", "fill-opacity", target ? .025 : .08);
+    if (map.getLayer("field-walk-target-fill")) map.setPaintProperty("field-walk-target-fill", "fill-color", target?.color ?? "#e9a84a");
+    if (map.getLayer("field-walk-target-line")) {
+      map.setPaintProperty("field-walk-target-line", "line-color", target?.color ?? "#a9660d");
+      map.setPaintProperty("field-walk-target-line", "line-offset", target?.streetSelection?.side === "left" ? -5 : target?.streetSelection?.side === "right" ? 5 : 0);
+    }
+    if (!target) { displayedTargetIdRef.current = null; return; }
+    if (displayedTargetIdRef.current === target.id) return;
+    displayedTargetIdRef.current = target.id;
+    const rosterPoints = target.parcels.flatMap((parcel) => parcel.representativePoint ? [parcel.representativePoint] : []);
+    const points = rosterPoints.length ? rosterPoints : target.geometry.coordinates.flat();
+    if (points.length) {
+      const longitudes = points.map((point) => point[0]);
+      const latitudes = points.map((point) => point[1]);
+      map.fitBounds([[Math.min(...longitudes), Math.min(...latitudes)], [Math.max(...longitudes), Math.max(...latitudes)]], { padding: 48, maxZoom: 18, duration: 0 });
+    }
+  }, [mapStatus, target]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mapStatus !== "ready") return;
     updateGeoJsonSource(map, "draft-territory", draftFeatureCollection(draftBoundary));
   }, [draftBoundary, mapStatus]);
 
@@ -793,19 +956,22 @@ export function MapCanvas({
   }, [properties, selectedPropertyId, visibleOutcomes, compactMarkers, mapStatus]);
 
   return (
-    <div className="map-engine-shell">
-      <div ref={containerRef} className="map-engine" aria-label={`Interactive map of ${territory.name}`} />
+    <div className={`map-engine-shell${drawMode ? " map-drawing-active" : ""}`}>
+      <div ref={containerRef} className="map-engine" role="region" aria-label={`Interactive map of ${territory.name}`} />
       {mapStatus === "loading" && (
         <div className="map-state"><LoaderCircle className="spin" size={22} /><strong>Loading the neighborhood map</strong><span>Your territory records are already available.</span></div>
       )}
       {mapStatus === "error" && (
-        <div className="map-state error"><AlertTriangle size={23} /><strong>The map tiles did not load</strong><span>Visit records still work. Check the map style URL or your connection.</span></div>
+        <div className="map-state error"><AlertTriangle size={23} /><strong>The map is unavailable</strong><span>Your saved locations and visit records can still be used in the address list.</span>{onUseAddressList && <button className="button primary" onClick={onUseAddressList}>Use address list</button>}</div>
       )}
       {addMode && (
         <div className="map-mode-banner"><MapPin size={15} /><span>Tap the next dwelling or entrance</span></div>
       )}
       {drawMode && (
-        <div className="map-mode-banner draw"><MousePointerClick size={15} /><span>{drawModeLabel ?? "Tap at least 3 corners"} · {draftBoundary.length} added</span></div>
+        <div className="map-drawing-panel">
+          <MapDrawingModeControl value={drawShape} onChange={changeDrawShape} />
+          <p aria-live="polite"><MousePointerClick size={15} /><span><strong>{drawModeLabel ?? "Draw boundary"}</strong>{drawingInstruction(drawShape, draftBoundary)}</span></p>
+        </div>
       )}
     </div>
   );

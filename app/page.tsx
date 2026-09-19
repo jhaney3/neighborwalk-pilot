@@ -1,5 +1,6 @@
-import { NeighborWalkRoot } from "../components/SupabaseGate";
+import { LegacyEntry } from "../components/LegacyEntry";
+import { HomeContent, PublicShell } from "../components/PublicSite";
 
 export default function Home() {
-  return <NeighborWalkRoot />;
+  return <PublicShell><LegacyEntry /><HomeContent /></PublicShell>;
 }

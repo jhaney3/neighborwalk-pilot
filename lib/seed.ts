@@ -4,6 +4,7 @@ import {
   type NeighborWalkData,
 } from "./domain";
 import { DEFAULT_MAP_STYLE_URL, MAP_STYLE_CONFIGURATION_REVISION } from "./map-config";
+import { calendarDate } from "./calendar";
 
 const CHURCH_ID = "church_grace_harbor_demo";
 const EVENT_ID = "event_saturday_outreach";
@@ -308,6 +309,10 @@ export function createSeedData(): NeighborWalkData {
 
   return {
     schemaVersion: APP_SCHEMA_VERSION,
+    walkTargets: [],
+    targetProgress: [],
+    parentProgress: [],
+    coverageVisibility: "complete",
     church: {
       id: CHURCH_ID,
       name: "Grace Harbor Church",
@@ -315,6 +320,7 @@ export function createSeedData(): NeighborWalkData {
       retentionDays: 365,
       defaultFollowUpDays: 3,
       noteCharacterLimit: 500,
+      pathwayEnabled: false,
     },
     volunteers: [
       { id: "volunteer_erica", churchId: CHURCH_ID, name: "Erica", role: "leader", active: true },
@@ -332,8 +338,23 @@ export function createSeedData(): NeighborWalkData {
       startsAt: dayAt(0, 9, 30),
       endsAt: dayAt(0, 12),
       status: "active",
+      timezone: "America/Chicago",
+      purpose: "Listen to neighbors and follow through on the next steps they request.",
+      meetingPoint: "Church welcome table, north entrance",
+      leaderContact: "Erica at the welcome table",
     }],
+    outingParticipants: ["volunteer_erica", "volunteer_maya", "volunteer_jordan", "volunteer_sam", "volunteer_noah", "volunteer_ruth", "volunteer_eli"].map((volunteerId, index) => ({
+      id: `participant_demo_${index}`,
+      churchId: CHURCH_ID,
+      eventId: EVENT_ID,
+      volunteerId,
+      status: "checked_in" as const,
+    })),
     territories,
+    assignments: territories.map((area, index) => ({
+      id: "assignment_demo_" + index, churchId: CHURCH_ID, eventId: EVENT_ID, territoryId: area.id,
+      assignedTeamId: ["team_barnabas", "team_priscilla", "team_lydia"][index], status: "assigned" as const,
+    })),
     teams: [
       { id: "team_barnabas", churchId: CHURCH_ID, eventId: EVENT_ID, name: "Team Barnabas", memberIds: ["volunteer_erica", "volunteer_maya", "volunteer_jordan"], territoryIds: [territories[0].id], status: "active" },
       { id: "team_priscilla", churchId: CHURCH_ID, eventId: EVENT_ID, name: "Team Priscilla", memberIds: ["volunteer_sam", "volunteer_ruth"], territoryIds: [territories[1].id], status: "active" },
@@ -341,23 +362,16 @@ export function createSeedData(): NeighborWalkData {
     ],
     properties,
     visits,
-    followUps,
+    followUps: followUps.map((task) => ({ ...task,
+      assignedVolunteerId: residents.find((person) => person.id === task.residentId)?.assignedVolunteerId ?? task.history[0]?.actorId ?? "volunteer_erica",
+      acceptance: "accepted", channel: "visit", eventId: EVENT_ID, dueAt: calendarDate(task.dueAt, "America/Chicago"),
+    })),
     residents,
     personNotes,
     guide: [
       {
-        id: "guide_permission",
-        order: 1,
-        eyebrow: "Start with care",
-        title: "Make room to decline",
-        coaching: "Keep the opening neighborly and give the person an easy way to decline.",
-        sampleWords: "Hi! We’re with Grace Harbor Church nearby, checking in with our neighbors today. Is there anything we could pray about for you?",
-        reminder: "Pause and listen before deciding what to say next.",
-        scriptureReferences: [],
-      },
-      {
         id: "guide_listen",
-        order: 2,
+        order: 1,
         eyebrow: "Make room",
         title: "Listen for their story",
         coaching: "A sincere question is often more helpful than a memorized speech.",
@@ -367,7 +381,7 @@ export function createSeedData(): NeighborWalkData {
       },
       {
         id: "guide_gospel",
-        order: 3,
+        order: 2,
         eyebrow: "Share clearly",
         title: "Explain the good news",
         coaching: "Use your church’s approved wording and avoid pressure or argument.",
@@ -377,7 +391,7 @@ export function createSeedData(): NeighborWalkData {
       },
       {
         id: "guide_invite",
-        order: 4,
+        order: 3,
         eyebrow: "Leave a next step",
         title: "Invite, don’t corner",
         coaching: "Offer a practical next step that matches the conversation.",

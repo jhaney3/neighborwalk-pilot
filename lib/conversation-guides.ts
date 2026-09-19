@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { storageKey } from "./environment";
+import { IncompleteCollectionError, readCompletePages } from "./complete-pages";
 import {
   createId,
   type ConversationGuide,
@@ -8,19 +9,42 @@ import {
   type GuideStep,
   type Team,
 } from "./domain";
-import type { Json, NeighborWalkDatabase } from "./supabase";
+import type { NeighborWalkDatabase } from "./supabase";
 
-type GuideRow = NeighborWalkDatabase["public"]["Tables"]["conversation_guides"]["Row"];
+type DatabaseGuideRow = NeighborWalkDatabase["public"]["Tables"]["conversation_guides"]["Row"];
+type GuideRow = Omit<DatabaseGuideRow, "version" | "archived_at"> & Partial<Pick<DatabaseGuideRow, "version" | "archived_at">>;
+
+export class GuideLibraryReadError extends Error {}
+export class GuideAccessError extends GuideLibraryReadError {}
+export function guideLibraryAccessDenied(error: unknown): boolean {
+  // Page readers retain service errors as causes. Bound traversal so even an
+  // unexpected cyclic diagnostic cannot prevent the authorization check.
+  for (let depth = 0; depth < 4 && error && typeof error === "object"; depth++) {
+    if (error instanceof GuideAccessError) return true;
+    const detail = error as { code?: unknown; cause?: unknown };
+    if (typeof detail.code === "string" && /^(42501|PGRST3)/.test(detail.code)) return true;
+    error = detail.cause;
+  }
+  return false;
+}
+export function guideLibraryErrorMessage(error: unknown) {
+  // Only our controlled content-free messages may appear in the field UI.
+  return error instanceof GuideLibraryReadError || error instanceof IncompleteCollectionError ? error.message
+    : "Could not refresh guides. Reconnect and try again; saved guides have not been replaced.";
+}
 
 export type GuideLibraryState = {
   guides: ConversationGuide[];
   favoriteGuideId?: string;
   teamGuideDefaults: Record<string, string>;
+  revision?: number;
+  favoriteVersion?: number;
+  teamGuideVersions?: Record<string, number>;
 };
 
 const LOCAL_GUIDE_LIBRARY_KEY = storageKey("neighborwalk-conversation-guides-v1");
 
-const guideStepSchema: z.ZodType<GuideStep> = z.object({
+export const guideStepSchema: z.ZodType<GuideStep> = z.object({
   id: z.string().min(1),
   order: z.number().int().min(1),
   eyebrow: z.string().min(1).max(80),
@@ -42,6 +66,7 @@ const conversationGuideSchema: z.ZodType<ConversationGuide> = z.object({
   sortOrder: z.number().int().min(0).max(10000),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  version: z.number().int().positive().optional(),
 }).superRefine((guide, context) => {
   if (guide.scope === "personal" && !guide.ownerUserId) {
     context.addIssue({ code: "custom", path: ["ownerUserId"], message: "Personal guides require an owner." });
@@ -55,6 +80,9 @@ const localGuideLibrarySchema = z.object({
   guides: z.array(conversationGuideSchema),
   favoriteGuideId: z.string().min(1).optional(),
   teamGuideDefaults: z.record(z.string(), z.string()).default({}),
+  revision: z.number().int().nonnegative().optional(),
+  favoriteVersion: z.number().int().nonnegative().optional(),
+  teamGuideVersions: z.record(z.string(), z.number().int().positive()).optional(),
 });
 
 export function makeBlankGuideStep(order: number): GuideStep {
@@ -68,6 +96,11 @@ export function makeBlankGuideStep(order: number): GuideStep {
     reminder: "",
     scriptureReferences: [],
   };
+}
+
+export function parseScriptureReferenceInput(value: string): string[] {
+  return value.split(",").map((reference, index) =>
+    index > 0 ? reference.trimStart() : reference);
 }
 
 export function normalizeGuideSteps(steps: GuideStep[]): GuideStep[] {
@@ -114,10 +147,21 @@ export function preferredConversationGuide(
   favoriteGuideId?: string,
   teamDefaultGuideId?: string,
 ) {
-  return guides.find((guide) => guide.id === teamDefaultGuideId && guide.scope === "church")
-    ?? guides.find((guide) => guide.id === favoriteGuideId)
-    ?? guides.find((guide) => guide.scope === "church")
-    ?? guides[0];
+  return resolveFieldGuide(guides, { favoriteGuideId, teamDefaultGuideId }).guide;
+}
+
+/** The label comes from the guide actually available, never from a stale ID.
+ * Outings/groups may select church guides, not a private member's library. */
+export function resolveFieldGuide(guides: ConversationGuide[], options: { outingGuideId?: string; teamDefaultGuideId?: string; favoriteGuideId?: string }) {
+  const outing = guides.find((guide) => guide.id === options.outingGuideId && guide.scope === "church");
+  if (outing) return { guide: outing, source: "outing" as const };
+  const group = guides.find((guide) => guide.id === options.teamDefaultGuideId && guide.scope === "church");
+  if (group) return { guide: group, source: "group" as const };
+  const favorite = guides.find((guide) => guide.id === options.favoriteGuideId);
+  if (favorite) return { guide: favorite, source: "favorite" as const };
+  const church = guides.find((guide) => guide.scope === "church");
+  if (church) return { guide: church, source: "church" as const };
+  return guides[0] ? { guide: guides[0], source: "personal" as const } : { guide: undefined, source: undefined };
 }
 
 export function conversationGuideTeam(
@@ -132,13 +176,20 @@ export function conversationGuideTeam(
     ?? memberships[0];
 }
 
-export function readLocalGuideLibrary(churchId: string, legacySteps: GuideStep[]): GuideLibraryState {
+function guideStorageKey(churchId: string, userId?: string) {
+  return `${LOCAL_GUIDE_LIBRARY_KEY}:${JSON.stringify([userId ?? "demo", churchId])}`;
+}
+
+export function readLocalGuideLibrary(churchId: string, legacySteps: GuideStep[], userId?: string): GuideLibraryState {
   try {
-    const parsed = localGuideLibrarySchema.safeParse(JSON.parse(window.localStorage.getItem(LOCAL_GUIDE_LIBRARY_KEY) ?? "null"));
-    if (parsed.success && parsed.data.guides.some((guide) => guide.churchId === churchId)) {
-      const guides = parsed.data.guides.filter((guide) => guide.churchId === churchId);
+    const parsed = localGuideLibrarySchema.safeParse(JSON.parse(window.localStorage.getItem(guideStorageKey(churchId, userId)) ?? "null"));
+    if (parsed.success) {
+      const guides = parsed.data.guides.filter((guide) => guide.churchId === churchId && (guide.scope === "church" || !userId || guide.ownerUserId === userId));
       return {
         guides,
+        revision: parsed.data.revision,
+        favoriteVersion: parsed.data.favoriteVersion,
+        teamGuideVersions: parsed.data.teamGuideVersions,
         favoriteGuideId: guides.some((guide) => guide.id === parsed.data.favoriteGuideId)
           ? parsed.data.favoriteGuideId
           : undefined,
@@ -151,12 +202,13 @@ export function readLocalGuideLibrary(churchId: string, legacySteps: GuideStep[]
   } catch {
     // A malformed device cache should not prevent the field app from opening.
   }
+  if (userId) return { guides: [], teamGuideDefaults: {} };
   const fallback = legacyConversationGuide(churchId, legacySteps);
   return { guides: [fallback], favoriteGuideId: fallback.id, teamGuideDefaults: {} };
 }
 
-export function writeLocalGuideLibrary(state: GuideLibraryState) {
-  window.localStorage.setItem(LOCAL_GUIDE_LIBRARY_KEY, JSON.stringify(state));
+export function writeLocalGuideLibrary(state: GuideLibraryState, churchId = state.guides[0]?.churchId ?? "demo", userId?: string) {
+  window.localStorage.setItem(guideStorageKey(churchId, userId), JSON.stringify(state));
 }
 
 function canonicalIsoTimestamp(value: string): string | null {
@@ -165,6 +217,7 @@ function canonicalIsoTimestamp(value: string): string | null {
 }
 
 export function conversationGuideFromRow(row: GuideRow): ConversationGuide | null {
+  if (row.archived_at) return null;
   const parsedSteps = z.array(guideStepSchema).min(1).max(24).safeParse(row.steps);
   const createdAt = canonicalIsoTimestamp(row.created_at);
   const updatedAt = canonicalIsoTimestamp(row.updated_at);
@@ -180,8 +233,22 @@ export function conversationGuideFromRow(row: GuideRow): ConversationGuide | nul
     sortOrder: row.sort_order,
     createdAt,
     updatedAt,
+    version: row.version,
   });
   return parsedGuide.success ? parsedGuide.data : null;
+}
+
+const guideStateSchema = z.object({
+  apiVersion: z.literal(1), churchId: z.string().uuid(), userId: z.string().uuid(),
+  revision: z.number().int().nonnegative(), favoriteVersion: z.number().int().nonnegative(),
+  favoriteGuideId: z.string().uuid().nullable(),
+});
+export async function connectedGuideState(client: SupabaseClient<NeighborWalkDatabase>, churchId: string, userId: string) {
+  const { data, error } = await client.rpc("outreach_guide_state", { target_church: churchId });
+  if (error) throw error;
+  const state = guideStateSchema.parse(data);
+  if (state.churchId !== churchId || state.userId !== userId) throw new GuideAccessError("Guide access changed. Sign in again before refreshing this library.");
+  return state;
 }
 
 export async function loadConnectedGuideLibrary(
@@ -189,125 +256,42 @@ export async function loadConnectedGuideLibrary(
   churchId: string,
   userId: string,
 ): Promise<GuideLibraryState> {
-  const [guideResult, preferenceResult, teamDefaultsResult] = await Promise.all([
-    client
-      .from("conversation_guides")
-      .select("id, church_id, scope, owner_user_id, title, description, steps, sort_order, created_by, updated_by, created_at, updated_at")
-      .eq("church_id", churchId)
-      .order("sort_order")
-      .order("created_at"),
-    client
-      .from("conversation_guide_preferences")
-      .select("favorite_guide_id")
-      .eq("church_id", churchId)
-      .eq("user_id", userId)
-      .maybeSingle(),
-    client
-      .from("conversation_guide_team_defaults")
-      .select("team_id, guide_id")
-      .eq("church_id", churchId),
-  ]);
-  if (guideResult.error) throw guideResult.error;
-  if (preferenceResult.error) throw preferenceResult.error;
-  if (teamDefaultsResult.error) throw teamDefaultsResult.error;
-  const guides = (guideResult.data ?? []).flatMap((row) => {
-    const guide = conversationGuideFromRow(row);
-    return guide ? [guide] : [];
-  });
-  const favoriteGuideId = preferenceResult.data?.favorite_guide_id;
-  return {
-    guides,
-    favoriteGuideId: guides.some((guide) => guide.id === favoriteGuideId) ? favoriteGuideId : undefined,
-    teamGuideDefaults: Object.fromEntries(
-      (teamDefaultsResult.data ?? [])
-        .filter((item) => guides.some((guide) => guide.id === item.guide_id && guide.scope === "church"))
-        .map((item) => [item.team_id, item.guide_id]),
-    ),
-  };
-}
-
-export async function saveConnectedGuide(
-  client: SupabaseClient<NeighborWalkDatabase>,
-  input: ConversationGuideInput,
-  churchId: string,
-  userId: string,
-  sortOrder: number,
-): Promise<ConversationGuide> {
-  if (!validGuideInput(input)) throw new Error("Finish each guide step before saving.");
-  const normalized = {
-    title: input.title.trim(),
-    description: input.description.trim(),
-    steps: normalizeGuideSteps(input.steps) as unknown as Json,
-  };
-  const result = input.id
-    ? await client
-      .from("conversation_guides")
-      .update(normalized)
-      .eq("id", input.id)
-      .select("id, church_id, scope, owner_user_id, title, description, steps, sort_order, created_by, updated_by, created_at, updated_at")
-      .single()
-    : await client
-      .from("conversation_guides")
-      .insert({
-        church_id: churchId,
-        scope: input.scope,
-        owner_user_id: input.scope === "personal" ? userId : null,
-        ...normalized,
-        sort_order: sortOrder,
-        created_by: userId,
-        updated_by: userId,
-      })
-      .select("id, church_id, scope, owner_user_id, title, description, steps, sort_order, created_by, updated_by, created_at, updated_at")
-      .single();
-  if (result.error) throw result.error;
-  const guide = conversationGuideFromRow(result.data);
-  if (!guide) throw new Error("The saved guide could not be read.");
-  return guide;
-}
-
-export async function deleteConnectedGuide(
-  client: SupabaseClient<NeighborWalkDatabase>,
-  guideId: string,
-) {
-  const { error } = await client.from("conversation_guides").delete().eq("id", guideId);
-  if (error) throw error;
-}
-
-export async function saveConnectedFavorite(
-  client: SupabaseClient<NeighborWalkDatabase>,
-  churchId: string,
-  userId: string,
-  guideId: string,
-) {
-  const { error } = await client.from("conversation_guide_preferences").upsert({
-    church_id: churchId,
-    user_id: userId,
-    favorite_guide_id: guideId,
-  }, { onConflict: "church_id,user_id" });
-  if (error) throw error;
-}
-
-export async function saveConnectedTeamGuideDefault(
-  client: SupabaseClient<NeighborWalkDatabase>,
-  churchId: string,
-  userId: string,
-  teamId: string,
-  guideId?: string,
-) {
-  if (!guideId) {
-    const { error } = await client
-      .from("conversation_guide_team_defaults")
-      .delete()
-      .eq("church_id", churchId)
-      .eq("team_id", teamId);
-    if (error) throw error;
-    return;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const before = await connectedGuideState(client, churchId, userId);
+    const [guideResult, teamDefaultsResult] = await Promise.all([
+      readCompletePages((cursor) => {
+        const query = client.from("conversation_guides")
+          .select("id, church_id, scope, owner_user_id, title, description, steps, sort_order, created_by, updated_by, created_at, updated_at, version, archived_at")
+          .eq("church_id", churchId).is("archived_at", null).order("id").limit(100);
+        return cursor ? query.gt("id", cursor) : query;
+      }, (row) => row.id),
+      readCompletePages((cursor) => {
+        const query = client.from("conversation_guide_team_defaults")
+          .select("team_id, guide_id, version, outreach_teams!conversation_guide_team_normalized_fk!inner(deleted_at)")
+          .eq("church_id", churchId).is("outreach_teams.deleted_at", null).order("team_id").limit(100);
+        return cursor ? query.gt("team_id", cursor) : query;
+      }, (row) => row.team_id),
+    ]);
+    const after = await connectedGuideState(client, churchId, userId);
+    if (before.revision !== after.revision) continue;
+    const guides = guideResult.map((row) => {
+      const guide = conversationGuideFromRow(row);
+      if (!guide || !guide.version || guide.churchId !== churchId || (guide.scope === "personal" && guide.ownerUserId !== userId)) {
+        throw new GuideLibraryReadError("A guide could not be safely read. The saved library was not replaced; ask your leader to review guide content and access.");
+      }
+      return guide;
+    }).sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    const accessible = new Map(guides.map((guide) => [guide.id, guide]));
+    const favoriteGuideId = after.favoriteGuideId ?? undefined;
+    if ((favoriteGuideId && !accessible.has(favoriteGuideId)) || teamDefaultsResult.some((item) =>
+      !Number.isSafeInteger(item.version) || item.version < 1 || (item.guide_id !== null && accessible.get(item.guide_id)?.scope !== "church"))) {
+      throw new GuideLibraryReadError("Guide choices changed or contain an unavailable reference. Refresh before continuing; the saved library was not replaced.");
+    }
+    return {
+      guides, favoriteGuideId, revision: after.revision, favoriteVersion: after.favoriteVersion,
+      teamGuideDefaults: Object.fromEntries(teamDefaultsResult.filter((item) => item.guide_id !== null).map((item) => [item.team_id, item.guide_id!])),
+      teamGuideVersions: Object.fromEntries(teamDefaultsResult.map((item) => [item.team_id, item.version])),
+    };
   }
-  const { error } = await client.from("conversation_guide_team_defaults").upsert({
-    church_id: churchId,
-    team_id: teamId,
-    guide_id: guideId,
-    updated_by: userId,
-  }, { onConflict: "church_id,team_id" });
-  if (error) throw error;
+  throw new GuideLibraryReadError("The church changed repeatedly while guides were loading. Try again shortly; the saved library was not replaced.");
 }

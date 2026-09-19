@@ -1,10 +1,13 @@
 "use client";
+import { useAsyncAction } from "../lib/use-async-action";
+import { Modal } from "./ui";
 
 import { Check, Copy, Link2, PencilLine, Plus, RefreshCcw, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { Team, TeamUpdate } from "../lib/domain";
 import type { WorkspaceMembership } from "../lib/use-neighborwalk";
 import { getSupabaseBrowserClient, type NeighborWalkDatabase } from "../lib/supabase";
+import { invitationLink } from "../lib/invitations";
 
 type Member = Pick<
   NeighborWalkDatabase["public"]["Tables"]["church_memberships"]["Row"],
@@ -25,12 +28,14 @@ function memberLabel(member: Member) {
   return member.display_name?.trim() || member.member_email?.split("@")[0] || "Church member";
 }
 
-export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDeleteTeam }: {
+export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDeleteTeam, onAuthenticate, onAccessChanged }: {
   membership: WorkspaceMembership;
   teams: Team[];
-  onAddTeam: (update: TeamUpdate) => string;
-  onUpdateTeam: (teamId: string, update: TeamUpdate) => void;
-  onDeleteTeam: (teamId: string) => void;
+  onAddTeam: (update: TeamUpdate) => Promise<unknown>;
+  onUpdateTeam: (teamId: string, update: TeamUpdate) => Promise<unknown>;
+  onDeleteTeam: (teamId: string) => Promise<unknown>;
+  onAuthenticate: (password: string) => Promise<void>;
+  onAccessChanged: () => Promise<boolean>;
 }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -41,28 +46,54 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [editingTeam, setEditingTeam] = useState<Team | "new" | null>(null);
+  const [password, setPassword] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [reviewing, setReviewing] = useState<{ member: Member; patch: Pick<Member, "role" | "active"> } | null>(null);
 
   const load = useCallback(async () => {
     const client = getSupabaseBrowserClient();
-    if (!client) return;
-    const [memberResult, invitationResult] = await Promise.all([
-      client
-        .from("church_memberships")
-        .select("user_id, role, active, joined_at, member_email, display_name")
-        .eq("church_id", membership.churchId)
-        .order("joined_at", { ascending: true }),
-      client
-        .from("church_invitations")
-        .select("id, invited_email, role, created_at, expires_at")
-        .eq("church_id", membership.churchId)
-        .is("accepted_at", null)
-        .is("revoked_at", null)
-        .order("created_at", { ascending: false }),
-    ]);
-    if (memberResult.error) throw memberResult.error;
-    if (invitationResult.error) throw invitationResult.error;
-    setMembers(memberResult.data ?? []);
-    setInvitations(invitationResult.data ?? []);
+    if (!client) throw new Error("Connect to load church members.");
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const before = await client.rpc("outreach_workspace_info", { target_church: membership.churchId });
+      if (before.error) throw before.error;
+      const roster: Member[] = [];
+      const invites: Invitation[] = [];
+      let cursor = "";
+      for (;;) {
+        let query = client.from("church_memberships").select("user_id, role, active, joined_at, member_email, display_name").eq("church_id", membership.churchId).order("user_id").limit(500);
+        if (cursor) query = query.gt("user_id", cursor);
+        const page = await query;
+        if (page.error) throw page.error;
+        roster.push(...page.data);
+        if (page.data.length < 500) break;
+        const next = page.data.at(-1)!.user_id;
+        if (next <= cursor) throw new Error("The member cursor did not advance; a partial roster was not accepted.");
+        cursor = next;
+      }
+      cursor = "";
+      for (;;) {
+        let query = client.from("church_invitations").select("id, invited_email, role, created_at, expires_at").eq("church_id", membership.churchId).is("accepted_at", null).is("revoked_at", null).gt("expires_at", new Date().toISOString()).order("id").limit(500);
+        if (cursor) query = query.gt("id", cursor);
+        const page = await query;
+        if (page.error) throw page.error;
+        invites.push(...page.data);
+        if (page.data.length < 500) break;
+        const next = page.data.at(-1)!.id;
+        if (next <= cursor) throw new Error("The invitation cursor did not advance; a partial list was not accepted.");
+        cursor = next;
+      }
+      const after = await client.rpc("outreach_workspace_info", { target_church: membership.churchId });
+      if (after.error) throw after.error;
+      const start = before.data as { revision?: number; role?: string };
+      const end = after.data as { revision?: number; role?: string };
+      if (start.revision === end.revision && end.role === "leader") {
+        setMembers(roster.sort((a, b) => a.joined_at.localeCompare(b.joined_at)));
+        setInvitations(invites.sort((a, b) => b.created_at.localeCompare(a.created_at)));
+        setLoaded(true);
+        return;
+      }
+    }
+    throw new Error("Church access changed while loading. Refresh the roster again.");
   }, [membership.churchId]);
 
   useEffect(() => {
@@ -91,12 +122,11 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
       if (invitationError) throw invitationError;
       const invitation = data?.[0];
       if (!invitation) throw new Error("The invitation link was not created.");
-      const link = new URL(window.location.origin);
-      link.searchParams.set("invite", invitation.invitation_token);
-      setCreatedLink(link.toString());
+      setCreatedLink(invitationLink(window.location.origin, invitation.invitation_token));
       setEmail("");
       setMessage(`Invitation ready for ${invitation.email}. It expires in 7 days.`);
       await load();
+      await onAccessChanged();
     } catch (invitationError) {
       setError(readableError(invitationError));
     } finally {
@@ -125,6 +155,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
       setCreatedLink("");
       setMessage("Invitation revoked.");
       await load();
+      await onAccessChanged();
     } catch (revokeError) {
       setError(readableError(revokeError));
     } finally {
@@ -132,22 +163,28 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
     }
   };
 
-  const updateMember = async (member: Member, patch: Pick<Member, "role" | "active">) => {
+  const updateMember = async (member: Member, patch: Pick<Member, "role" | "active">, reason: string) => {
     const client = getSupabaseBrowserClient();
-    if (!client) return;
+    if (!client) throw new Error("Connect to review account access.");
     setBusy(true);
     setError("");
     try {
-      const { error: updateError } = await client.rpc("update_church_member", {
+      const { error: updateError } = await client.rpc("outreach_update_member", {
         target_user_id: member.user_id,
+        expected_role: member.role,
+        expected_active: member.active,
         member_role: patch.role,
         member_active: patch.active,
+        reason,
       });
       if (updateError) throw updateError;
       setMessage(`${memberLabel(member)} updated.`);
+      setReviewing(null);
       await load();
+      if (!await onAccessChanged()) setMessage("Access changed on the server. Refresh Today to review remaining responsibilities.");
     } catch (updateError) {
       setError(readableError(updateError));
+      throw updateError;
     } finally {
       setBusy(false);
     }
@@ -158,6 +195,12 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
       <div className="section-heading">
         <div><p className="eyebrow">Workspace access</p><h2>Members</h2></div>
         <span>{activeCount} active</span>
+      </div>
+
+      <div className="today-card"><h3>Confirm sensitive access changes</h3><p>Invitations, role changes and suspension require a live leader account and a sign-in within 15 minutes. Leaders have access to church care records. Review the roster regularly and after a volunteer leaves.</p>
+        <form className="form-stack" onSubmit={(event) => { event.preventDefault(); setBusy(true); setError(""); void onAuthenticate(password).then(() => { setPassword(""); setMessage("Sign-in confirmed. Access changes are still checked by the server."); }).catch((failure) => setError(readableError(failure))).finally(() => setBusy(false)); }}><label className="form-field"><span>Current password</span><input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="button quiet" disabled={busy}>Confirm my sign-in</button></form>
+        <p>Using an email link or sign-in provider? Share pending work, sign out safely, and sign in again.</p>
+        <button className="button quiet" disabled={busy} onClick={() => { setBusy(true); void load().catch((failure) => setError(readableError(failure))).finally(() => setBusy(false)); }}>Refresh roster</button>
       </div>
 
       <div className="member-management-grid">
@@ -179,10 +222,10 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
               return <div className={`member-row${member.active ? "" : " inactive"}`} key={member.user_id}>
                 <span className={`member-avatar ${member.role}`}>{memberLabel(member).charAt(0).toUpperCase()}</span>
                 <p><strong>{memberLabel(member)}{isCurrentUser ? " (you)" : ""}</strong><small>{member.member_email ?? "No email available"}</small></p>
-                {isCurrentUser ? <span className="role-badge leader"><ShieldCheck size={12} /> Leader</span> : <div className="member-controls"><select disabled={busy} value={member.role} aria-label={`Role for ${memberLabel(member)}`} onChange={(event) => void updateMember(member, { role: event.target.value as Member["role"], active: member.active })}><option value="volunteer">Volunteer</option><option value="leader">Leader</option></select><button className="button quiet" disabled={busy} onClick={() => void updateMember(member, { role: member.role, active: !member.active })}>{member.active ? "Suspend" : "Reactivate"}</button></div>}
+                {isCurrentUser ? <span className="role-badge leader"><ShieldCheck size={12} /> Leader</span> : <div className="member-controls"><select disabled={busy} value={member.role} aria-label={`Role for ${memberLabel(member)}`} onChange={(event) => setReviewing({ member, patch: { role: event.target.value as Member["role"], active: member.active } })}><option value="volunteer">Volunteer</option><option value="leader">Leader</option></select><button className="button quiet" disabled={busy} onClick={() => setReviewing({ member, patch: { role: member.role, active: !member.active } })}>{member.active ? "Suspend" : "Reactivate"}</button></div>}
               </div>;
             })}
-            {!members.length && <div className="member-empty"><RefreshCcw size={16} /> Loading members…</div>}
+            {!members.length && <div className="member-empty"><RefreshCcw size={16} /> {loaded ? "No members available. Refresh to verify your access." : error ? "The roster could not be loaded. Refresh after checking your connection and access." : "Loading members…"}</div>}
           </div>
         </div>
       </div>
@@ -191,7 +234,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
 
       <div className="group-management">
         <div className="section-heading"><div><p className="eyebrow">Field organization</p><h2>Outreach groups</h2></div><button className="button quiet small" onClick={() => setEditingTeam("new")}><Plus size={14} /> New group</button></div>
-        <p className="section-description">Place active members into reusable groups, then assign a group to a territory or follow-up.</p>
+        <p className="section-description">Saved groups are optional starting points for common pairings. At each walk, check in whoever arrives and adjust the actual crews without changing these presets.</p>
         <div className="group-list">
           {teams.map((team) => <article className="group-card" key={team.id}>
             <span className={`team-initial ${team.status}`}>{team.name.charAt(0).toUpperCase()}</span>
@@ -206,18 +249,19 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
         team={editingTeam === "new" ? undefined : editingTeam}
         members={members.filter((member) => member.active)}
         onClose={() => setEditingTeam(null)}
-        onSave={(update) => {
-          if (editingTeam === "new") onAddTeam(update);
-          else onUpdateTeam(editingTeam.id, update);
+        onSave={async (update) => {
+          if (editingTeam === "new") await onAddTeam(update);
+          else await onUpdateTeam(editingTeam.id, update);
           setEditingTeam(null);
         }}
-        onDelete={editingTeam === "new" ? undefined : () => {
-          if (window.confirm(`Delete ${editingTeam.name}? Territory and follow-up assignments will become unassigned.`)) {
-            onDeleteTeam(editingTeam.id);
+        onDelete={editingTeam === "new" ? undefined : async () => {
+          if (window.confirm(`Archive ${editingTeam.name}? Its outing assignments will be cancelled and group links removed. Named task owners and recorded history are kept.`)) {
+            await onDeleteTeam(editingTeam.id);
             setEditingTeam(null);
           }
         }}
       />}
+      {reviewing && <MemberAccessReview key={reviewing.member.user_id + reviewing.patch.role + reviewing.patch.active} review={reviewing} onClose={() => setReviewing(null)} onSave={(reason) => updateMember(reviewing.member, reviewing.patch, reason)} />}
     </section>
   );
 }
@@ -226,16 +270,15 @@ function TeamEditor({ team, members, onClose, onSave, onDelete }: {
   team?: Team;
   members: Member[];
   onClose: () => void;
-  onSave: (update: TeamUpdate) => void;
-  onDelete?: () => void;
+  onSave: (update: TeamUpdate) => Promise<unknown>;
+  onDelete?: () => Promise<unknown>;
 }) {
   const [name, setName] = useState(team?.name ?? "");
+  const action = useAsyncAction();
   const [status, setStatus] = useState<Team["status"]>(team?.status ?? "ready");
   const [memberIds, setMemberIds] = useState<string[]>(team?.memberIds ?? []);
   const volunteerId = (userId: string) => `volunteer_${userId.replaceAll("-", "")}`;
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-    <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="team-editor-title">
-      <div className="modal-heading"><div><h2 id="team-editor-title">{team ? "Edit outreach group" : "Create outreach group"}</h2><p>Groups organize your church members without changing their account access.</p></div><button className="close-button" onClick={onClose} aria-label="Close dialog">×</button></div>
+  return <Modal title={team ? "Edit outreach group" : "Create outreach group"} description="Groups organize members without changing account access." onClose={action.busy ? () => undefined : onClose}>
       <div className="form-stack">
         <label className="form-field"><span>Group name</span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: Team Barnabas" /></label>
         <label className="form-field"><span>Field status</span><select value={status} onChange={(event) => setStatus(event.target.value as Team["status"])}><option value="ready">Ready</option><option value="active">Active</option><option value="finished">Finished</option></select></label>
@@ -244,7 +287,21 @@ function TeamEditor({ team, members, onClose, onSave, onDelete }: {
           return <label key={member.user_id} aria-label={`Include ${memberLabel(member)} in this group`}><input type="checkbox" checked={memberIds.includes(id)} onChange={(event) => setMemberIds((current) => event.target.checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} /><span><strong>{memberLabel(member)}</strong><small>{member.member_email ?? member.role}</small></span></label>;
         })}{!members.length && <p>No active members are available yet.</p>}</fieldset>
       </div>
-      <div className="modal-actions split">{onDelete ? <button className="button danger" onClick={onDelete}><Trash2 size={14} /> Delete group</button> : <span />}<div><button className="button quiet" onClick={onClose}>Cancel</button><button className="button primary" disabled={name.trim().length < 2} onClick={() => onSave({ name, memberIds, status })}><Check size={14} /> Save group</button></div></div>
-    </section>
-  </div>;
+      <div className="modal-actions split">{onDelete ? <button className="button danger" disabled={action.busy} onClick={() => void action.run(onDelete)}><Trash2 size={14} /> Archive group</button> : <span />}<div><button className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={name.trim().length < 2 || action.busy} onClick={() => void action.run(() => onSave({ name, memberIds, status }))}><Check size={14} /> Save group</button></div></div>
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+  </Modal>;
+}
+
+function MemberAccessReview({ review, onClose, onSave }: { review: { member: Member; patch: Pick<Member, "role" | "active"> }; onClose: () => void; onSave: (reason: string) => Promise<void> }) {
+  const [reason, setReason] = useState("");
+  const action = useAsyncAction();
+  return <Modal title="Review member access" onClose={action.busy ? () => undefined : onClose}>
+    <form className="form-stack" aria-busy={action.busy} onSubmit={(event) => { event.preventDefault(); void action.run(() => onSave(reason)); }}>
+      <p><strong>{memberLabel(review.member)}</strong>: {review.member.active ? "Active" : "Suspended"} {review.member.role} → {review.patch.active ? "Active" : "Suspended"} {review.patch.role}.</p>
+      <p>{!review.patch.active ? "Connected access stops immediately. Their people and unfinished tasks keep their history and ownership, and must be reviewed by a leader. A disconnected device may retain a bounded offline copy until it reconnects." : review.patch.role === "leader" ? "An active leader can see all church care records and manage church access. Confirm this level of trust is appropriate." : "An active volunteer can use assigned field tools and explicitly permitted care records. Previous leader access does not continue on the server."}</p>
+      <label className="form-field"><span>Administrative reason — no neighbor details</span><textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+      {action.error && <p role="alert" className="inline-error">{action.error} Refresh the roster before retrying if access changed elsewhere.</p>}
+      <div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={action.busy || reason.trim().length < 3}>Confirm reviewed change</button></div>
+    </form>
+  </Modal>;
 }

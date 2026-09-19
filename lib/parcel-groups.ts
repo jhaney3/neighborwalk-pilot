@@ -19,7 +19,7 @@ export function propertyParcelKey(property: Property) {
 
 export function dwellingsForParcel(properties: Property[], parcel: ParcelIdentity) {
   const key = parcelKey(parcel);
-  return properties.filter((property) => propertyParcelKey(property) === key);
+  return properties.filter((property) => !property.mergedIntoId && propertyParcelKey(property) === key);
 }
 
 export function parcelProgress(properties: Property[]): ParcelProgress {

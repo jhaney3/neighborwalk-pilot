@@ -12,12 +12,15 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
 /out/
 /public/maplibre-gl-worker.mjs
 /public/maplibre-gl-shared.mjs
+/public/sw-build.js
 
 # misc
 .DS_Store

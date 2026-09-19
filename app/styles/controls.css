@@ -21,6 +21,45 @@ select:not([multiple]) option { color: var(--ink); background: white; }
 select:not([multiple]) option:checked { color: var(--pine-950); background: var(--mint-100); }
 .select-wrap select:not([multiple]) { padding-right: 32px; background-image: none; }
 
+/* Checkbox labels are used for compact, sentence-style choices. Normalize the
+   native control so it matches the rest of the form system across browsers. */
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding-block: 6px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid #789087;
+  border-radius: 5px;
+  background-color: white;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+
+.checkbox-label:hover input[type="checkbox"]:not(:disabled) { border-color: var(--pine-600); }
+.checkbox-label input[type="checkbox"]:checked {
+  border-color: var(--pine-700);
+  background-color: var(--pine-700);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 4 4L19 6'/%3E%3C/svg%3E");
+  background-size: 14px;
+}
+.checkbox-label input[type="checkbox"]:disabled { cursor: not-allowed; opacity: .55; }
+.checkbox-label:has(input[type="checkbox"]:disabled) { cursor: not-allowed; }
+
 /* Progressively enhance only the opened menu. The trigger keeps its dimensions,
    surface, type, and spacing from the feature-level rules above this layer. */
 @supports (appearance: base-select) and selector(select::picker(select)) {

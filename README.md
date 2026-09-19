@@ -1,114 +1,58 @@
 # NeighborWalk
 
-NeighborWalk is a mobile-first progressive web app for respectful neighborhood outreach. Volunteers can work from a real interactive map, record one objective outcome per visit, schedule follow-ups, and use a church-approved conversation guide. Leaders can define territories and see operational coverage without ranking residents, conversations, or volunteers.
+**Turn neighborhood conversations into personal follow-through.** NeighborWalk is a mobile-first app and website for churches coordinating respectful outreach: prepare an outing, record an encounter, assign an owned next step, and follow through together. It is not a church-management replacement or a system for scoring neighbors, beliefs, conversions, or volunteers.
 
-The app remains offline-first with IndexedDB and an installable service worker. When Supabase is configured, members sign in with Google or email and password, then synchronize a church workspace protected by grants and row-level security.
+## Release status
 
-## Included
+The church-readiness rework is on `rework/church-ready-neighborwalk` and is **not yet approved or deployed to production**. The previous improvements were deployed first at `d94d17c6a24075e6cc657759b676dba988789a97`; production remains that checkpoint. No rework migration has changed the live church database.
 
-- MapLibre neighborhood map with house/location markers, outcome filters, address search, geolocation, and tappable building detection
-- leader-drawn territory boundaries with assignment and coverage summaries
-- visit history, objective notes, do-not-revisit status, and scheduled return visits
-- unified follow-up task queue for location visits and person care, with overdue/today/upcoming filters, notes, rescheduling, completion, and cancellation
-- searchable, private-by-default discipleship directory with a named owner for every person, explicit team/member sharing, dated follow-up plans, and one visible note history
-- editable, church-approved conversation guide with sample words and Scripture references
-- leader dashboard for territories, teams, coverage, outcomes, and audit activity
-- offline device storage, ordered writes, validated import/export, retention enforcement, and a service worker
-- installable PWA manifest, responsive desktop/mobile layouts, reduced-motion support, and device notifications
-- Supabase Google, email/password, recovery, and optional one-time-link authentication with revision-aware workspace synchronization
-- production PostgreSQL/PostGIS migrations with explicit grants, row-level security, and a parcel-ready spatial index
-- OpenAPI 3.1 contract for bootstrap, sync, map data, visits, follow-ups, and reverse geocoding
+See the [audit delivery matrix](docs/audit-delivery-status.md) for implemented features and gaps, the [execution ledger](docs/rework-progress.md) for exact test results, and the [release gates](docs/production-checklist.md) for what remains. Fresh production recovery, controlled staging/cutover, commercial hosting, operator policies/support, real email delivery, physical-phone testing and church-pilot evidence are not replaced by a passing build. Enrollment stays closed pending those decisions.
 
-## Run locally
+## Implemented on the rework branch
 
-Requirements: Node.js 22.13 or newer.
+- Today / Outreach / People / More navigation, direct links, reusable groups/areas, outing preparation, assignment acceptance, readiness and debrief.
+- Map and address-list fieldwork, manual locations, and community encounters that do not require an address or named person.
+- Address-optional people, named task responsibility, date-only due dates, accepted handoffs, leader backstops and permission-filtered history.
+- Independent contact restrictions, retained corrections, reviewed person/location moves and duplicate aliases that preserve original records.
+- Optional church/private guides with coaching, reminders and Scripture references; complete/coherent reads, captured-version edits, durable request recovery and reference-safe archives.
+- Transactional tenant-scoped database commands, immutable device outbox and server receipts, held conflicts, account isolation and live-session checks.
+- Prepared offline app assets, permitted cached records/tasks and saved guide text within a bounded previously verified account window.
+- Reviewed CSV exchange, audited administration and local encrypted database capture/isolated-restore tooling.
+- Public positioning, how-it-works, pricing/pilot explanation, trust/help and explicitly draft policy pages; a separate fictional demo and prepared leader/volunteer pilot material.
+- Opt-in privacy-preserving email-reminder implementation, disabled until provider/scheduler/delivery verification. This is not a claim of active email, background synchronization or closed-app push.
 
-```bash
-npm install
+Outings currently reference a guide's current text, not immutable historical editions. Archival is not permanent erasure. People are visible to their responsible owner, church leaders and explicitly authorized recipients; historical creator access is disclosed and ends at an accepted handoff. Scripture is reference-only. Maps require connectivity and appropriate provider permission; address-list work does not require map tiles.
+
+## Run safely locally
+
+Use Node **22.x** and the isolated Supabase development stack. From this repository:
+
+```sh
+npm ci
 npm run sandbox:start
 npm run dev
 ```
 
-Then open the local URL shown in the terminal. Use the separate test account described in [safe local testing](docs/sandbox.md). Local and preview builds block production database connections. Without Supabase settings, the app opens device-only fictional demo data.
+Use the fictional accounts in [safe local testing](docs/sandbox.md). Local and preview builds refuse production database connections. Do not bypass that guard or copy production credentials into `.env.local`. A separately approved staging configuration remains a release requirement. The explicit demo uses fictional device-only data; real accounts require an invitation and active church membership.
 
-Useful checks:
-
-```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
+```sh
 npm run verify
+npm run test:database
+npm run test:browser
 ```
 
-## Configuration
+The browser suite starts its own optimized local server and uses only fictional loopback services. Run the build before browser tests; do not rebuild while that suite is running. See [browser readiness](docs/browser-readiness.md) for boundaries and the still-required physical-device matrix.
 
-`npm run sandbox:start` writes the local Supabase settings to ignored `.env.local`. Use `.env.example` as a reference for optional providers. MapTiler browser keys are visible to visitors by design, so use a dedicated key restricted to the deployed and local origins. Never put server secrets in variables prefixed with `NEXT_PUBLIC_`.
+## Architecture and configuration
 
-| Variable | Purpose |
-| --- | --- |
-| `NEXT_PUBLIC_MAPTILER_KEY` | Protected browser key used to build the MapTiler Streets style URL automatically. Paste only the key value. |
-| `NEXT_PUBLIC_MAP_STYLE_URL` | MapLibre-compatible style JSON URL. Defaults to OpenFreeMap Bright. |
-| `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe Supabase project API URL. |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Modern browser-safe Supabase publishable key. Never substitute a secret or service-role key. |
-| `NEXT_PUBLIC_GEOCODER_URL` | Same-origin or trusted proxy endpoint used for reverse address lookup. |
-| `NEXT_PUBLIC_SITE_URL` | Canonical production origin used for metadata. |
+The current source of truth is the checked-in `supabase/migrations/` sequence, generated [database types](lib/database.types.ts), transactional clients and their regression tests. The historical `docs/database/postgres.sql` and `docs/api/openapi.yaml` are **archived design proposals**, not the current schema or deployed REST API. Never apply them to the live church.
 
-Without both Supabase variables, NeighborWalk intentionally stays in device-only demo mode. With them, the app requires Google or email sign-in and an active church membership. New members join through a leader-created invitation link; users without membership see an invitation-required screen. Workspace creation is currently an administrative backend operation.
+The normalized rework and its compatible application must be released together: it revokes legacy bulk snapshot and direct guide/protected-record writes. Existing snapshots and historical records are preserved for reconciliation, not replaced with seed data. See [current architecture](docs/current-architecture.md), [workspace reads](docs/workspace-read-reliability.md), [guide reliability](docs/guide-library-reliability.md) and [session security](docs/session-security.md).
 
-When `NEXT_PUBLIC_MAPTILER_KEY` is configured, new installs use MapTiler Streets and existing version-3 installs migrate once from a bundled OpenFreeMap style. Users can still choose another layer afterward. MapTiler supplies streets and building footprints, not legal parcel boundaries; a separate parcel provider is required for a Zillow-style parcel overlay.
+`npm run sandbox:start` prepares ignored local settings. `.env.example` lists configuration names, not permission to activate a production service. Browser publishable keys and restricted map keys are public by design; never substitute a secret/service-role key or prefix server secrets with `NEXT_PUBLIC_`. Verify production auth URLs, provider callbacks and SMTP delivery under the release runbook before inviting real users.
 
-## Supabase backend
+## Preservation, operations and pilot
 
-### Google sign-in setup
+[Database recovery](docs/database-recovery.md) distinguishes authored device recovery, sensitive reviewed exports, encrypted operator database bundles and managed-project recovery. Private backup files and credentials stay outside Git with restricted permissions. A server backup cannot capture unsent phone-only work, and a logical database archive does not include every provider setting or storage object file.
 
-NeighborWalk's Google button uses Supabase's hosted OAuth callback. Complete these provider settings once:
-
-1. In Google Auth Platform, create an OAuth client with application type **Web application**.
-2. Add the production app origin under **Authorized JavaScript origins**: `https://neighborwalk-pilot.vercel.app`.
-3. Add the Supabase callback under **Authorized redirect URIs**: `https://llhrbtlkcneldgrhkwpf.supabase.co/auth/v1/callback`.
-4. Configure the Google consent screen scopes `openid`, `userinfo.email`, and `userinfo.profile`.
-5. In Supabase, open **Authentication > Sign In / Providers > Google**, enable the provider, and paste the Google Client ID and Client Secret.
-6. In Supabase **Authentication > URL Configuration**, set the Site URL to `https://neighborwalk-pilot.vercel.app` and add the exact redirect `https://neighborwalk-pilot.vercel.app/` to Redirect URLs. Add the local development origin separately when testing Google sign-in locally.
-
-Do not put the Google Client Secret in a `NEXT_PUBLIC_` environment variable or commit it to this repository. It belongs only in the Supabase provider configuration.
-
-### Production email and password setup
-
-NeighborWalk uses Google as the quickest sign-in path and email/password as the dependable alternative. A routine password sign-in does not send an email. Account confirmation, password recovery, and the optional one-time-link fallback do send email.
-
-Supabase's built-in email sender is best-effort and currently limited to two messages per hour, so it is not suitable for a live rollout. Before inviting real users, configure a custom SMTP provider under **Authentication > Email > SMTP Settings** and test account confirmation and recovery from the production origin. Keep email confirmation enabled. Existing magic-link users can sign in once and choose **Settings > Account and access > Set or change password**.
-
-For the small no-domain pilot, use a dedicated Gmail account with `smtp.gmail.com`, port `465`, the full Gmail address as both sender and username, and a Google App Password after enabling 2-Step Verification. Never use or store the account's normal Google password in Supabase. Supabase warns that personal-email SMTP is not designed for higher-volume transactional delivery, so move to a domain-backed transactional provider before a broader public rollout.
-
-SMS is intentionally not enabled as the default workaround. Supabase phone login requires a separately configured SMS provider and incurs a message on each OTP login; it is useful only if the ministry decides that the added provider cost and phone-number lifecycle risks are worthwhile.
-
-The applied database source is stored in `supabase/migrations/`. It creates:
-
-- church workspaces and authenticated memberships
-- an offline-first workspace snapshot with optimistic revision checks
-- a privacy-minimized parcel table and bounding-box RPC for Lawrence County data
-- explicit Data API grants and tenant-scoped RLS policies
-- protected discipleship people, note, and follow-up tables whose RLS grants access only to creators, assigned owners, explicit shares, and church leaders
-
-`docs/database/postgres.sql` and `docs/api/openapi.yaml` preserve the more normalized future backend design. The connected pilot currently uses the smaller Supabase schema so the existing offline document can synchronize without discarding field functionality.
-
-## Data and records model
-
-NeighborWalk records addresses because the workflow is location-based and can store person details supplied for follow-up. People are private to the person who added them and their assigned discipleship owner unless explicitly shared with a group or church member; leaders can oversee every record. The person who adds a record becomes its initial discipleship owner. Each active person may include a non-numeric relationship stage, dated tasks in the unified follow-up queue, and one chronological note history visible from both the profile and its follow-ups. Stages provide shared ministry context; they are not scores. The app deliberately excludes receptiveness scores, conversion tallies, and volunteer leaderboards. Notes are optional, character-limited, and described as care context. Approval and retention records are maintained outside the app.
-
-Ordinary visit history and audit entries expire according to the church retention setting. Active follow-up source records remain until resolved; do-not-revisit instructions persist so future volunteers can honor the resident's request. Leaders should establish a documented deletion process and legal basis appropriate to their jurisdiction before collecting live data.
-
-Exported backups are readable JSON and can contain sensitive ministry records. Store them in approved encrypted storage and delete obsolete copies.
-
-## Deployment status
-
-The canonical production PWA is deployed through the linked GitHub repository and Vercel project at [neighborwalk-pilot.vercel.app](https://neighborwalk-pilot.vercel.app). Make application changes in this repository; Vercel owns production and preview builds. The public app shell requires its own Google or Supabase email sign-in; PostgreSQL grants and row-level security protect workspace and parcel records after authentication.
-
-Vercel project: `jhaney3s-projects/neighborwalk-pilot`. Production and Preview both contain the browser-safe MapTiler and Supabase variables listed above. Deployment Protection is disabled so volunteers do not encounter a separate Vercel login screen. To publish the linked workspace again:
-
-```bash
-npx vercel deploy --prod --yes --scope jhaney3s-projects
-```
-
-See [`docs/production-checklist.md`](docs/production-checklist.md) before a live canvassing rollout. The [codebase review](docs/codebase-review.md) records the cleanup, verification, and remaining product and reliability issues.
+[Email activation](docs/email-reminders.md) and the [church pilot kit](docs/church-pilot-kit.md) describe prepared workflows and their outstanding verification. The [original audit](docs/market-readiness-audit.md) and [approved plan](docs/market-readiness-plan.md) remain the acceptance contract. Follow [production release gates](docs/production-checklist.md); a standalone production-deploy command is not a safe cutover procedure for this branch.

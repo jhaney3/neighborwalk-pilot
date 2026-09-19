@@ -1,12 +1,15 @@
 import { openDB, type IDBPDatabase } from "idb";
 import {
   APP_SCHEMA_VERSION,
+  createId,
   enforceRetention,
   neighborWalkDataSchema,
   type NeighborWalkData,
 } from "./domain";
 import { createSeedData } from "./seed";
+import { calendarDate } from "./calendar";
 import { storageKey } from "./environment";
+import { authoredRecovery } from "./device-recovery";
 import {
   DEFAULT_MAP_STYLE_URL,
   isOpenFreeMapStyle,
@@ -17,7 +20,20 @@ import {
 const DB_NAME = storageKey("neighborwalk");
 const DB_VERSION = 1;
 const STORE = "app_state";
-const DATA_KEY = "primary";
+const DATA_KEY = "demo";
+export type StorageScope = { userId: string; churchId: string };
+
+export function scopedStorageKey(scope: StorageScope) {
+  if (!scope.userId || !scope.churchId) throw new Error("An authenticated account and church are required for local records.");
+  return JSON.stringify(["account", scope.userId, scope.churchId]);
+}
+
+export class StorageRecoveryError extends Error {
+  constructor(public readonly backupKey: string) {
+    super("Saved records need recovery. The original data has been preserved; no sample records replaced it. Contact your church leader before clearing browser storage.");
+    this.name = "StorageRecoveryError";
+  }
+}
 
 let databasePromise: Promise<IDBPDatabase> | null = null;
 
@@ -83,6 +99,44 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   });
   const storedPersonNotes = Array.isArray(data.personNotes) ? data.personNotes : [];
   const storedFollowUps = Array.isArray(data.followUps) ? data.followUps : [];
+  const storedParticipants = Array.isArray(data.outingParticipants) ? data.outingParticipants : [];
+  const migratedParticipants = version < 13 && storedParticipants.length === 0
+    ? (() => {
+      const assignments = Array.isArray(data.assignments) ? data.assignments : [];
+      const teams = Array.isArray(data.teams) ? data.teams : [];
+      const byOutingAndVolunteer = new Map<string, Record<string, unknown>>();
+      const statusPriority = { not_going: 0, invited: 1, going: 2, checked_in: 3 } as const;
+      assignments.forEach((candidateAssignment, assignmentIndex) => {
+        if (!candidateAssignment || typeof candidateAssignment !== "object" || Array.isArray(candidateAssignment)) return;
+        const assignment = candidateAssignment as Record<string, unknown>;
+        if (assignment.status === "cancelled" || typeof assignment.eventId !== "string") return;
+        const memberIds = typeof assignment.assignedVolunteerId === "string" ? [assignment.assignedVolunteerId]
+          : typeof assignment.assignedTeamId === "string"
+            ? (teams.find((candidateTeam) => candidateTeam && typeof candidateTeam === "object" && !Array.isArray(candidateTeam)
+              && (candidateTeam as Record<string, unknown>).id === assignment.assignedTeamId) as Record<string, unknown> | undefined)?.memberIds
+            : [];
+        if (!Array.isArray(memberIds)) return;
+        const status = assignment.status === "completed" ? "checked_in" : assignment.status === "accepted" ? "going"
+          : assignment.status === "declined" ? "not_going" : "invited";
+        memberIds.forEach((memberId, memberIndex) => {
+          if (typeof memberId !== "string") return;
+          const key = JSON.stringify([assignment.eventId, memberId]);
+          const current = byOutingAndVolunteer.get(key);
+          if (current && statusPriority[current.status as keyof typeof statusPriority] >= statusPriority[status]) return;
+          byOutingAndVolunteer.set(key, {
+            id: `participant_migrated_${assignmentIndex}_${memberIndex}`,
+            churchId: typeof assignment.churchId === "string" ? assignment.churchId : defaults.church.id,
+            eventId: assignment.eventId,
+            volunteerId: memberId,
+            status,
+          });
+        });
+      });
+      return [...byOutingAndVolunteer.values()];
+    })()
+    : storedParticipants;
+  const timezone = data.church && typeof data.church === "object" && "timezone" in data.church && typeof data.church.timezone === "string"
+    ? data.church.timezone : defaults.church.timezone;
   const defaultFollowUpDays = data.church && typeof data.church === "object" && !Array.isArray(data.church)
     && typeof (data.church as Record<string, unknown>).defaultFollowUpDays === "number"
     ? Number((data.church as Record<string, unknown>).defaultFollowUpDays)
@@ -152,13 +206,19 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
     schemaVersion: APP_SCHEMA_VERSION,
     church: withoutLegacyFields(data.church, ["requireFollowUpConsent"]),
     residents: migratedResidents,
+    outingParticipants: migratedParticipants,
+    walkTargets: Array.isArray(data.walkTargets) ? data.walkTargets : [],
+    targetProgress: Array.isArray(data.targetProgress) ? data.targetProgress : [],
+    parentProgress: Array.isArray(data.parentProgress) ? data.parentProgress : [],
+    coverageVisibility: data.coverageVisibility === "complete" ? "complete" : "assigned_targets_only",
     personNotes: [...storedPersonNotes, ...migratedLegacyNotes],
     visits: Array.isArray(data.visits)
       ? data.visits.map((visit) => withoutLegacyFields(visit, ["followUpConsent"]))
       : [],
     followUps: [...storedFollowUps, ...migratedNextStepFollowUps]
       .map((followUp) => followUp && typeof followUp === "object"
-        ? { ...followUp as Record<string, unknown>, history: Array.isArray((followUp as Record<string, unknown>).history) ? (followUp as Record<string, unknown>).history : [] }
+        ? { ...followUp as Record<string, unknown>, dueAt: calendarDate(String((followUp as Record<string, unknown>).dueAt), timezone),
+          history: Array.isArray((followUp as Record<string, unknown>).history) ? (followUp as Record<string, unknown>).history : [] }
         : followUp),
     preferences: {
       ...defaults.preferences,
@@ -170,6 +230,9 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
     },
     sync: data.sync && typeof data.sync === "object" && !Array.isArray(data.sync) ? {
       ...data.sync as Record<string, unknown>,
+      legacyRecoveryRequired: Boolean((data.sync as Record<string, unknown>).legacyRecoveryRequired
+        || (version < 11 && Array.isArray((data.sync as Record<string, unknown>).pending)
+          && ((data.sync as Record<string, unknown>).pending as unknown[]).length > 0)),
       pending: Array.isArray((data.sync as Record<string, unknown>).pending)
         ? (data.sync as Record<string, unknown>).pending as unknown[]
         : [],
@@ -178,32 +241,217 @@ export function migrateNeighborWalkData(candidate: unknown): unknown {
   };
 }
 
+async function parseStoredData(stored: unknown, key: string): Promise<NeighborWalkData> {
+  const database = await getDatabase();
+  if (stored && typeof stored === "object" && "schemaVersion" in stored && Number(stored.schemaVersion) < APP_SCHEMA_VERSION) {
+    const archiveKey = `pre-upgrade:${key}:${stored.schemaVersion}`;
+    if (await database.get(STORE, archiveKey) === undefined) await database.put(STORE, stored, archiveKey);
+  }
+  try {
+    const migratedCandidate = migrateNeighborWalkData(stored);
+    const parsed = neighborWalkDataSchema.parse(migratedCandidate);
+    // Retention is an explicit reviewed operation, not a side effect of opening
+    // a device. This also preserves all queued work during an upgrade.
+    return parsed;
+  } catch {
+    const backupKey = `quarantine:${key}:${Date.now()}`;
+    await database.put(STORE, stored, backupKey);
+    throw new StorageRecoveryError(backupKey);
+  }
+}
+
 export async function loadNeighborWalkData(): Promise<NeighborWalkData> {
   const database = await getDatabase();
   const stored = await database.get(STORE, DATA_KEY);
-  if (!stored) {
-    const seeded = createSeedData();
-    await database.put(STORE, seeded, DATA_KEY);
-    return seeded;
-  }
-  const migratedCandidate = migrateNeighborWalkData(stored);
-  const parsed = neighborWalkDataSchema.safeParse(migratedCandidate);
-  if (!parsed.success) {
-    const backupKey = `invalid_${Date.now()}`;
-    await database.put(STORE, stored, backupKey);
-    const seeded = createSeedData();
-    await database.put(STORE, seeded, DATA_KEY);
-    return seeded;
-  }
-  const retained = enforceRetention(parsed.data);
-  await database.put(STORE, retained, DATA_KEY);
-  return retained;
+  if (stored) return parseStoredData(stored, DATA_KEY);
+  const seeded = createSeedData();
+  await database.put(STORE, seeded, DATA_KEY);
+  return seeded;
 }
 
-export async function saveNeighborWalkData(data: NeighborWalkData): Promise<void> {
-  const parsed = neighborWalkDataSchema.parse(data);
+export async function loadScopedNeighborWalkData(scope: StorageScope): Promise<NeighborWalkData | null> {
   const database = await getDatabase();
-  await database.put(STORE, parsed, DATA_KEY);
+  const key = scopedStorageKey(scope);
+  // Bind the former shared cache to its original known owner exactly once,
+  // before connection metadata can be changed by a different sign-in.
+  let legacyOwner = await database.get(STORE, "legacy_owner");
+  if (legacyOwner === undefined) {
+    try {
+      const cached = JSON.parse(window.localStorage.getItem(storageKey("neighborwalk-supabase-workspace")) ?? "null");
+      legacyOwner = cached?.userId && cached?.churchId ? scopedStorageKey(cached) : "unclaimed";
+    } catch { legacyOwner = "unclaimed"; }
+    await database.put(STORE, legacyOwner, "legacy_owner");
+  }
+  let stored = await database.get(STORE, key);
+  if (!stored && legacyOwner === key) {
+    const legacy = await database.get(STORE, "primary");
+    if (legacy) {
+      const parsed = await parseStoredData(legacy, "primary");
+      if (parsed.church.id !== scope.churchId) throw new StorageRecoveryError("primary");
+      await database.put(STORE, parsed, key);
+      stored = parsed;
+    }
+  }
+  if (!stored) return null;
+  const parsed = await parseStoredData(stored, key);
+  if (parsed.church.id !== scope.churchId) throw new StorageRecoveryError(key);
+  return parsed;
+}
+
+export async function saveNeighborWalkData(data: NeighborWalkData, scope?: StorageScope): Promise<void> {
+  const parsed = neighborWalkDataSchema.parse(data);
+  if (scope && scope.churchId !== parsed.church.id) throw new Error("Local records belong to a different church. Nothing was overwritten.");
+  const database = await getDatabase();
+  await database.put(STORE, parsed, scope ? scopedStorageKey(scope) : DATA_KEY);
+}
+
+export async function archiveWorkspaceRecovery(data: NeighborWalkData, scope: StorageScope, reason: string) {
+  if (data.church.id !== scope.churchId) throw new Error("Recovery archive belongs to a different church.");
+  const database = await getDatabase();
+  const key = `recovery:${scopedStorageKey(scope)}:${createId("archive")}`;
+  await database.put(STORE, { data, reason, createdAt: new Date().toISOString(), scope }, key);
+  return key;
+}
+
+export async function recoveryArchives(scope: StorageScope): Promise<{ key: string; reason: string; createdAt: string }[]> {
+  const database = await getDatabase();
+  const keys = await database.getAllKeys(STORE);
+  const scopeKey = scopedStorageKey(scope);
+  const ownsLegacy = await database.get(STORE, "legacy_owner") === scopeKey;
+  const entries = await Promise.all(keys.filter((key) => typeof key === "string" && archiveKeyAllowed(key, scopeKey, ownsLegacy)).map(async (key) => {
+    const entry = await database.get(STORE, key);
+    const raw = !String(key).startsWith("recovery:");
+    return { key: String(key), reason: raw ? "Original device copy preserved before migration or schema recovery." : String(entry.reason), createdAt: raw ? "" : String(entry.createdAt) };
+  }));
+  return entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function exportRecoveryArchive(scope: StorageScope, key: string, mode: "authored" | "workspace" = "authored"): Promise<Blob> {
+  const database = await getDatabase();
+  const scopeKey = scopedStorageKey(scope);
+  if (!archiveKeyAllowed(key, scopeKey, await database.get(STORE, "legacy_owner") === scopeKey)) throw new Error("This archive belongs to a different account or church.");
+  const entry = await database.get(STORE, key);
+  if (!entry) throw new Error("The archive is no longer available on this device.");
+  const payload = key.startsWith("recovery:") ? entry : { data: entry, reason: "Original preserved device copy", scope };
+  if (mode === "authored") return new Blob([JSON.stringify(authoredRecovery(payload.data, scope), null, 2)], { type: "application/json" });
+  return new Blob([JSON.stringify({ format: "neighborwalk-recovery", formatVersion: 1, ...payload }, null, 2)], { type: "application/json" });
+}
+
+function archiveKeyAllowed(key: string, scopeKey: string, ownsLegacy: boolean) {
+  return ["recovery:", "pre-upgrade:", "quarantine:"].some((prefix) => key.startsWith(prefix + scopeKey + ":"))
+    || ownsLegacy && ["pre-upgrade:primary:", "quarantine:primary:"].some((prefix) => key.startsWith(prefix));
+}
+
+export type PendingAdministration = { request: Record<string, unknown>; savedAt: string; scope: StorageScope };
+export async function pendingAdministration(scope: StorageScope): Promise<PendingAdministration | null> {
+  const database = await getDatabase();
+  const entry = await database.get(STORE, "admin-pending:" + scopedStorageKey(scope));
+  if (!entry) return null;
+  if (entry.scope?.churchId !== scope.churchId || entry.scope?.userId !== scope.userId || entry.request?.churchId !== scope.churchId) throw new Error("Administration recovery belongs to a different account.");
+  return entry;
+}
+export async function preserveAdministration(scope: StorageScope, request: Record<string, unknown>) {
+  if (request.churchId !== scope.churchId || typeof request.id !== "string") throw new Error("An account-scoped administration request is required.");
+  const existing = await pendingAdministration(scope);
+  if (existing && JSON.stringify(existing.request) !== JSON.stringify(request)) throw new Error("Review or retry this account’s previous administration request first.");
+  const database = await getDatabase();
+  await database.put(STORE, { request, scope, savedAt: existing?.savedAt ?? new Date().toISOString() }, "admin-pending:" + scopedStorageKey(scope));
+}
+export async function finishAdministration(scope: StorageScope, requestId: string, result: unknown) {
+  const database = await getDatabase();
+  const transaction = database.transaction(STORE, "readwrite");
+  const key = "admin-pending:" + scopedStorageKey(scope);
+  const original = await transaction.store.get(key);
+  if (!original || original.request.id !== requestId) { await transaction.done; return; }
+  await transaction.store.put({ ...original, result, reviewedAt: new Date().toISOString() }, "admin-history:" + scopedStorageKey(scope) + ":" + requestId);
+  await transaction.store.delete(key);
+  await transaction.done;
+}
+
+export type PendingGuideChange = { request: Record<string, unknown>; savedAt: string; scope: StorageScope };
+function validateGuideJournal(entry: PendingGuideChange, scope: StorageScope) {
+  if (entry.scope?.churchId !== scope.churchId || entry.scope?.userId !== scope.userId
+    || entry.request?.churchId !== scope.churchId || entry.request?.userId !== scope.userId || typeof entry.request.id !== "string") {
+    throw new Error("Guide recovery does not match this account and church. The original entry was not changed.");
+  }
+  return entry;
+}
+export async function pendingGuideChange(scope: StorageScope): Promise<PendingGuideChange | null> {
+  const database = await getDatabase();
+  const entry = await database.get(STORE, "guide-pending:" + scopedStorageKey(scope));
+  return entry ? validateGuideJournal(entry, scope) : null;
+}
+export async function preserveGuideChange(scope: StorageScope, request: Record<string, unknown>) {
+  const candidate = validateGuideJournal({ request, scope, savedAt: new Date().toISOString() }, scope);
+  const database = await getDatabase();
+  const transaction = database.transaction(STORE, "readwrite");
+  const key = "guide-pending:" + scopedStorageKey(scope);
+  try {
+    const existing = await transaction.store.get(key);
+    if (existing && JSON.stringify(validateGuideJournal(existing, scope).request) !== JSON.stringify(request)) {
+      throw new Error("A previous guide request needs review. Open Guides to retry it or preserve it as reviewed before starting another.");
+    }
+    await transaction.store.put(existing ?? candidate, key);
+    await transaction.done;
+    return validateGuideJournal(existing ?? candidate, scope);
+  } catch (error) {
+    try { transaction.abort(); } catch { /* The transaction may have failed already. */ }
+    await transaction.done.catch(() => {});
+    throw error;
+  }
+}
+export async function finishGuideChange(scope: StorageScope, requestId: string, result: unknown) {
+  const database = await getDatabase();
+  const transaction = database.transaction(STORE, "readwrite");
+  const key = "guide-pending:" + scopedStorageKey(scope);
+  const original = await transaction.store.get(key);
+  if (!original || original.request?.id !== requestId) { await transaction.done; return; }
+  try {
+    validateGuideJournal(original, scope);
+    await transaction.store.put({ ...original, result, reviewedAt: new Date().toISOString() }, "guide-history:" + scopedStorageKey(scope) + ":" + requestId);
+    await transaction.store.delete(key);
+    await transaction.done;
+  } catch (error) {
+    try { transaction.abort(); } catch { /* Keep a failed original available for review. */ }
+    await transaction.done.catch(() => {});
+    throw error;
+  }
+}
+
+/** Available even when membership has been revoked: only the signed-in
+ * account's authored work, never its old read cache or a whole church export. */
+export async function authoredDeviceRecovery(scope: StorageScope) {
+  const database = await getDatabase();
+  const scopeKey = scopedStorageKey(scope);
+  const current = await database.get(STORE, scopeKey);
+  const keys = await database.getAllKeys(STORE);
+  const authored: ReturnType<typeof authoredRecovery>[] = [];
+  let supervisedCopies = 0;
+  const add = (data: unknown) => {
+    if (!data) return;
+    try { authored.push(authoredRecovery(data, scope)); } catch { supervisedCopies++; }
+  };
+  add(current);
+  const ownsLegacy = await database.get(STORE, "legacy_owner") === scopeKey;
+  for (const key of keys) {
+    if (typeof key !== "string" || !archiveKeyAllowed(key, scopeKey, ownsLegacy)) continue;
+    const record = await database.get(STORE, key);
+    add(key.startsWith("recovery:") ? record?.data : record);
+  }
+  const administration = [];
+  const guideChanges = [];
+  for (const key of keys) {
+    if (typeof key !== "string" || !(key === "admin-pending:" + scopeKey || key.startsWith("admin-history:" + scopeKey + ":"))) continue;
+    const record = await database.get(STORE, key);
+    if (record?.scope?.userId === scope.userId && record.scope.churchId === scope.churchId && record.request?.churchId === scope.churchId) administration.push(record);
+  }
+  for (const key of keys) {
+    if (typeof key !== "string" || !(key === "guide-pending:" + scopeKey || key.startsWith("guide-history:" + scopeKey + ":"))) continue;
+    const record = await database.get(STORE, key);
+    try { if (record) guideChanges.push(validateGuideJournal(record, scope)); } catch { supervisedCopies++; }
+  }
+  return { format: "neighborwalk-authored-device-recovery", formatVersion: 1, scope, authored, administration, guideChanges, supervisedCopies,
+    notice: "Only this account’s authored transactions, administration and guide-change journals. No cached church records. Older copies without reliable authorship remain on the device for supervised recovery." };
 }
 
 export async function replaceNeighborWalkData(candidate: unknown): Promise<NeighborWalkData> {
@@ -228,5 +476,6 @@ export async function importNeighborWalkFile(file: File): Promise<NeighborWalkDa
   const text = await file.text();
   const raw = JSON.parse(text) as { data?: unknown; format?: string };
   const candidate = raw?.format === "neighborwalk-backup" ? raw.data : raw;
-  return replaceNeighborWalkData(candidate);
+  // Parsing an upload is not permission to overwrite any local or remote data.
+  return neighborWalkDataSchema.parse(migrateNeighborWalkData(candidate));
 }

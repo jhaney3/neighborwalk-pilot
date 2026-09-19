@@ -3,6 +3,7 @@ import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 import { isProductionApp } from "../lib/environment";
+import { InstallPromptCapture } from "../components/InstallPromptCapture";
 
 const PRODUCTION_ORIGIN = "https://neighborwalk-pilot.vercel.app";
 
@@ -27,8 +28,8 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   metadataBase: metadataOrigin(),
-  title: "NeighborWalk — Neighborhood outreach, kept in order",
-  description: "An offline-ready territory, visit, follow-up, and conversation companion for church outreach teams.",
+  title: "NeighborWalk — Go together. Follow through personally.",
+  description: "Turn neighborhood conversations into personal follow-through. Shared outings, owned next steps, and thoughtful care handoffs for church teams.",
   applicationName: "NeighborWalk",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "NeighborWalk" },
@@ -36,14 +37,14 @@ export const metadata: Metadata = {
   icons: { icon: "/favicon.svg", apple: "/apple-touch-icon.png" },
   openGraph: {
     title: "NeighborWalk",
-    description: "Neighborhood outreach, kept in order.",
+    description: "Turn neighborhood conversations into personal follow-through.",
     type: "website",
     images: [{ url: "/og.png", width: 1728, height: 909, alt: "NeighborWalk neighborhood outreach field app" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "NeighborWalk",
-    description: "Neighborhood outreach, kept in order.",
+    description: "Turn neighborhood conversations into personal follow-through.",
     images: ["/og.png"],
   },
 };
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body suppressHydrationWarning className={`${archivo.variable} ${plexMono.variable}`}>
+        <InstallPromptCapture />
         {!isProductionApp && <div className="sandbox-banner" role="status">Test workspace · Changes stay separate from production</div>}
         {children}
       </body>

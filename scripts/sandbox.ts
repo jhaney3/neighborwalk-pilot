@@ -6,14 +6,16 @@ import { createClient } from "@supabase/supabase-js";
 import { assertSafeSupabaseUrl, LOCAL_SUPABASE_URL } from "../lib/environment";
 import { createSeedData } from "../lib/seed";
 import { neighborWalkDataSchema, type NeighborWalkData } from "../lib/domain";
-import { personInsertForCreator, volunteerIdForUser, withoutSnapshotDiscipleship } from "../lib/discipleship";
+import { volunteerIdForUser } from "../lib/discipleship";
+import { calendarDate } from "../lib/calendar";
+import type { CommandOperation } from "../lib/command-schema";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
 const cli = resolve("node_modules/.bin/supabase");
 const runtime = resolve("work/runtime");
 const databaseUrl = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
-const churchId = "00000000-0000-4000-8000-000000000001";
+const churchId = process.argv[2] === "seed-check" ? "00000000-0000-4000-8000-000000000099" : "00000000-0000-4000-8000-000000000001";
 const password = "NeighborWalk-test-123!";
 const accounts = [
   { email: "leader@neighborwalk.test", name: "Test Leader", role: "leader" },
@@ -24,7 +26,7 @@ mkdirSync(runtime, { recursive: true });
 // These commands have no linked-project option and never load production credentials.
 const cliEnv = { ...process.env };
 delete cliEnv.SUPABASE_ACCESS_TOKEN;
-if (process.platform === "linux") cliEnv.DOCKER_HOST = `unix://${runtime}/docker.sock`;
+if (!cliEnv.DOCKER_HOST && existsSync(resolve(runtime, "docker.sock"))) cliEnv.DOCKER_HOST = `unix://${runtime}/docker.sock`;
 
 function runCli(args: string[]) {
   return execFileSync(cli, args, { env: cliEnv, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
@@ -70,17 +72,23 @@ function configureApp(settings: Record<string, string>) {
   writeFileSync(path, next, { mode: 0o600 });
 }
 
-async function seed() {
+async function seed(rehearsal = false) {
   const settings = localSettings();
-  if (sql(`select count(*) from public.workspace_snapshots where church_id = '${churchId}';`) !== "0") {
+  if (sql(`select count(*) from public.outreach_outings where church_id = '${churchId}';`) !== "0") {
+    if (rehearsal) throw new Error("The seed-rehearsal church must be empty. Nothing was changed.");
     console.log("Existing sandbox records preserved.");
     return;
   }
   const admin = createClient(LOCAL_SUPABASE_URL, settings.SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-  const existing = await admin.auth.admin.listUsers();
+  const existing = rehearsal ? { data: { users: [] }, error: null } : await admin.auth.admin.listUsers();
   if (existing.error) throw existing.error;
   const users = [];
   for (const account of accounts) {
+    if (rehearsal) {
+      const id = account.role === "leader" ? "00000000-0000-4000-8000-000000000091" : "00000000-0000-4000-8000-000000000092";
+      users.push({ ...account, email: "rehearsal-" + account.email, id, volunteerId: volunteerIdForUser(id) });
+      continue;
+    }
     let user = existing.data.users.find((candidate) => candidate.email === account.email);
     if (!user) {
       const created = await admin.auth.admin.createUser({ email: account.email, password, email_confirm: true, user_metadata: { full_name: account.name } });
@@ -93,8 +101,11 @@ async function seed() {
   const sample = createSeedData();
   const oldChurchId = sample.church.id;
   const oldVolunteers = new Set(sample.volunteers.map((volunteer) => volunteer.id));
+  const sampleIds = new Set([...sample.events, ...sample.teams, ...sample.territories, ...sample.properties, ...sample.residents,
+    ...sample.visits, ...sample.personNotes, ...sample.followUps, ...(sample.assignments ?? [])].map((record) => record.id));
   const data = JSON.parse(JSON.stringify(sample, (_key, value) => {
     if (value === oldChurchId) return churchId;
+    if (rehearsal && typeof value === "string" && sampleIds.has(value)) return "rehearsal_" + value;
     return typeof value === "string" && oldVolunteers.has(value) ? leader.volunteerId : value;
   })) as NeighborWalkData;
   data.church.name = "NeighborWalk Test Church";
@@ -104,41 +115,59 @@ async function seed() {
   data.audit = [];
   data.preferences.activeVolunteerId = leader.volunteerId;
   neighborWalkDataSchema.parse(data);
-  const statements = ["begin;", insert("churches", {
+  const statements = ["begin;"];
+  // Dedicated synthetic identities exist only inside the rollback transaction.
+  // No real account or existing sandbox membership is touched.
+  if (rehearsal) for (const user of users) statements.push(`insert into auth.users(id,email,aud,role,is_anonymous) values('${user.id}','${user.email}','authenticated','authenticated',false);`);
+  statements.push(insert("churches", {
     id: churchId, name: data.church.name, created_by: leader.id,
     timezone: data.church.timezone, retention_days: data.church.retentionDays,
     default_follow_up_days: data.church.defaultFollowUpDays, note_character_limit: data.church.noteCharacterLimit,
-  })];
+  }));
   for (const user of users) statements.push(insert("church_memberships", {
     church_id: churchId, user_id: user.id, role: user.role, active: true,
     member_email: user.email, display_name: user.name,
   }));
-  statements.push(insert("workspace_snapshots", { church_id: churchId, schema_version: data.schemaVersion, data: withoutSnapshotDiscipleship(data), updated_by: leader.id }));
-  for (const person of data.residents) statements.push(insert("discipleship_people", personInsertForCreator(person, churchId, leader.id)));
-  for (const note of data.personNotes) statements.push(insert("discipleship_person_notes", {
-    id: note.id, church_id: churchId, person_id: note.residentId, author_id: leader.id,
-    kind: note.kind, body: note.body, created_at: note.createdAt,
-  }));
-  for (const task of data.followUps.filter((task) => task.residentId)) statements.push(insert("discipleship_follow_ups", {
-    id: task.id, church_id: churchId, person_id: task.residentId, property_id: task.propertyId,
-    source_visit_id: task.sourceVisitId, created_by: leader.id, due_at: task.dueAt,
-    status: task.status, note: task.note, history: task.history, created_at: task.createdAt,
-  }));
+  const operations: CommandOperation[] = [];
+  const add = (entityType: CommandOperation["entityType"], records: { id: string }[]) => {
+    for (const record of records) operations.push({ entityType, entityId: record.id, operation: "upsert", expectedVersion: 0, record });
+  };
+  add("event", data.events.map((e) => ({ ...e, status: "draft" })));
+  add("team", data.teams);
+  add("territory", data.territories);
+  add("property", data.properties);
+  add("resident", data.residents.map((p) => ({ ...p, name: p.name || "Fictional sample person" })));
+  add("visit", data.visits.map((v) => ({ ...v, objectiveNote: v.residentId ? undefined : v.objectiveNote })));
+  add("person_note", data.personNotes);
+  add("follow_up", data.followUps.map((t) => ({ ...t, dueAt: calendarDate(t.dueAt, data.church.timezone) })));
+  add("assignment", (data.assignments ?? []).map((a) => ({ ...a, status: "assigned" })));
+  // A short-lived synthetic session is local-only and removed in the same
+  // transaction after seeding; do not weaken production authorization for fixtures.
+  const seedSessionId = crypto.randomUUID();
+  statements.push(`insert into auth.sessions(id,user_id,not_after) values('${seedSessionId}','${leader.id}',now()+interval '5 minutes');`);
+  statements.push(`select set_config('request.jwt.claims',${literal({ sub: leader.id, session_id: seedSessionId, role: "authenticated", is_anonymous: false })}::text,true);`, "set local role authenticated;");
+  for (let offset = 0; offset < operations.length; offset += 60) statements.push(`select public.outreach_apply_command(${literal({
+    id: "fictional-seed-" + offset, schemaVersion: 1, churchId, userId: leader.id, createdAt: new Date().toISOString(), operations: operations.slice(offset, offset + 60),
+  })});`);
+  statements.push("reset role;");
   statements.push(insert("conversation_guides", {
-    id: "00000000-0000-4000-8000-000000000002", church_id: churchId, scope: "church",
+    id: rehearsal ? "00000000-0000-4000-8000-000000000098" : "00000000-0000-4000-8000-000000000002", church_id: churchId, scope: "church",
     title: "Test conversation guide", description: "Fictional practice workspace", steps: data.guide,
     sort_order: 0, created_by: leader.id, updated_by: leader.id,
   }));
   // Synthetic rectangles exercise parcel loading without copying real addresses or geometry.
   for (const [index, property] of data.properties.entries()) {
+    if (!property.coordinates) continue;
     const [lng, lat] = property.coordinates;
     statements.push(`insert into public.parcels (county_fips, gislink, situs_address, property_class, land_use, is_residential, geometry)
       values ('17031', 'sandbox-${index}', ${literal(property.address)} #>> '{}', 'Synthetic test parcel', 'Test fixture', true,
       extensions.st_multi(extensions.st_makeenvelope(${lng - 0.00015}, ${lat - 0.00012}, ${lng + 0.00015}, ${lat + 0.00012}, 4326))) on conflict do nothing;`);
   }
-  statements.push("commit;");
+  statements.push(`delete from auth.sessions where id='${seedSessionId}' and user_id='${leader.id}';`);
+  statements.push(rehearsal ? "rollback;" : "commit;");
   sql(statements.join("\n"));
-  console.log("Created a fictional church workspace, two test accounts, guides, people, tasks, and synthetic parcels.");
+  console.log(rehearsal ? "PASS: fresh normalized fixture seed. All church records rolled back; existing sandbox records preserved."
+    : "Created a fictional church workspace, two test accounts, guides, people, tasks, and synthetic parcels.");
 }
 
 async function verify() {
@@ -146,21 +175,28 @@ async function verify() {
   const client = createClient(LOCAL_SUPABASE_URL, settings.ANON_KEY, { auth: { persistSession: false } });
   const login = await client.auth.signInWithPassword({ email: accounts[0].email, password });
   if (login.error) throw login.error;
-  const snapshot = await client.from("workspace_snapshots").select("data, revision").eq("church_id", churchId).single();
-  if (snapshot.error) throw snapshot.error;
-  neighborWalkDataSchema.parse(snapshot.data.data);
+  const info = await client.rpc("outreach_workspace_info", { target_church: churchId });
+  if (info.error || info.data?.apiVersion !== 1) throw info.error ?? new Error("Normalized workspace API did not load.");
   const parcels = await client.rpc("parcels_in_view_v2", { min_lat: 41.88, min_long: -87.81, max_lat: 41.90, max_long: -87.77, result_limit: 5000 });
   if (parcels.error || !parcels.data?.length) throw parcels.error ?? new Error("Synthetic parcels did not load.");
-  const revision = snapshot.data.revision;
-  const saved = await client.from("workspace_snapshots").update({ data: snapshot.data.data }).eq("church_id", churchId).eq("revision", revision).select("revision").single();
-  if (saved.error || saved.data.revision !== revision + 1) throw saved.error ?? new Error("Local save failed.");
+  const deniedLegacyWrite = await client.from("workspace_snapshots").update({ schema_version: 11 }).eq("church_id", churchId);
+  if (!deniedLegacyWrite.error) throw new Error("Legacy whole-workspace writes were not revoked.");
   const testPersonId = `sandbox_check_${crypto.randomUUID()}`;
+  let version = 0;
+  const apply = async (operation: "upsert" | "delete", record?: Record<string, unknown>) => {
+    const command = { schemaVersion: 1, id: crypto.randomUUID(), churchId, userId: login.data.user.id, createdAt: new Date().toISOString(),
+      operations: [{ entityType: "resident", entityId: testPersonId, operation, expectedVersion: version, record }] };
+    const result = await client.rpc("outreach_apply_command", { command });
+    if (result.error) throw result.error;
+    const retry = await client.rpc("outreach_apply_command", { command });
+    if (retry.error || JSON.stringify(retry.data) !== JSON.stringify(result.data)) throw retry.error ?? new Error("Idempotent retry returned a different receipt.");
+    version += 1;
+  };
   try {
-    const person = personInsertForCreator({ ...createSeedData().residents[0], id: testPersonId, propertyId: snapshot.data.data.properties[0].id }, churchId, login.data.user.id);
-    const created = await client.from("discipleship_people").insert(person);
-    if (created.error) throw created.error;
-    const edited = await client.from("discipleship_people").update({ name: "Updated sandbox check" }).eq("id", testPersonId).select("name").single();
-    if (edited.error || edited.data.name !== "Updated sandbox check") throw edited.error ?? new Error("Local edit failed.");
+    await apply("upsert", { name: "Fictional sandbox check", preferredContact: "none" });
+    await apply("upsert", { name: "Updated sandbox check", preferredContact: "none" });
+    const edited = await client.from("discipleship_people").select("name,property_id").eq("id", testPersonId).single();
+    if (edited.error || edited.data.name !== "Updated sandbox check" || edited.data.property_id !== null) throw edited.error ?? new Error("Address-optional persisted edit failed.");
     const volunteer = createClient(LOCAL_SUPABASE_URL, settings.ANON_KEY, { auth: { persistSession: false } });
     const volunteerLogin = await volunteer.auth.signInWithPassword({ email: accounts[1].email, password });
     if (volunteerLogin.error) throw volunteerLogin.error;
@@ -168,20 +204,22 @@ async function verify() {
     if (privateRecord.error || privateRecord.data.length) throw privateRecord.error ?? new Error("Private person record was visible to another member.");
     await volunteer.auth.signOut();
   } finally {
-    const removed = await client.from("discipleship_people").delete().eq("id", testPersonId);
-    if (removed.error) console.error("Could not remove the temporary local test person:", removed.error.message);
+    if (version) await apply("delete");
   }
   const deleted = await client.from("discipleship_people").select("id").eq("id", testPersonId);
   if (deleted.error || deleted.data.length) throw deleted.error ?? new Error("Local deletion failed.");
   await client.auth.signOut();
   const denied = await client.from("workspace_snapshots").select("church_id");
   if (!denied.error && denied.data?.length) throw new Error("Unauthenticated access unexpectedly succeeded.");
-  console.log(`Verified local sign-in, schema, ${parcels.data.length} parcels, a persisted save, person creation/edit/deletion, member privacy, and blocked unauthenticated access.`);
+  console.log(`Verified local sign-in, normalized API, ${parcels.data.length} parcels, transactional person creation/edit/archive, idempotent receipts, member privacy and revoked legacy writes.`);
 }
 
 const command = process.argv[2];
 if (command === "start") {
-  if (process.platform === "linux") execFileSync("bash", ["scripts/start-rootless-docker.sh"], { stdio: "inherit" });
+  if (process.platform === "linux" && !process.env.CI) {
+    execFileSync("bash", ["scripts/start-rootless-docker.sh"], { stdio: "inherit" });
+    cliEnv.DOCKER_HOST = `unix://${runtime}/docker.sock`;
+  }
   console.log("Starting the isolated Supabase services. First startup downloads container images.");
   const log = openSync(resolve(runtime, "supabase-start.log"), "a");
   try {
@@ -197,6 +235,8 @@ if (command === "start") {
   console.log("Sandbox stopped. Its data is retained.");
 } else if (command === "seed") {
   await seed();
+} else if (command === "seed-check") {
+  await seed(true);
 } else if (command === "verify") {
   await verify();
 } else if (command === "status") {

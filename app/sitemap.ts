@@ -1,0 +1,9 @@
+import type { MetadataRoute } from "next";
+import { publicPages } from "../components/PublicSite";
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://neighborwalk-pilot.vercel.app";
+  return ["", ...Object.keys(publicPages).map((page) => `/${page}`)].map((path) => ({
+    url: origin + path, lastModified: "2026-09-11", changeFrequency: "monthly", priority: path ? 0.7 : 1,
+  }));
+}

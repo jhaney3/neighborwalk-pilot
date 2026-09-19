@@ -1,84 +1,94 @@
+importScripts("/sw-build.js");
 const CACHE_SCOPE = new URL(self.location.href).searchParams.has("sandbox") ? "-sandbox" : "";
-const APP_CACHE = `neighborwalk-app-v16${CACHE_SCOPE}`;
-const MAP_CACHE = `neighborwalk-map-v2${CACHE_SCOPE}`;
-const CORE = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
-const MAP_CACHE_LIMIT = 180;
+const APP_CACHE = `neighborwalk-app-${self.NEIGHBORWALK_BUILD.version}${CACHE_SCOPE}`;
+const CORE = ["/", "/app/today", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", ...self.NEIGHBORWALK_BUILD.assets];
 const STATIC_DESTINATIONS = new Set(["style", "script", "worker", "image", "font", "manifest"]);
+const PUBLIC_PAGES = new Set(["/", "/how-it-works", "/pricing", "/trust", "/help", "/pilot", "/privacy", "/terms", "/demo"]);
+function preparedAppPath(pathname) {
+  const parts = pathname.split("/").filter(Boolean).slice(1);
+  if (!pathname.startsWith("/app/") || !["today", "outreach", "locations", "people", "followups", "guides", "leader", "settings", "more", "recovery", "data"].includes(parts[0])) return false;
+  if (parts.length === 1) return true;
+  if (!/^[A-Za-z0-9_-]{1,240}$/.test(parts[1] || "")) return false;
+  return (parts.length === 2 && ["outreach", "people", "locations", "followups", "guides"].includes(parts[0]))
+    || (parts.length === 3 && parts[0] === "outreach" && parts[2] === "field");
+}
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(APP_CACHE).then((cache) => cache.addAll(CORE)).then(() => self.skipWaiting()));
+  // Do not replace the running app while a volunteer has unsent work.
+  // The browser activates this worker after existing clients have closed.
+  event.waitUntil(caches.open(APP_CACHE).then((cache) => cache.addAll(CORE.map((path) => new Request(new URL(path, self.location.origin), { credentials: "omit", cache: "reload" })))).catch(async (error) => {
+    await caches.delete(APP_CACHE);
+    throw error;
+  }));
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => ![APP_CACHE, MAP_CACHE].includes(key)).map((key) => caches.delete(key))))
-      .then(() => self.clients.claim()),
-  );
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) =>
+    (key.startsWith("neighborwalk-app-") || key.startsWith("neighborwalk-map-"))
+    && (CACHE_SCOPE ? key.endsWith("-sandbox") : !key.endsWith("-sandbox"))
+    && key !== APP_CACHE
+  ).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
 });
 
-async function trimCache(cacheName, limit) {
-  const cache = await caches.open(cacheName);
-  const keys = await cache.keys();
-  if (keys.length <= limit) return;
-  await Promise.all(keys.slice(0, keys.length - limit).map((key) => cache.delete(key)));
-}
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "OFFLINE_STATUS" || !event.ports?.[0]) return;
+  event.waitUntil((async () => {
+    const cache = await caches.open(APP_CACHE);
+    const entries = await Promise.all(CORE.map((path) => cache.match(path)));
+    event.ports[0].postMessage({ ready: entries.every(Boolean), build: self.NEIGHBORWALK_BUILD.version, bytes: self.NEIGHBORWALK_BUILD.bytes });
+  })());
+});
 
-async function networkFirst(request) {
+async function navigation(request) {
   const cache = await caches.open(APP_CACHE);
+  if (new URL(request.url).pathname.startsWith("/app/")) {
+    // Pin the authenticated app shell to this worker's fully prepared build.
+    // A new worker takes over only after old tabs close, not mid-fieldwork.
+    const shell = await cache.match("/app/today");
+    if (shell) return shell;
+  }
   try {
     const response = await fetch(request);
     if (response.ok) await cache.put(request, response.clone());
     return response;
   } catch {
-    return (await cache.match(request)) || (await cache.match("/")) || new Response("NeighborWalk is offline.", { status: 503 });
+    const fallback = new URL(request.url).pathname.startsWith("/app") ? "/app/today" : "/";
+    return await cache.match(request) || await cache.match(fallback) ||
+      new Response("NeighborWalk is offline. Reconnect to prepare this device.", { status: 503 });
   }
 }
 
-async function staleWhileRevalidate(request) {
+async function staticAsset(request) {
   const cache = await caches.open(APP_CACHE);
-  const cached = await cache.match(request);
-  const network = fetch(request).then(async (response) => {
-    if (response.ok) await cache.put(request, response.clone());
+  const pathname = new URL(request.url).pathname;
+  const cached = await cache.match(pathname);
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
+    if (response.ok) await cache.put(pathname, response.clone());
     return response;
-  }).catch(() => cached);
-  return cached || network;
-}
-
-async function cacheMapResource(request) {
-  const cache = await caches.open(MAP_CACHE);
-  const cached = await cache.match(request);
-  const network = fetch(request).then(async (response) => {
-    if (response.ok || response.type === "opaque") {
-      await cache.put(request, response.clone());
-      void trimCache(MAP_CACHE, MAP_CACHE_LIMIT);
-    }
-    return response;
-  }).catch(() => cached || new Response("Map data is unavailable offline.", { status: 503 }));
-  if (cached) {
-    void network;
-    return cached;
+  } catch {
+    return new Response("This resource is not prepared offline.", { status: 503 });
   }
-  return network;
 }
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.pathname.startsWith("/api/")
-    || url.pathname.startsWith("/v1/")) return;
+  // Authentication, API data, external maps, and token-bearing URLs are never
+  // stored here. Offline church records live in account-scoped IndexedDB.
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")
+    || url.pathname === "/login" || url.pathname.startsWith("/auth/") || url.pathname === "/invite" || url.pathname.startsWith("/invite/")) return;
   if (request.mode === "navigate") {
-    event.respondWith(networkFirst(request));
+    // Unknown paths remain server 404s, not a cached Today screen. New public
+    // routes must be deliberately reviewed before becoming cacheable.
+    if (!PUBLIC_PAGES.has(url.pathname) && !preparedAppPath(url.pathname)) return;
+    const safeAppQuery = url.pathname === "/app/followups" && [...url.searchParams].every(([key, value]) =>
+      key === "person" ? /^[A-Za-z0-9_-]{1,240}$/.test(value) : key === "scope" && ["mine", "all", "team", "unowned", "declined"].includes(value));
+    if (!url.search || safeAppQuery) event.respondWith(navigation(request));
     return;
   }
-  const isCacheableMapResource = url.hostname === "tiles.openfreemap.org"
-    || (url.hostname === "api.maptiler.com" && !url.pathname.startsWith("/geocoding/"));
-  if (isCacheableMapResource) {
-    event.respondWith(cacheMapResource(request));
-    return;
-  }
-  if (url.origin === self.location.origin && STATIC_DESTINATIONS.has(request.destination)) {
-    event.respondWith(staleWhileRevalidate(request));
-  }
+  const safeAssetQuery = [...url.searchParams].every(([key, value]) => key === "dpl" && /^[A-Za-z0-9_-]{1,200}$/.test(value));
+  if (STATIC_DESTINATIONS.has(request.destination) && CORE.includes(url.pathname) && safeAssetQuery) event.respondWith(staticAsset(request));
 });

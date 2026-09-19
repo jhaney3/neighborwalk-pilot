@@ -1,43 +1,91 @@
 "use client";
 
 import { Check, KeyRound, Mail, MapPinned, Navigation, ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
 import { NeighborWalkApp } from "../app/NeighborWalkApp";
 import { authErrorMessage, validAuthEmail } from "../lib/auth";
-import { getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
+import { authServiceUnreachable, authStorageKey, getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
 import { isProductionApp } from "../lib/environment";
+import { authenticatedAppPath, safeAppPath } from "../lib/auth-navigation";
+import { pendingInvitation, rememberBrowserInvitation } from "../lib/invitations";
+import { preparedOfflineIdentity, WORKSPACE_CACHE_KEY, type PreparedIdentity } from "../lib/offline-identity";
 
 export function NeighborWalkRoot() {
+  const router = useRouter();
+  const pathname = usePathname();
   const configured = isSupabaseConfigured();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(configured);
+  const [connectionError, setConnectionError] = useState("");
+  const [offlineCandidate, setOfflineCandidate] = useState<PreparedIdentity | null>(null);
+  const [offlineUser, setOfflineUser] = useState<PreparedIdentity | null>(null);
   const [passwordRecovery, setPasswordRecovery] = useState(() => {
     if (typeof window === "undefined") return false;
     return new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
   });
+  const userId = session?.user.id;
+  const email = session?.user.email ?? "";
+  const fullName = session?.user.user_metadata?.full_name;
+  const displayName = session?.user.user_metadata?.name;
+  const name = typeof fullName === "string" ? fullName : typeof displayName === "string" ? displayName : undefined;
+  // Keep the selected cache identity stable while a same-account token refresh
+  // completes, so reconnecting does not replace a store with a write in flight.
+  const workspaceUser = useMemo(() => offlineUser ?? (userId ? { id: userId, email, name } : null), [offlineUser, userId, email, name]);
+
+  useEffect(() => {
+    if (!loading && !connectionError && session && !passwordRecovery && ["/login", "/invite"].includes(pathname)) router.replace(authenticatedAppPath(window.location.search));
+  }, [loading, connectionError, session, passwordRecovery, pathname, router]);
 
   useEffect(() => {
     if (!configured) return;
-    const client = getSupabaseBrowserClient();
+    try { rememberBrowserInvitation(); }
+    catch (error) {
+      queueMicrotask(() => { setConnectionError(error instanceof Error ? error.message : "This browser could not preserve the invitation. Keep the original link and try again after signing in."); setLoading(false); });
+      return;
+    }
+    let client;
+    try { client = getSupabaseBrowserClient(); }
+    catch (error) { queueMicrotask(() => { setConnectionError(error instanceof Error ? error.message : "The workspace connection is unavailable."); setLoading(false); }); return; }
     if (!client) return;
     let active = true;
-    void client.auth.getSession().then(({ data }) => {
+    const prepared = () => !pendingInvitation(window.sessionStorage) ? preparedOfflineIdentity(window.localStorage, authStorageKey()) : null;
+    const checkOffline = async () => {
+      if (!window.location.pathname.startsWith("/app/") || !prepared()) return;
+      const unavailable = await authServiceUnreachable();
+      if (active) setOfflineCandidate(unavailable ? prepared() : null);
+    };
+    const offlineTimer = window.setTimeout(() => { void checkOffline().catch(() => {}); }, 1500);
+    const checkStoredAccess = (event: StorageEvent) => {
+      if (event.key && ![authStorageKey(), WORKSPACE_CACHE_KEY].includes(event.key)) return;
+      const candidate = prepared();
+      setOfflineCandidate((current) => current?.id === candidate?.id ? candidate : null);
+      setOfflineUser((current) => current?.id === candidate?.id ? current : null);
+      if (!candidate) setSession(null);
+    };
+    window.addEventListener("storage", checkStoredAccess);
+    void client.auth.getSession().then(({ data, error }) => {
       if (active) {
+        setConnectionError(error ? authErrorMessage(error) : "");
         setSession(data.session);
         setLoading(false);
       }
-    });
+    }).catch(() => { if (active) { setConnectionError("Sign-in could not be checked. Reconnect and try again. Your device records have not been cleared."); setLoading(false); } });
     const { data: listener } = client.auth.onAuthStateChange((event, nextSession) => {
       if (active) {
         setSession(nextSession);
+        if (nextSession) { setConnectionError(""); setOfflineCandidate(null); setOfflineUser((current) => current?.id === nextSession.user.id ? current : null); }
         if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
-        if (event === "SIGNED_OUT") setPasswordRecovery(false);
+        if (event === "SIGNED_OUT") { setPasswordRecovery(false); setOfflineUser(null); setOfflineCandidate(null); }
         setLoading(false);
       }
     });
     return () => {
       active = false;
+      window.clearTimeout(offlineTimer);
+      window.removeEventListener("storage", checkStoredAccess);
       listener.subscription.unsubscribe();
     };
   }, [configured]);
@@ -49,35 +97,35 @@ export function NeighborWalkRoot() {
     if (error) throw new Error(authErrorMessage(error));
   };
 
-  if (!configured) return <NeighborWalkApp />;
-  if (loading) return <ConnectionLoading />;
-  if (!session) return <SignInScreen />;
-  if (passwordRecovery) return <PasswordRecovery email={session.user.email ?? "your account"} onSave={async (password) => { await updatePassword(password); setPasswordRecovery(false); }} />;
+  if (!configured) return <main className="app-loading"><h1>Workspace connection unavailable</h1><p>Ask the operator to finish connecting this deployment. Real church records will not be replaced with sample data.</p><Link className="button quiet" href="/demo">Explore the separate sample workspace</Link></main>;
+  if (!offlineUser && !session && offlineCandidate && !passwordRecovery) return <main className="auth-shell"><section className="auth-card"><h1>Your prepared workspace is available</h1><p>The sign-in service cannot be reached. This device was checked with your church less than 24 hours ago. You can explicitly reopen its saved records; this is not a new sign-in.</p><p>New work stays on this device until your account and church permissions can be checked online. Signing out or a known access removal disables this option.</p><button className="button primary" onClick={() => {
+    const candidate = !pendingInvitation(window.sessionStorage) ? preparedOfflineIdentity(window.localStorage, authStorageKey()) : null;
+    if (candidate?.id === offlineCandidate.id) { setOfflineUser(candidate); setConnectionError(""); setLoading(false); }
+    else { setOfflineCandidate(null); setConnectionError("This device now needs an online sign-in and membership check. Saved work has not been cleared."); }
+  }}>Open prepared offline workspace</button><button className="button quiet" onClick={() => window.location.reload()}>Retry online sign-in</button></section></main>;
+  if (connectionError && !offlineUser) return <main className="auth-shell"><section className="auth-card"><h1>Check your connection or invitation</h1><p role="alert">{connectionError}</p><p>Nothing was cleared. If an email link opened in another tab, sign in there, then reopen your original church invitation.</p><div className="auth-connection-actions"><button className="button quiet" onClick={() => window.location.reload()}>Try again</button><Link className="button quiet" href="/login">Open sign-in</Link><Link href="/help">Sign-in help</Link></div></section></main>;
+  if (loading && !offlineUser) return <ConnectionLoading />;
+  if (!workspaceUser) return <SignInScreen />;
+  if (passwordRecovery && session) return <PasswordRecovery email={session.user.email ?? "your account"} onSave={async (password) => { await updatePassword(password); setPasswordRecovery(false); }} />;
+  if (["/login", "/invite"].includes(pathname)) return <ConnectionLoading />;
 
   return (
     <NeighborWalkApp
-      supabaseUser={{
-        id: session.user.id,
-        email: session.user.email ?? "",
-        name: typeof session.user.user_metadata?.full_name === "string"
-          ? session.user.user_metadata.full_name
-          : typeof session.user.user_metadata?.name === "string"
-            ? session.user.user_metadata.name
-            : undefined,
-      }}
+      key={workspaceUser.id}
+      supabaseUser={workspaceUser}
       onUpdatePassword={updatePassword}
       onSignOut={async () => {
         const client = getSupabaseBrowserClient();
-        if (client) await client.auth.signOut();
+        if (client) { const { error } = await client.auth.signOut({ scope: "local" }); if (error) throw new Error(authErrorMessage(error)); }
       }}
     />
   );
 }
 
 function authRedirectUrl() {
-  const url = new URL(window.location.origin);
-  const invitation = new URL(window.location.href).searchParams.get("invite");
-  if (invitation) url.searchParams.set("invite", invitation);
+  const url = new URL("/login", window.location.origin);
+  const next = window.location.pathname.startsWith("/app/") ? safeAppPath(window.location.pathname + window.location.search) : authenticatedAppPath(window.location.search);
+  if (next !== "/app/today") url.searchParams.set("next", next);
   return url.toString();
 }
 
@@ -110,25 +158,31 @@ function SignInScreen() {
     return false;
   };
   const clientOrError = () => {
-    const client = getSupabaseBrowserClient();
-    if (!client) setError("The church workspace connection is not available.");
-    return client;
+    try {
+      const client = getSupabaseBrowserClient();
+      if (!client) setError("The church workspace connection is not available.");
+      return client;
+    } catch (error) { setError(authErrorMessage(error)); return null; }
   };
   const begin = (nextAction: Exclude<AuthAction, null>) => {
     setAction(nextAction);
     setError("");
     setConfirmation(null);
   };
+  const runAuthAction = async (nextAction: Exclude<AuthAction, null>, operation: () => Promise<void>) => {
+    begin(nextAction);
+    try { await operation(); }
+    catch (error) { setError(authErrorMessage(error)); }
+    finally { setAction(null); }
+  };
 
   const signInWithGoogle = async () => {
     const client = clientOrError();
     if (!client) return;
-    begin("google");
-    const { error: signInError } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: authRedirectUrl() } });
-    if (signInError) {
-      setAction(null);
-      setError(authErrorMessage(signInError));
-    }
+    await runAuthAction("google", async () => {
+      const { error } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: authRedirectUrl() } });
+      if (error) throw error;
+    });
   };
 
   const submitPassword = async () => {
@@ -139,48 +193,38 @@ function SignInScreen() {
     }
     const client = clientOrError();
     if (!client) return;
-    begin(mode === "signin" ? "password" : "signup");
-    if (mode === "signin") {
-      const { error: signInError } = await client.auth.signInWithPassword({ email: normalizedEmail(), password });
-      setAction(null);
-      if (signInError) setError(authErrorMessage(signInError));
-      return;
-    }
-    const { data, error: signUpError } = await client.auth.signUp({ email: normalizedEmail(), password, options: { emailRedirectTo: authRedirectUrl() } });
-    setAction(null);
-    if (signUpError) {
-      setError(authErrorMessage(signUpError));
-      return;
-    }
-    if (!data.session) setConfirmation({ title: "Confirm your account", detail: `Open the confirmation email sent to ${normalizedEmail()}.` });
+    await runAuthAction(mode === "signin" ? "password" : "signup", async () => {
+      if (mode === "signin") {
+        const { error } = await client.auth.signInWithPassword({ email: normalizedEmail(), password });
+        if (error) throw error;
+        return;
+      }
+      const { data, error } = await client.auth.signUp({ email: normalizedEmail(), password, options: { emailRedirectTo: authRedirectUrl() } });
+      if (error) throw error;
+      if (!data.session) setConfirmation({ title: "Confirm your account", detail: `Open the confirmation email sent to ${normalizedEmail()}.` });
+    });
   };
 
   const sendReset = async () => {
     if (!requireEmail()) return;
     const client = clientOrError();
     if (!client) return;
-    begin("reset");
-    const { error: resetError } = await client.auth.resetPasswordForEmail(normalizedEmail(), { redirectTo: authRedirectUrl() });
-    setAction(null);
-    if (resetError) {
-      setError(authErrorMessage(resetError));
-      return;
-    }
-    setConfirmation({ title: "Check your inbox", detail: `A password reset link was requested for ${normalizedEmail()}.` });
+    await runAuthAction("reset", async () => {
+      const { error } = await client.auth.resetPasswordForEmail(normalizedEmail(), { redirectTo: authRedirectUrl() });
+      if (error) throw error;
+      setConfirmation({ title: "Check your inbox", detail: `A password reset link was requested for ${normalizedEmail()}.` });
+    });
   };
 
   const sendLink = async () => {
     if (!requireEmail()) return;
     const client = clientOrError();
     if (!client) return;
-    begin("link");
-    const { error: signInError } = await client.auth.signInWithOtp({ email: normalizedEmail(), options: { shouldCreateUser: false, emailRedirectTo: authRedirectUrl() } });
-    setAction(null);
-    if (signInError) {
-      setError(authErrorMessage(signInError));
-      return;
-    }
-    setConfirmation({ title: "Check your inbox", detail: `Open the one-time sign-in link requested for ${normalizedEmail()}.` });
+    await runAuthAction("link", async () => {
+      const { error } = await client.auth.signInWithOtp({ email: normalizedEmail(), options: { shouldCreateUser: false, emailRedirectTo: authRedirectUrl() } });
+      if (error) throw error;
+      setConfirmation({ title: "Check your inbox", detail: `Open the one-time sign-in link requested for ${normalizedEmail()}.` });
+    });
   };
 
   const busy = action !== null;
@@ -189,7 +233,7 @@ function SignInScreen() {
       <section className="auth-card" aria-labelledby="signin-title">
         <div className="auth-route" aria-hidden="true"><span><Navigation size={18} /></span><i /><span><MapPinned size={18} /></span></div>
         <p className="eyebrow">NeighborWalk church workspace</p>
-        <h1 id="signin-title">Keep every doorstep accounted for.</h1>
+        <h1 id="signin-title">Pick up where care left off.</h1>
         <p className="auth-intro">{isProductionApp ? "Google is the quickest way in. Password sign-in is also available and does not send an email each time." : "Use your test account here. This workspace has its own data and sign-in."}</p>
         <div className="auth-form">
           {isProductionApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or use your password</span></div></>}
@@ -206,7 +250,8 @@ function SignInScreen() {
           {error && <p className="auth-error" role="alert">{error}</p>}
           <details className="auth-email-fallback"><summary>Use a one-time email link instead</summary><p>This fallback sends an email and may be unavailable when the project email limit is reached.</p><button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}><Mail size={16} />{action === "link" ? "Sending…" : "Send one-time link"}</button></details>
         </div>
-        <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are private to their owner unless shared. Church leaders can oversee the full workspace.</span></div>
+        <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are visible to their owner, church leaders and explicitly shared teammates. Pending handoff recipients and some historical creators may also have access, as shown on the profile.</span></div>
+        <p><Link href="/help">Sign-in help</Link> · <Link href="/">About NeighborWalk</Link> · <Link href="/privacy">Privacy</Link></p>
       </section>
     </main>
   );
@@ -233,5 +278,5 @@ function PasswordRecovery({ email, onSave }: { email: string; onSave: (password:
 }
 
 function ConnectionLoading() {
-  return <main className="app-loading" role="status"><div className="loading-mark"><Navigation size={23} /></div><strong>Opening your church workspace</strong><span>Checking your secure session…</span></main>;
+  return <main className="app-loading"><div className="loading-mark"><Navigation size={23} /></div><h1>Opening your church workspace</h1><span role="status" aria-live="polite">Checking your secure session…</span></main>;
 }

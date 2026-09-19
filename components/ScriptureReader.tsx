@@ -46,7 +46,7 @@ export function ScriptureReader({ references, theme = "dark" }: { references: st
 
   return (
     <div className={`scripture-reader ${theme}`}>
-      <div className="scripture-reference-list" aria-label="Scripture references">
+      <nav className="scripture-reference-list" aria-label="Scripture references">
         <BookOpenText size={15} aria-hidden="true" />
         {references.map((reference) => {
           const active = activeReference === reference;
@@ -56,7 +56,7 @@ export function ScriptureReader({ references, theme = "dark" }: { references: st
             </button>
           );
         })}
-      </div>
+      </nav>
       {activeReference && (
         <div className="scripture-passage" role="region" aria-label={`${activeReference} scripture text`} aria-live="polite">
           {reading?.status === "ready" ? (
