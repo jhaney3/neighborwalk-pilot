@@ -420,7 +420,7 @@ function GuidedConversation({ guideTitle, guideContext, steps, index: requestedI
   return (
     <section className="doorstep-guide" aria-labelledby="doorstep-guide-title">
       <div className="doorstep-guide-heading">
-        <div><p>{guideContext ? `${guideContext} · ` : ""}{guideTitle}</p><h2 id="doorstep-guide-title">{step.title}</h2></div>
+        <div><p className="visually-hidden">{guideContext ? ` · ` : ""}{guideTitle}</p><h2 id="doorstep-guide-title">{step.title}</h2></div>
         <button className="button quiet small doorstep-without-guide" type="button" onClick={onRecordWithoutGuide}>Proceed without guide</button>
       </div>
       <div className="doorstep-progress" role="group" aria-label={`Step ${index + 1} of ${steps.length}`}>

@@ -1,5 +1,7 @@
 # NeighborWalk iOS release guide
 
+See [Apple sign-in and invitations](ios-auth-and-invitations.md) for the new native authentication, shared invitation flow, separate link hosting, and remaining activation requirements.
+
 ## What was built
 
 A separate, locally bundled Capacitor iOS app, with the existing React workspace and Supabase access controls, iOS-only styling, an app icon, launch screen, deep-link authentication, native export/share sheets, AirPrint, haptic tab selection, and app-switcher privacy protection. The landing page is not packaged. The app starts at `/app/today`, showing sign-in when necessary.
@@ -54,7 +56,7 @@ Operational requirements:
 
 Add the exact callback `neighborwalk://auth` (and the trailing-slash form emitted by the configured auth template if applicable) to Supabase Auth's allowed redirect URLs as a separately reviewed configuration change. Test account confirmation, password reset and email-link sign-in on a physical iPhone, both with the app running and fully closed. The app validates the callback scheme/host before passing it to Supabase.
 
-The native app uses email/password and email links. Google sign-in remains on the website and is deliberately excluded from the native build; adding social sign-in later requires a corresponding review of Apple's login-services rule and Sign in with Apple implementation. A native “Have a church invitation?” form accepts existing website invitation links without shipping the website. Universal Links are a future improvement requiring a website association file and an Apple team ID; no associated-domain deployment was made here.
+The native app includes Sign in with Apple, Google through the iOS system authentication sheet, email/password, email links, and optional phone-code sign-in. Apple and SMS providers still need configuring. Shared invitations can be addressed to a phone number or email and accepted by a different signed-in account. Legacy email-bound invitations keep their existing behavior. See [the activation guide](ios-auth-and-invitations.md) for the additive database migration, separately hosted invitation page, Universal Links setup and Apple token revocation required for deletion. No associated-domain deployment was made here.
 
 ### Public policies and support
 

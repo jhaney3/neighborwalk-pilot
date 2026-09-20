@@ -132,7 +132,7 @@ export function SettingsView({
 
   return (
     <div className="content-view settings-view">
-      <ViewHeading eyebrow="Church and device" title="Settings" description={canManage ? "Set ministry guardrails, prepare offline use, and manage workspace data." : "Manage your account, map, reminders, and this device."} />
+      <ViewHeading title="Settings" />
       {message && <div className="settings-message" role="status"><Check size={15} />{message}</div>}
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
       {storageError && <div className="settings-message error" role="alert"><AlertTriangle size={15} />{storageError}</div>}

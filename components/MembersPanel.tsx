@@ -1,5 +1,6 @@
 "use client";
 import { useAsyncAction } from "../lib/use-async-action";
+import { LeaderInvitations } from "./LeaderInvitations";
 import { Modal } from "./ui";
 
 import { Check, Copy, Link2, PencilLine, Plus, RefreshCcw, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
@@ -205,7 +206,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
       </div>
 
       <div className="member-management-grid">
-        <div className="member-invite-card">
+        {isMobileApp ? <LeaderInvitations onChanged={onAccessChanged} /> : <div className="member-invite-card">
           <div className="member-card-heading"><span><UserPlus size={18} /></span><div><strong>Invite a member</strong><small>The link works once and only for this email.</small></div></div>
           <label className="form-field"><span>Email address</span><input type="email" autoComplete="off" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="member@example.com" /></label>
           <label className="form-field"><span>Access level</span><select value={role} onChange={(event) => setRole(event.target.value as "leader" | "volunteer")}><option value="volunteer">Volunteer — field tools only</option><option value="leader">Leader — members, territories, and settings</option></select></label>
@@ -213,7 +214,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
           {createdLink && <div className="created-invitation"><div><Check size={16} /><span><strong>Link ready</strong>Copy it now; the secret token is not shown again after this page refreshes.</span></div><div className="invite-link-row"><input readOnly value={createdLink} onFocus={(event) => event.currentTarget.select()} aria-label="Invitation link" /><button className="button quiet" onClick={() => void copyLink()}><Copy size={14} /> Copy</button></div></div>}
           {message && <p className="member-message" role="status"><Check size={14} />{message}</p>}
           {error && <p className="member-message error" role="alert"><X size={14} />{error}</p>}
-        </div>
+        </div>}
 
         <div className="member-roster-card">
           <div className="member-card-heading"><span><Users size={18} /></span><div><strong>Church roster</strong><small>Roles come from the signed-in account, not this device.</small></div></div>

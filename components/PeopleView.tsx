@@ -352,14 +352,14 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
 
       <div className="person-care-grid">
         <section className={`care-next-card ${nextState}`}>
-          <div><span className="profile-section-label">Follow-up plan</span>{nextFollowUp && <em><CalendarClock size={12} /> {nextState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "long", day: "numeric" })}</em>}</div>
+          <div><span className="profile-section-label">Next step</span>{nextFollowUp && <em><CalendarClock size={12} /> {nextState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "long", day: "numeric" })}</em>}</div>
           {nextFollowUp ? <p>{nextFollowUp.note || "Follow up with this person."}</p> : <p className="care-next-empty">No open follow-up is planned.</p>}
           {openFollowUps.length > 1 && <small>{openFollowUps.length - 1} more open {openFollowUps.length === 2 ? "task" : "tasks"}</small>}
           <div className="care-next-actions">{canEdit && !followUpRestricted && <FollowUpPlanner timezone={data.church.timezone} defaultDays={data.church.defaultFollowUpDays} noteLimit={data.church.noteCharacterLimit} onSave={onAddFollowUp} />}{!followUps && <button onClick={onOpenFollowUps}>Open follow-ups <ChevronRight size={13} /></button>}</div>
         </section>
         <section className="care-owner-card">
-          <span className="profile-section-label">Responsible person</span>
-          <div className="care-owner-identity"><span className="care-owner-avatar" aria-hidden="true">{personInitials(owner?.name)}</span><div><strong>{owner?.name ?? "Choose an owner"}</strong><small>Keeps the relationship moving</small></div></div>
+          <span className="profile-section-label">Owner</span>
+          <div className="care-owner-identity"><span className="care-owner-avatar" aria-hidden="true">{personInitials(owner?.name)}</span><div><strong>{owner?.name ?? "Choose an owner"}</strong></div></div>
           {resident.pendingOwnerId ? <div className="handoff-panel">
             <div className="handoff-panel-heading"><span><Clock3 size={15} /></span><div><strong>{isHandoffRecipient ? "Care handoff requested" : `Waiting on ${pendingOwner?.name ?? "recipient"}`}</strong><small>{isHandoffRecipient ? "You’ve been invited to take responsibility." : "A new responsible person has been invited."}</small></div></div>
             <p>{owner?.name ?? "The current owner"} remains responsible until {isHandoffRecipient ? "you accept" : "the handoff is accepted"}.</p>
@@ -378,12 +378,12 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
       </div>
 
       <section id={`${tabsId}-followups-panel`} role="tabpanel" aria-labelledby={`${tabsId}-followups-tab`} className="person-profile-panel person-profile-followups" hidden={panel !== "followups"}>
-        <div className="person-profile-followups-heading"><div><span className="profile-section-label">Follow-ups</span><h3>Tasks and outcomes</h3></div><small>Complete, reschedule, or review history here.</small></div>
+        <div className="person-profile-followups-heading"><div><h3>Follow-ups</h3></div></div>
         {followUps ?? <div className="person-tab-empty"><CalendarClock size={22} /><p>Open the follow-up workspace to review this person’s tasks and outcomes.</p><button className="button quiet small" onClick={onOpenFollowUps}>Open follow-ups</button></div>}
       </section>
 
       <section id={`${tabsId}-activity-panel`} role="tabpanel" aria-labelledby={`${tabsId}-activity-tab`} className="person-profile-panel person-notes-section" hidden={panel !== "activity"}>
-        <div className="person-notes-heading"><div><span className="profile-section-label">Notes</span><h3>One clear history</h3></div><span>{timeline.length} activity entries</span></div>
+        <div className="person-notes-heading"><div><h3>Activity</h3></div><span>{timeline.length}</span></div>
         <div className="person-note-composer">
           <div><MessageCircle size={17} /><strong>Add a note</strong><small>Every person note goes here.</small></div>
           <label>Note kind<select disabled={action.busy} value={noteKind} onChange={(event) => setNoteKind(event.target.value as PersonNoteKind)}>{Object.entries(personNoteKindLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>

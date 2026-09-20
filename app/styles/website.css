@@ -1,3 +1,15 @@
+/* The marketing site keeps its own editorial typography. The workspace reset
+   in foundation.css zeroes heading/paragraph margins and restyles buttons,
+   so restore document defaults inside .public-site before its own rules. */
+.public-site { color-scheme: light; font-family: var(--font-archivo), var(--font-sans); }
+.public-site p { margin: 1em 0; }
+.public-site h1, .public-site h2, .public-site h3, .public-site h4 { color: inherit; letter-spacing: normal; font-weight: 700; line-height: normal; }
+.public-site h3 { margin: 1em 0 .5em; font-size: 1.17em; }
+.public-site h4 { margin: 1.33em 0; font-size: 1em; }
+.public-site strong, .public-site b { font-weight: 700; }
+.public-site small { font-size: smaller; }
+.public-site button { color: inherit; }
+.public-site input:not([type="checkbox"]):not([type="radio"]), .public-site select, .public-site textarea { min-height: 0; padding: revert; border: revert; border-radius: revert; background: revert; font-size: inherit; }
 .public-site { background: #faf9f4; color: #19392e; font-size: 17px; line-height: 1.65; min-height: 100vh; }
 .public-site a { color: inherit; text-underline-offset: 4px; }
 .public-site a:focus-visible { outline: 3px solid #ad7820; outline-offset: 5px; }

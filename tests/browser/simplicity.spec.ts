@@ -1,10 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { DEMO_CENTER } from "../../lib/seed";
 
 const destinations = ["Home", "Walks", "People", "More"] as const;
 
 async function openDemo(page: Page) {
-  const center = [-87.7824, 41.8856] as const;
+  const center = DEMO_CENTER;
   const parcels = Array.from({ length: 6 }, (_, index) => {
     const column = index % 3;
     const row = Math.floor(index / 3);
@@ -26,11 +27,11 @@ async function openDemo(page: Page) {
     contentType: "application/json",
     body: JSON.stringify({ release: "playwright-test-streets-v1", source: "Playwright test GIS fixture", complete: true, truncated: false, features: [
       { id: "playwright-test-main-west", name: "Test Main Street", road_class: "residential", subclass: null,
-        geometry: { type: "LineString", coordinates: [[-87.7849, 41.8856], [-87.7824, 41.8856]] } },
+        geometry: { type: "LineString", coordinates: [[center[0] - 0.0025, center[1]], [center[0], center[1]]] } },
       { id: "playwright-test-main-east", name: "Test Main Street", road_class: "residential", subclass: null,
-        geometry: { type: "LineString", coordinates: [[-87.7824, 41.8856], [-87.7799, 41.8856]] } },
+        geometry: { type: "LineString", coordinates: [[center[0], center[1]], [center[0] + 0.0025, center[1]]] } },
       { id: "playwright-test-cross", name: "Test Church Avenue", road_class: "residential", subclass: null,
-        geometry: { type: "LineString", coordinates: [[-87.7824, 41.8838], [-87.7824, 41.8874]] } },
+        geometry: { type: "LineString", coordinates: [[center[0], center[1] - 0.0018], [center[0], center[1] + 0.0018]] } },
     ] }),
   }));
   await page.route(/https:\/\/api\.maptiler\.com\/maps\/streets-v4\/style\.json.*/, (route) => route.fulfill({
@@ -247,7 +248,7 @@ test("People opens to follow-ups, switches to the directory, and keeps task link
 test("map-first walk setup resumes assigned drafts and keeps leader responses out of Home", async ({ page }) => {
   const suffix = randomUUID().slice(0, 8);
   const walkName = `Fictional simplicity walk ${suffix}`;
-  const parentName = "Oakwood East";
+  const parentName = "Crockett Heights";
 
   await openDemo(page);
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
@@ -356,7 +357,7 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
   expect(finalDraftSnapshot).toEqual(draftSnapshot);
 
   await page.getByRole("button", { name: "Manage crews", exact: true }).click();
-  let crewDialog = page.getByRole("dialog", { name: "Manage tonight’s crews", exact: true });
+  let crewDialog = page.getByRole("dialog", { name: "Crews", exact: true });
   await crewDialog.getByRole("button", { name: "Everyone is here", exact: true }).click();
   const firstCrewTarget = crewDialog.locator(".walk-crew-target").filter({ hasText: parentName });
   await firstCrewTarget.locator("summary").click();
@@ -366,13 +367,13 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
   await expect(assignmentCard).toContainText("Erica, Maya, Jordan, Sam, Noah, Ruth, Eli");
 
   await page.getByRole("button", { name: "Manage crews", exact: true }).click();
-  crewDialog = page.getByRole("dialog", { name: "Manage tonight’s crews", exact: true });
+  crewDialog = page.getByRole("dialog", { name: "Crews", exact: true });
   await crewDialog.getByRole("group", { name: "People here tonight", exact: true }).getByRole("button", { name: "Jordan", exact: true }).click();
   await crewDialog.getByRole("button", { name: "Save crew changes", exact: true }).click();
   await expect(assignmentCard).not.toContainText("Jordan");
 
   await page.getByRole("button", { name: "Manage crews", exact: true }).click();
-  crewDialog = page.getByRole("dialog", { name: "Manage tonight’s crews", exact: true });
+  crewDialog = page.getByRole("dialog", { name: "Crews", exact: true });
   await crewDialog.getByRole("group", { name: "People here tonight", exact: true }).getByRole("button", { name: "Jordan", exact: true }).click();
   const liveCrewTarget = crewDialog.locator(".walk-crew-target").filter({ hasText: parentName });
   await liveCrewTarget.locator("summary").click();
@@ -406,11 +407,11 @@ test("recording no answer never asks for a person", async ({ page }) => {
   await navigation.getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("button", { name: "Locations & address lists", exact: true }).click();
   await page.getByRole("group", { name: "Outreach display" }).getByRole("button", { name: "Address list", exact: true }).click();
-  await page.getByRole("button", { name: /^118 Maple Avenue/ }).click();
+  await page.getByRole("button", { name: /^118 Crockett Street/ }).click();
 
-  const before = await demoSnapshot(page, { address: "118 Maple Avenue" });
+  const before = await demoSnapshot(page, { address: "118 Crockett Street" });
   expect(before.propertyIds).toHaveLength(1);
-  const drawer = page.getByRole("dialog", { name: "Location details for 118 Maple Avenue" });
+  const drawer = page.getByRole("dialog", { name: "Location details for 118 Crockett Street" });
   await drawer.getByRole("button", { name: "Add a person or note", exact: true }).click();
   await expect(drawer.getByRole("combobox", { name: /^Person/ })).toBeVisible();
   await drawer.locator(".outcome-options").getByRole("button", { name: "No answer", exact: true }).click();
@@ -420,9 +421,9 @@ test("recording no answer never asks for a person", async ({ page }) => {
   await expect(save).toBeEnabled();
   await save.click();
   await expect(drawer).toBeHidden();
-  await expect(page.getByText("No answer saved on this device", { exact: true })).toBeVisible();
+  await expect(page.getByText("No answer saved", { exact: true })).toBeVisible();
 
-  const after = await demoSnapshot(page, { address: "118 Maple Avenue" });
+  const after = await demoSnapshot(page, { address: "118 Crockett Street" });
   const beforeIds = new Set(before.visits.map(({ id }) => id));
   const savedVisits = after.visits.filter(({ id }) => !beforeIds.has(id));
   expect(savedVisits).toHaveLength(1);
@@ -435,7 +436,7 @@ test("recording no answer never asks for a person", async ({ page }) => {
 
   await page.reload();
   await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
-  const reloaded = await demoSnapshot(page, { address: "118 Maple Avenue" });
+  const reloaded = await demoSnapshot(page, { address: "118 Crockett Street" });
   expect(reloaded.visits.find(({ id }) => id === savedVisits[0].id)).toEqual(savedVisits[0]);
 });
 
@@ -457,7 +458,7 @@ test("a person’s follow-up can be completed in their profile", async ({ page }
 test("an advance invitation becomes field access only after check-in and crew assignment", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const walkName = `Fictional advance invitation ${randomUUID().slice(0, 8)}`;
-  const parentName = "Oakwood East";
+  const parentName = "Crockett Heights";
 
   await openDemo(page);
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
@@ -494,7 +495,7 @@ test("an advance invitation becomes field access only after check-in and crew as
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.locator(".outing-card").filter({ hasText: walkName }).click();
   await page.getByRole("button", { name: "Manage crews", exact: true }).click();
-  dialog = page.getByRole("dialog", { name: "Manage tonight’s crews", exact: true });
+  dialog = page.getByRole("dialog", { name: "Crews", exact: true });
   await dialog.getByRole("group", { name: "People here tonight", exact: true })
     .getByRole("button", { name: "Maya", exact: true }).click();
   const target = dialog.locator(".walk-crew-target").filter({ hasText: parentName });
@@ -515,6 +516,6 @@ test("an advance invitation becomes field access only after check-in and crew as
   await display.getByRole("button", { name: "Address list", exact: true }).click();
   const addressList = page.getByRole("region", { name: "Outreach address list", exact: true });
   await expect(addressList.getByRole("combobox", { name: "Territory", exact: true })).toHaveCount(0);
-  await expect(addressList.getByRole("button", { name: /Address unavailable Oakwood East Not visited/ })).toHaveCount(6);
+  await expect(addressList.getByRole("button", { name: /Address unavailable Crockett Heights Not visited/ })).toHaveCount(6);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

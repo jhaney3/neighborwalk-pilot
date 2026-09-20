@@ -8,10 +8,16 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  CircleEllipsis,
+  CircleHelp,
   CircleUserRound,
   CloudOff,
+  Database,
   Edit3,
+  Footprints,
+  House,
   LoaderCircle,
+  Lock,
   Map as MapIcon,
   MapPin,
   MapPinned,
@@ -22,6 +28,7 @@ import {
   ShieldCheck,
   Undo2,
   Users,
+  UsersRound,
   WifiOff,
   X,
 } from "lucide-react";
@@ -236,6 +243,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     : pendingChanges ? `${pendingChanges} saved on device · waiting to share`
     : data.sync.lastError ? "Refresh needs attention"
     : data.sync.lastSyncedAt ? "Shared · " + new Date(data.sync.lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Connected";
+  const syncStatusTone = data.sync.lastError || needsReview ? "error" : !online ? "offline" : saving || syncing || pendingChanges ? "pending" : "online";
   const canManage = workspaceMembership ? workspaceMembership.role === "leader" : activeVolunteer.role === "leader";
   const requestedView = route.view;
   const view = requestedView === "leader" && !canManage ? "today" : requestedView;
@@ -414,7 +422,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     setAddMode(false);
     setGuidedPropertyId(startGuided ? propertyId : null);
     setSelectedPropertyId(propertyId);
-    setToast(startGuided ? "Location added — conversation guide ready" : pendingAdd.parcel ? "Dwelling added to this parcel" : "Location added to this territory");
+    setToast(pendingAdd.parcel ? "Dwelling added" : "Location added");
   };
 
   const beginAddingDwelling = () => {
@@ -423,7 +431,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     setGuidedPropertyId(null);
     setPendingAdd(null);
     setAddMode(true);
-    setToast("Tap the next dwelling or entrance on the parcel");
+    setToast("Tap the next dwelling");
   };
 
   const startDrawing = () => {
@@ -468,17 +476,17 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
 
   return (
     <main className="app-shell">
-      {data.sync.mode === "device_only" && <div className="demo-notice" role="status">Sample workspace · fictional data only · nothing here is shared with a church. <Link href={isMobileApp ? "/login" : "/"}>{isMobileApp ? "Sign in" : "Return to website"}</Link></div>}
+      {data.sync.mode === "device_only" && <div className="demo-notice" role="status"><span>Sample workspace · fictional data only · nothing here is shared with a church.</span> <Link href={isMobileApp ? "/login" : "/"}>{isMobileApp ? "Sign in" : "Return to website"}</Link></div>}
       <header className="app-header">
         <button className="brand" onClick={() => navigate("today")} aria-label="Open NeighborWalk Home">
           <span className="brand-mark" aria-hidden="true"><Navigation size={18} /></span>
-          <span><strong>NeighborWalk</strong><small>{data.church.name}</small></span>
+          <span><strong>{data.church.name}</strong><small><i className={`status-dot ${syncStatusTone}`} aria-hidden="true" /><span>{syncStatusLabel}</span></small></span>
         </button>
         <div className="header-status">
           <span className={`network-chip ${online ? "online" : "offline"}`} aria-live="polite">{online ? <ShieldCheck size={13} /> : <WifiOff size={13} />}{syncStatusLabel}</span>
           {saving && !syncing && <span className="saving-label">Saving on device…</span>}
           {canManage && !fieldOuting && !drawMode && <button className="button quiet header-zone-button" onClick={startDrawing}><MapPinned size={16} /><span>Add zone</span></button>}
-          <button className="profile-button" onClick={() => navigate("settings")} aria-label="Open profile and settings"><CircleUserRound size={21} /><span>{activeVolunteer.name}</span></button>
+          <button className="profile-button" onClick={() => navigate("settings")} aria-label="Open profile and settings"><span className="profile-avatar" aria-hidden="true">{initials(activeVolunteer.name)}</span><span>{activeVolunteer.name}</span></button>
         </div>
       </header>
       {data.sync.mode === "connected" && <div className={`offline-preparation ${offlineShell}`}><span role="status">{offlineShellCopy[offlineShell]}</span>{["preparing", "unavailable"].includes(offlineShell) && <button className="text-button" onClick={actions.checkOfflinePreparation}>Check preparation</button>}</div>}
@@ -495,10 +503,10 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
             <p><span>{coverage.touched} touched</span><span>{coverage.remaining} remaining</span></p>
           </div>}
           <nav className="sidebar-nav" aria-label="Main sections">
-            <NavButton active={view === "today"} icon={<Check size={18} />} label="Home" onClick={() => navigate("today")} />
-            <NavButton active={view === "outreach" || Boolean(fieldOuting)} icon={<MapPinned size={18} />} label="Walks" onClick={() => navigate("outreach")} />
+            <NavButton active={view === "today"} icon={<House size={18} />} label="Home" onClick={() => navigate("today")} />
+            <NavButton active={view === "outreach" || Boolean(fieldOuting)} icon={<Footprints size={18} />} label="Walks" onClick={() => navigate("outreach")} />
             <NavButton active={view === "people" || view === "followups"} icon={<Users size={18} />} label="People" onClick={() => { setFollowUpPersonId(null); navigate("people"); }} />
-            <NavButton active={["more", "guide", "leader", "settings", "map", "recovery", "data"].includes(view) && !fieldOuting} icon={<Settings2 size={18} />} label="More" onClick={() => navigate("more")} />
+            <NavButton active={["more", "guide", "leader", "settings", "map", "recovery", "data"].includes(view) && !fieldOuting} icon={<CircleEllipsis size={18} />} label="More" onClick={() => navigate("more")} />
           </nav>
           <div className="sidebar-footer">
             <div className="local-mode"><CloudOff size={16} /><p><strong>{data.sync.mode === "connected" ? "Automatic sync" : "Device-only mode"}</strong><span>{data.sync.mode === "connected" ? syncStatusLabel : "Practice here with fictional records."}</span></p></div>
@@ -509,9 +517,22 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
         <section className="workspace">
           {view === "data" && (canManage && data.sync.mode === "connected" ? <DataHealthView data={data} online={online} onRun={actions.runAdministration} onExport={actions.exportChurchRecords} onAuthenticate={actions.reauthenticateAdmin} onPending={actions.getAdministrationPending} onReviewPending={actions.reviewAdministrationPending} onPreviewRetention={actions.getRetentionPreview} onPreviewDuplicates={actions.getDuplicatePreview} onRefresh={actions.syncNow} onOpenPerson={(id) => navigate("people", id)} onOpenLocation={(id) => navigate("map", id)} /> : <section className="content-view"><h1>Leader administration</h1><p>A connected church leader account is required. The sample does not import or archive real church records.</p></section>)}
           {view === "recovery" && <RecoveryView data={data} online={online} onPreview={actions.previewRecovery} onResolve={actions.resolveRecovery} onExport={actions.downloadDeviceRecovery} onAuthoredExport={actions.downloadAuthoredDeviceRecovery} onArchives={actions.listDeviceArchives} onDownloadArchive={actions.downloadDeviceArchive} onSync={actions.syncNow} />}
-          {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={openPeopleDirectory} onPlanWalk={planWalk} onStart={startWalk} onWalkResponse={async (participant, status) => { await actions.saveOutingResponse(participant.id, status); setToast(status === "going" ? "Walk response saved: you’re going" : "Walk response saved: you’re not going"); }} additionalAction={<EncounterComposer data={data} onSave={async (input) => { await actions.recordVisit(input); setToast("Encounter saved on this device"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} />} />}
-          {view === "outreach" && <OutreachView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onRecordEncounter={async (input) => { await actions.recordVisit(input); setToast("Encounter saved on this device"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} initialCreate={pathname.startsWith("/app") ? searchParams.get("plan") === "1" : demoPlanWalk} onCreateClosed={() => { setDemoPlanWalk(false); if (pathname.startsWith("/app") && searchParams.has("plan")) window.history.replaceState(null, "", appHref("outreach", route.id)); }} onSelect={(id) => navigate("outreach", id)} onStart={startWalk} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onSaveRoster={actions.saveOutingRoster} onSaveCrews={actions.saveWalkCrews} onAddZone={actions.addTerritory} onSaveTarget={actions.saveTarget} onReplaceTarget={actions.replaceTarget} onOpenGuide={(id) => navigate("guide", id)} />}
-          {view === "more" && <section className="content-view"><h1>More</h1><p>Resources and tools for your church team.</p><div className="more-grid"><button onClick={() => navigate("guide")}><BookOpenText /> Conversation guides</button><button onClick={() => navigate("map")}><MapIcon /> Locations &amp; address lists</button>{canManage && <button onClick={() => navigate("leader")}><Users /> Groups &amp; members</button>}{canManage && data.sync.mode === "connected" && <button onClick={() => navigate("data")}><ShieldCheck /> Data &amp; health</button>}<button onClick={() => navigate("settings")}><Settings2 /> Settings &amp; device</button><button onClick={() => navigate("recovery")}><CloudOff /> Device status {deviceNeedsAttention && <strong>Needs attention</strong>}</button><Link href="/help">Help &amp; field guide</Link><Link href="/trust">Privacy &amp; trust</Link></div></section>}
+          {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={openPeopleDirectory} onPlanWalk={planWalk} onStart={startWalk} onWalkResponse={async (participant, status) => { await actions.saveOutingResponse(participant.id, status); setToast(status === "going" ? "You’re going" : "Response saved"); }} additionalAction={<EncounterComposer data={data} onSave={async (input) => { await actions.recordVisit(input); setToast("Encounter saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} />} />}
+          {view === "outreach" && <OutreachView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onRecordEncounter={async (input) => { await actions.recordVisit(input); setToast("Encounter saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} initialCreate={pathname.startsWith("/app") ? searchParams.get("plan") === "1" : demoPlanWalk} onCreateClosed={() => { setDemoPlanWalk(false); if (pathname.startsWith("/app") && searchParams.has("plan")) window.history.replaceState(null, "", appHref("outreach", route.id)); }} onSelect={(id) => navigate("outreach", id)} onStart={startWalk} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onSaveRoster={actions.saveOutingRoster} onSaveCrews={actions.saveWalkCrews} onAddZone={actions.addTerritory} onSaveTarget={actions.saveTarget} onReplaceTarget={actions.replaceTarget} onOpenGuide={(id) => navigate("guide", id)} />}
+          {view === "more" && <section className="content-view more-view"><h1>More</h1><p>Resources and tools for your church team.</p>
+            <div className="more-grid">
+              <MoreRow icon={<BookOpenText />} tile="var(--indigo)" label={<>Conversation guides</>} onClick={() => navigate("guide")} />
+              <MoreRow icon={<MapIcon />} tile="var(--blue)" label={<>Locations &amp; address lists</>} onClick={() => navigate("map")} />
+              {canManage && <MoreRow icon={<UsersRound />} tile="var(--teal)" label={<>Groups &amp; members</>} onClick={() => navigate("leader")} />}
+              {canManage && data.sync.mode === "connected" && <MoreRow icon={<Database />} tile="var(--purple)" label={<>Data &amp; health</>} onClick={() => navigate("data")} />}
+              <MoreRow icon={<Settings2 />} tile="var(--gray)" label={<>Settings &amp; device</>} onClick={() => navigate("settings")} />
+              <MoreRow icon={<CloudOff />} tile={deviceNeedsAttention ? "var(--orange)" : "var(--tint)"} label={<>Device status {deviceNeedsAttention && <strong>Needs attention</strong>}</>} onClick={() => navigate("recovery")} />
+            </div>
+            <div className="more-grid">
+              <MoreRow icon={<CircleHelp />} tile="var(--blue)" label={<>Help &amp; field guide</>} href="/help" />
+              <MoreRow icon={<Lock />} tile="var(--gray)" label={<>Privacy &amp; trust</>} href="/trust" />
+            </div>
+          </section>}
           {view === "map" && (!route.fieldOutingId || fieldArea ? (
             <section className="map-view">
               {fieldOuting && <header className="fieldwork-header">
@@ -635,7 +656,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                 {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => undoDrawingPoint(points, drawShape))}><Undo2 size={15} /> {drawShape === "rectangle" ? "Clear rectangle" : "Undo corner"}</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={!drawingBoundaryReady(draftBoundary, drawShape)} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
               </div>
               </>}
-              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={fieldGuideContext} canManage={canManage} activeVolunteerId={activeVolunteer.id} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { if (route.id && !fieldOuting) navigate("map"); setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={async (input) => { if (fieldOuting && selectedProperty.territoryId !== activeTerritory.id) throw new Error("This address belongs to another area. Open its assigned walk before recording a visit."); await actions.recordVisit({ ...input, eventId: fieldOuting?.id, targetId: fieldTarget?.id }); setToast(`${outcomeMeta[input.outcome].label} saved on this device`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
+              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={fieldGuideContext} canManage={canManage} activeVolunteerId={activeVolunteer.id} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { if (route.id && !fieldOuting) navigate("map"); setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={async (input) => { if (fieldOuting && selectedProperty.territoryId !== activeTerritory.id) throw new Error("This address belongs to another area. Open its assigned walk before recording a visit."); await actions.recordVisit({ ...input, eventId: fieldOuting?.id, targetId: fieldTarget?.id }); setToast(`${outcomeMeta[input.outcome].short} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
             </section>
           ) : <section className="content-view"><h1>Choose where to begin</h1><p>Open the walk to choose an area and review your assignment.</p><button className="button primary" onClick={() => navigate("outreach", fieldOuting?.id)}>Open walk</button></section>)}
           {(view === "people" || view === "followups") && <PeopleWorkspace
@@ -652,9 +673,9 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
               onOpenProperty: (id) => { navigate("map", id); const property = data.properties.find((item) => item.id === id); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); },
               onOpenPerson: (id) => navigate("people", id),
               onAddPersonNote: actions.addPersonNote,
-              onComplete: async (id, input) => { await actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Follow-up completed and next task scheduled" : "Follow-up completed"); },
+              onComplete: async (id, input) => { await actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Completed · next step scheduled" : "Follow-up completed"); },
               onReschedule: async (id, date, note) => { await actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); },
-              onCancel: async (id, note) => { await actions.cancelFollowUp(id, note); setToast("Follow-up cancelled on this device"); },
+              onCancel: async (id, note) => { await actions.cancelFollowUp(id, note); setToast("Follow-up cancelled"); },
               onAssign: actions.assignFollowUp, onAccept: actions.acceptFollowUp,
             }}
             peopleProps={{
@@ -682,10 +703,10 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
       </div>
 
       <nav className="mobile-nav" aria-label="Main navigation">
-        <MobileNav active={view === "today"} icon={<Check size={20} />} label="Home" onClick={() => navigate("today")} />
-        <MobileNav active={view === "outreach" || Boolean(fieldOuting)} icon={<MapPinned size={20} />} label="Walks" onClick={() => navigate("outreach")} />
-        <MobileNav active={view === "people" || view === "followups"} icon={<Users size={20} />} label="People" onClick={() => navigate("people")} />
-        <MobileNav active={["more", "guide", "leader", "settings", "map", "recovery", "data"].includes(view) && !fieldOuting} icon={<Settings2 size={20} />} label="More" onClick={() => navigate("more")} />
+        <MobileNav active={view === "today"} icon={<House size={24} />} label="Home" onClick={() => navigate("today")} />
+        <MobileNav active={view === "outreach" || Boolean(fieldOuting)} icon={<Footprints size={24} />} label="Walks" onClick={() => navigate("outreach")} />
+        <MobileNav active={view === "people" || view === "followups"} icon={<Users size={24} />} label="People" onClick={() => navigate("people")} />
+        <MobileNav active={["more", "guide", "leader", "settings", "map", "recovery", "data"].includes(view) && !fieldOuting} icon={<CircleEllipsis size={24} />} label="More" onClick={() => navigate("more")} />
       </nav>
 
       {pendingAdd && <AddPropertyModal intent={pendingAdd} existingDwellingCount={pendingParcelDwellings.length} guideName={favoriteConversationGuide?.title} guideAvailable={Boolean(favoriteConversationGuide?.steps.length)} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
@@ -863,6 +884,16 @@ function NavButton({ active, icon, label, count, onClick }: { active: boolean; i
 
 function MobileNav({ active, icon, label, count, onClick }: { active: boolean; icon: React.ReactNode; label: string; count?: number; onClick: () => void }) {
   return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined}><span>{icon}{count ? <b>{count}</b> : null}</span><small>{label}</small></button>;
+}
+
+function MoreRow({ icon, tile, label, onClick, href }: { icon: React.ReactNode; tile: string; label: React.ReactNode; onClick?: () => void; href?: string }) {
+  const body = <><span className="more-icon" style={{ "--tile": tile } as React.CSSProperties} aria-hidden="true">{icon}</span><span>{label}</span><ChevronRight size={18} aria-hidden="true" /></>;
+  return href ? <Link href={href}>{body}</Link> : <button type="button" onClick={onClick}>{body}</button>;
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] ?? "?").slice(0, 2)).toUpperCase();
 }
 
 function AppLoading() {

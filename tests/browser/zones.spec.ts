@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { DEMO_CENTER } from "../../lib/seed";
 
 type TargetFixture = {
   eventId: string;
@@ -29,7 +30,7 @@ function hasGeoJsonPoint(value: unknown) {
     && point.coordinates.slice(0, 2).every(Number.isFinite);
 }
 
-const TEST_GIS_CENTER = [-87.7824, 41.8856] as const;
+const TEST_GIS_CENTER = DEMO_CENTER;
 const TEST_STREET_RESPONSE = {
   release: "playwright-test-streets-v1",
   source: "Playwright test GIS fixture",
@@ -37,11 +38,11 @@ const TEST_STREET_RESPONSE = {
   truncated: false,
   features: [
     { id: "playwright-test-main-west", name: "Test Main Street", road_class: "residential", subclass: null,
-      geometry: { type: "LineString", coordinates: [[-87.7849, 41.8856], [-87.7824, 41.8856]] } },
+      geometry: { type: "LineString", coordinates: [[TEST_GIS_CENTER[0] - 0.0025, TEST_GIS_CENTER[1]], [TEST_GIS_CENTER[0], TEST_GIS_CENTER[1]]] } },
     { id: "playwright-test-main-east", name: "Test Main Street", road_class: "residential", subclass: null,
-      geometry: { type: "LineString", coordinates: [[-87.7824, 41.8856], [-87.7799, 41.8856]] } },
+      geometry: { type: "LineString", coordinates: [[TEST_GIS_CENTER[0], TEST_GIS_CENTER[1]], [TEST_GIS_CENTER[0] + 0.0025, TEST_GIS_CENTER[1]]] } },
     { id: "playwright-test-cross", name: "Test Church Avenue", road_class: "residential", subclass: null,
-      geometry: { type: "LineString", coordinates: [[-87.7824, 41.8838], [-87.7824, 41.8874]] } },
+      geometry: { type: "LineString", coordinates: [[TEST_GIS_CENTER[0], TEST_GIS_CENTER[1] - 0.0018], [TEST_GIS_CENTER[0], TEST_GIS_CENTER[1] + 0.0018]] } },
   ],
 };
 
@@ -326,7 +327,7 @@ async function installTargetFixture(page: Page): Promise<TargetFixture> {
         if (!data) continue;
 
         const now = new Date();
-        const parent = data.territories.find(({ name }) => name === "Oakwood East");
+        const parent = data.territories.find(({ name }) => name === "Crockett Heights");
         const leader = data.volunteers.find(({ id }) => id === "volunteer_erica");
         if (!parent || !leader) throw new Error("The fictional parent zone or leader is unavailable.");
         const eventId = `event_zone_browser_${idSuffix}`;
@@ -339,7 +340,7 @@ async function installTargetFixture(page: Page): Promise<TargetFixture> {
         const apartmentParcel = { countyFips: "47055", gislink: `browser-${idSuffix}-apartments` };
         const remainingParcel = { countyFips: "47055", gislink: `browser-${idSuffix}-remaining` };
         const targetParcel = (parcel: typeof firstParcel) => ({ ...parcel, datasetRevision: "fictional-browser-v1", inclusionSource: "manual_add" });
-        const center = [-87.7824, 41.8856] as const;
+        const center = DEMO_CENTER;
         const rectangle = (south: number, north: number) => ({
           type: "Polygon",
           coordinates: [[
@@ -365,8 +366,8 @@ async function installTargetFixture(page: Page): Promise<TargetFixture> {
           { id: `participant_zone_browser_${idSuffix}`, churchId: data.church.id, eventId, volunteerId: leader.id, status: "checked_in" },
         ];
         data.walkTargets.push(
-          { id: firstTargetId, churchId: data.church.id, eventId, territoryId: parent.id, name: firstTargetName, color: "#286c59", selectionKind: "rectangle", geometry: rectangle(41.8856, 41.888), parcels: [targetParcel(firstParcel)], rosterState: "frozen", frozenAt: now.toISOString() },
-          { id: secondTargetId, churchId: data.church.id, eventId, territoryId: parent.id, name: secondTargetName, color: "#a9660d", selectionKind: "rectangle", geometry: rectangle(41.8832, 41.8855), parcels: [targetParcel(apartmentParcel), targetParcel(remainingParcel)], rosterState: "frozen", frozenAt: now.toISOString() },
+          { id: firstTargetId, churchId: data.church.id, eventId, territoryId: parent.id, name: firstTargetName, color: "#286c59", selectionKind: "rectangle", geometry: rectangle(TEST_GIS_CENTER[1], TEST_GIS_CENTER[1] + 0.0024), parcels: [targetParcel(firstParcel)], rosterState: "frozen", frozenAt: now.toISOString() },
+          { id: secondTargetId, churchId: data.church.id, eventId, territoryId: parent.id, name: secondTargetName, color: "#a9660d", selectionKind: "rectangle", geometry: rectangle(TEST_GIS_CENTER[1] - 0.0024, TEST_GIS_CENTER[1] - 0.0001), parcels: [targetParcel(apartmentParcel), targetParcel(remainingParcel)], rosterState: "frozen", frozenAt: now.toISOString() },
         );
         const firstAssignmentId = `assignment_zone_browser_${idSuffix}_north`;
         const secondAssignmentId = `assignment_zone_browser_${idSuffix}_south`;
@@ -380,9 +381,9 @@ async function installTargetFixture(page: Page): Promise<TargetFixture> {
           coordinates: [...coordinates], currentOutcome: "unvisited", visitCount: 0, createdAt: recordedAt, updatedAt: recordedAt, source: "manual",
         });
         data.properties.push(
-          property(`property_zone_browser_${idSuffix}_north`, outsideAddress, undefined, firstParcel, [center[0], 41.8865]),
-          property(apartmentA, apartmentAddress, "Apartment A", apartmentParcel, [center[0] - 0.0002, 41.8844]),
-          property(apartmentB, apartmentAddress, "Apartment B", apartmentParcel, [center[0] - 0.0001, 41.8844]),
+          property(`property_zone_browser_${idSuffix}_north`, outsideAddress, undefined, firstParcel, [center[0], TEST_GIS_CENTER[1] + 0.0009]),
+          property(apartmentA, apartmentAddress, "Apartment A", apartmentParcel, [center[0] - 0.0002, TEST_GIS_CENTER[1] - 0.0012]),
+          property(apartmentB, apartmentAddress, "Apartment B", apartmentParcel, [center[0] - 0.0001, TEST_GIS_CENTER[1] - 0.0012]),
           property(remainingHouse, `Fictional Remaining House ${idSuffix}`, undefined, remainingParcel, [center[0] + 0.001, 41.884]),
         );
         const visit = (id: string, propertyId: string, targetId: string, parcel: typeof firstParcel, corrections?: unknown[]) => ({
@@ -564,7 +565,7 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   });
   await completeWalk.click();
   await expect(readyCard).toHaveCount(0);
-  await page.getByRole("checkbox", { name: "Include completed, cancelled and archived outings", exact: true }).check();
+  await page.getByRole("checkbox", { name: "Show past walks", exact: true }).check();
   const completedCard = page.locator(".outing-card").filter({ hasText: walkName });
   await expect(completedCard.getByText("completed", { exact: true })).toBeVisible();
   await expect(completedCard.getByRole("button", { name: "Complete walk", exact: true })).toHaveCount(0);
@@ -584,8 +585,8 @@ test("the planner starts from a persistent zone and offers area and street targe
 
   const parentZone = dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true });
   await expect(parentZone).toBeVisible();
-  await parentZone.selectOption({ label: "Oakwood East" });
-  const planner = dialog.getByRole("region", { name: "Plan targets inside Oakwood East", exact: true });
+  await parentZone.selectOption({ label: "Crockett Heights" });
+  const planner = dialog.getByRole("region", { name: "Plan targets inside Crockett Heights", exact: true });
   await expect(planner).toBeVisible();
   await expect(planner.getByRole("button", { name: "Whole zone", exact: true })).toBeEnabled();
   const map = planner.getByRole("application", { name: "Interactive target map", exact: true });
@@ -858,7 +859,7 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   await page.reload();
   await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
-  await page.getByRole("checkbox", { name: "Include completed, cancelled and archived outings", exact: true }).check();
+  await page.getByRole("checkbox", { name: "Show past walks", exact: true }).check();
   await page.locator(".outing-card").filter({ hasText: fixture.eventName }).click();
   const reloaded = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });
   await expect(reloaded).toContainText("finished tonight");
@@ -907,7 +908,7 @@ test("replacing a frozen target preserves history and requires fresh acceptance"
   await page.locator(".outing-card").filter({ hasText: fixture.eventName }).click();
 
   const firstAssignment = page.locator(".assignment-list li").filter({ hasText: fixture.firstTargetName });
-  await firstAssignment.getByRole("button", { name: "Cancel", exact: true }).click();
+  await firstAssignment.getByRole("button", { name: "Cancel assignment", exact: true }).click();
   await expect(firstAssignment).toContainText("No crew yet");
 
   const previousAssignment = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });

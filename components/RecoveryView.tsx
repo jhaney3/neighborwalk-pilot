@@ -60,7 +60,7 @@ export function RecoveryView({ data, online, onPreview, onResolve, onExport, onA
     setMessage(keepSelected ? "The original work was archived on this device. Selected changes are queued as a new transaction." : "Shared records are now shown. The previous device work is preserved in a downloadable recovery archive.");
   };
   return <section className="content-view recovery-view">
-    <ViewHeading eyebrow="This device" title="Device status" description="See whether work saved here has reached your church workspace. Recovery tools appear only when they are useful." />
+    <ViewHeading title="Device status" />
     <section className={`device-status-card ${statusTone}`}>
       <header><span className="device-status-icon">{statusTone === "calm" ? <CheckCircle2 size={25} /> : statusTone === "offline" ? <CloudOff size={25} /> : <AlertTriangle size={25} />}</span><div><p>{hasAttention ? "Check this device" : "Up to date"}</p><h2>{statusTitle}</h2><span>{statusDetail}</span></div><strong className="device-status-pill">{connected ? online ? "Connected" : "Offline" : "Device only"}</strong></header>
       <div className="device-status-facts"><div><small>Connection</small><strong>{connected ? online ? "Online" : "Offline" : "Sample mode"}</strong></div><div><small>Waiting to share</small><strong>{commands.length}</strong></div><div><small>Last shared</small><strong>{connected ? lastShared : "Not connected"}</strong></div></div>

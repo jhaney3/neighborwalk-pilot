@@ -44,3 +44,12 @@ export function getSupabaseBrowserClient(): SupabaseClient<NeighborWalkDatabase>
   });
   return browserClient;
 }
+
+/** Separate in-memory PKCE flow: never replace the website's auth behavior or
+ * persist provider tokens. Only the verified Supabase session is handed back. */
+export function createMobileGoogleClient() {
+  if (!isMobileApp || !getSupabaseBrowserClient() || !supabaseUrl || !supabasePublishableKey) throw new Error("The app connection is unavailable.");
+  return createClient<NeighborWalkDatabase>(supabaseUrl, supabasePublishableKey, {
+    auth: { storageKey: authStorageKey() + "-google-flow", flowType: "pkce", persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}

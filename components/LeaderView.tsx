@@ -27,7 +27,7 @@ export function LeaderView(props: Props) {
   const { data, membership } = props;
   const activeOutings = data.events.filter((outing) => ["draft", "ready", "active"].includes(outing.status));
   return <section className="content-view leader-view">
-    <ViewHeading eyebrow="Church coordination" title="Groups & members" description="Keep the member roster current. Saved groups are optional presets; build the actual crews when people arrive for a walk." />
+    <ViewHeading title="Groups & members" />
 
     <section className="today-card leader-setup">
       <header className="leader-setup-header">

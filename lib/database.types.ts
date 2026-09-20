@@ -1497,6 +1497,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_shared_invitation: { Args: { contact_kind: string; contact_value: string; recipient_name?: string; invitation_role?: string }; Returns: Json }
+      list_shared_invitations: { Args: Record<PropertyKey, never>; Returns: Json }
+      revoke_shared_invitation: { Args: { invitation_id: string }; Returns: boolean }
+      shared_invitation: { Args: { invitation_token: string; accept_invitation?: boolean }; Returns: Json }
+
       request_account_deletion: {
         Args: Record<PropertyKey, never>
         Returns: Json

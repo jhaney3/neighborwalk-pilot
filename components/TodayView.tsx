@@ -69,7 +69,7 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
     })()}
   </article>)}</div>;
   return <section className="content-view today-view">
-    <ViewHeading eyebrow={formatCalendarDate(today, { weekday: "long", month: "long", day: "numeric" })} title={"Hello, " + name + "."} description="Your next walk. The people to remember." aside={canManage && <button className="button quiet" onClick={onPlanWalk}><Plus size={16} /> Plan a walk</button>} />
+    <ViewHeading eyebrow={formatCalendarDate(today, { weekday: "long", month: "long", day: "numeric" })} title={"Hello, " + name + "."} aside={canManage && <button className="button quiet" onClick={onPlanWalk}><Plus size={16} /> Plan a walk</button>} />
     {unansweredResponseOutings.length > 0 && <section className="today-card home-walk-invitations">
       <span className="eyebrow"><MapPinned size={16} /> Your walk responses</span>
       <h2>Can you join?</h2>

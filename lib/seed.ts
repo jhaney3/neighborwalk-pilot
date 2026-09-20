@@ -9,6 +9,15 @@ import { calendarDate } from "./calendar";
 const CHURCH_ID = "church_grace_harbor_demo";
 const EVENT_ID = "event_saturday_outreach";
 
+/** Lawrenceburg, Tennessee: inside the Lawrence County parcel service area so demo targets can load real parcels. */
+export const DEMO_CENTER: Coordinates = [-87.3348, 35.2424];
+const DEMO_COUNTY_FIPS = "47099";
+const DEMO_PARCEL_REVISION = "neighborwalk-demo-parcels-2026-09";
+
+function demoParcelGislink(index: number) {
+  return `099DEMO${String(index + 1).padStart(3, "0")}`;
+}
+
 function dayAt(offset: number, hour: number, minute = 0) {
   const date = new Date();
   date.setDate(date.getDate() + offset);
@@ -27,16 +36,16 @@ const boundary = (center: Coordinates, dx = 0.0047, dy = 0.0034): Coordinates[] 
 export function createSeedData(): NeighborWalkData {
   const now = new Date().toISOString();
   const centers: Record<string, Coordinates> = {
-    east: [-87.7824, 41.8856],
-    west: [-87.7936, 41.8855],
-    river: [-87.8217, 41.8877],
+    east: DEMO_CENTER,
+    west: [DEMO_CENTER[0] - 0.0112, DEMO_CENTER[1] - 0.0001],
+    river: [DEMO_CENTER[0] + 0.0118, DEMO_CENTER[1] + 0.0058],
   };
   const territories = [
     {
       id: "territory_oakwood_east",
       churchId: CHURCH_ID,
       eventId: EVENT_ID,
-      name: "Oakwood East",
+      name: "Crockett Heights",
       color: "#286c59",
       center: centers.east,
       zoom: 16.2,
@@ -47,7 +56,7 @@ export function createSeedData(): NeighborWalkData {
       id: "territory_oakwood_west",
       churchId: CHURCH_ID,
       eventId: EVENT_ID,
-      name: "Oakwood West",
+      name: "Westside",
       color: "#6b91ad",
       center: centers.west,
       zoom: 16.1,
@@ -58,7 +67,7 @@ export function createSeedData(): NeighborWalkData {
       id: "territory_riverside",
       churchId: CHURCH_ID,
       eventId: EVENT_ID,
-      name: "Riverside",
+      name: "Shoal Creek",
       color: "#b98231",
       center: centers.river,
       zoom: 15.8,
@@ -74,10 +83,10 @@ export function createSeedData(): NeighborWalkData {
     [-0.0018, -0.0022], [-0.0002, -0.0019], [0.0015, -0.0022], [0.0032, -0.0019],
   ];
   const addresses = [
-    "118 Maple Avenue", "122 Maple Avenue", "130 Maple Avenue", "136 Maple Avenue",
-    "144 Maple Avenue", "150 Maple Avenue", "201 Cedar Street", "207 Cedar Street",
-    "215 Cedar Street", "221 Cedar Street", "229 Cedar Street", "302 Willow Lane",
-    "308 Willow Lane", "316 Willow Lane", "324 Willow Lane", "330 Willow Lane",
+    "118 Crockett Street", "122 Crockett Street", "130 Crockett Street", "136 Crockett Street",
+    "144 Crockett Street", "150 Crockett Street", "201 Gaines Street", "207 Gaines Street",
+    "215 Gaines Street", "221 Gaines Street", "229 Gaines Street", "302 Berger Street",
+    "308 Berger Street", "316 Berger Street", "324 Berger Street", "330 Berger Street",
   ];
   const outcomes: NeighborWalkData["properties"][number]["currentOutcome"][] = [
     "follow_up", "conversation", "no_answer", "declined", "unvisited", "unvisited",
@@ -104,6 +113,7 @@ export function createSeedData(): NeighborWalkData {
       territoryId: territories[0].id,
       address: addresses[index],
       coordinates: [centers.east[0] + offset[0], centers.east[1] + offset[1]] as Coordinates,
+      parcel: { countyFips: DEMO_COUNTY_FIPS, gislink: demoParcelGislink(index) },
       currentOutcome: outcomes[index],
       lastVisitedAt: visited ? dayAt(0, 10, 8 + index * 4) : undefined,
       visitCount: visited ? 1 : 0,
@@ -121,6 +131,8 @@ export function createSeedData(): NeighborWalkData {
       eventId: EVENT_ID,
       territoryId: territories[0].id,
       propertyId: property.id,
+      targetId: properties.indexOf(property) < 6 ? "target_demo_crockett_north" : "target_demo_crockett_south",
+      targetParcel: property.parcel,
       volunteerId: index % 2 === 0 ? "volunteer_maya" : "volunteer_jordan",
       outcome: property.currentOutcome as Exclude<typeof property.currentOutcome, "unvisited">,
       objectiveNote: notes[properties.indexOf(property)],
@@ -307,10 +319,40 @@ export function createSeedData(): NeighborWalkData {
     },
   ];
 
+  // Nightly targets with fixed parcel rosters that match the seeded properties, so
+  // crews, the address list, coverage tallies and the field map all agree.
+  const demoTarget = (input: { id: string; territoryId: string; name: string; color: string; center: Coordinates; parcelIndexes: number[]; dx: number; dy: number }): NeighborWalkData["walkTargets"][number] => ({
+    id: input.id,
+    churchId: CHURCH_ID,
+    eventId: EVENT_ID,
+    territoryId: input.territoryId,
+    name: input.name,
+    color: input.color,
+    selectionKind: "rectangle",
+    geometry: { type: "Polygon", coordinates: [boundary(input.center, input.dx, input.dy)] },
+    parcels: input.parcelIndexes.map((parcelIndex) => ({
+      countyFips: DEMO_COUNTY_FIPS,
+      gislink: demoParcelGislink(parcelIndex),
+      datasetRevision: DEMO_PARCEL_REVISION,
+      inclusionSource: "polygon_auto" as const,
+      representativePoint: properties[parcelIndex].coordinates,
+    })),
+    rosterState: "frozen",
+    frozenAt: dayAt(-1, 18),
+  });
+  const walkTargets = [
+    demoTarget({ id: "target_demo_crockett_north", territoryId: territories[0].id, name: "Crockett north", color: "#286c59", center: [centers.east[0], centers.east[1] + 0.0018], parcelIndexes: [0, 1, 2, 3, 4, 5], dx: 0.0044, dy: 0.0013 }),
+    demoTarget({ id: "target_demo_crockett_south", territoryId: territories[0].id, name: "Crockett south", color: "#6b91ad", center: [centers.east[0], centers.east[1] - 0.0011], parcelIndexes: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15], dx: 0.0044, dy: 0.0016 }),
+    demoTarget({ id: "target_demo_westside", territoryId: territories[1].id, name: "Westside loop", color: "#b98231", center: centers.west, parcelIndexes: [], dx: 0.0024, dy: 0.0017 }),
+  ];
+  const targetProgress = properties.flatMap((property, index) => property.currentOutcome === "unvisited" || !property.parcel
+    ? []
+    : [{ targetId: index < 6 ? walkTargets[0].id : walkTargets[1].id, countyFips: property.parcel.countyFips, gislink: property.parcel.gislink }]);
+
   return {
     schemaVersion: APP_SCHEMA_VERSION,
-    walkTargets: [],
-    targetProgress: [],
+    walkTargets,
+    targetProgress,
     parentProgress: [],
     coverageVisibility: "complete",
     church: {
@@ -351,10 +393,11 @@ export function createSeedData(): NeighborWalkData {
       status: "checked_in" as const,
     })),
     territories,
-    assignments: territories.map((area, index) => ({
-      id: "assignment_demo_" + index, churchId: CHURCH_ID, eventId: EVENT_ID, territoryId: area.id,
-      assignedTeamId: ["team_barnabas", "team_priscilla", "team_lydia"][index], status: "assigned" as const,
-    })),
+    assignments: [
+      { id: "assignment_demo_0", churchId: CHURCH_ID, eventId: EVENT_ID, territoryId: territories[0].id, targetId: walkTargets[0].id, assignedTeamId: "team_barnabas", status: "accepted" as const },
+      { id: "assignment_demo_1", churchId: CHURCH_ID, eventId: EVENT_ID, territoryId: territories[0].id, targetId: walkTargets[1].id, assignedTeamId: "team_priscilla", status: "assigned" as const },
+      { id: "assignment_demo_2", churchId: CHURCH_ID, eventId: EVENT_ID, territoryId: territories[1].id, targetId: walkTargets[2].id, assignedTeamId: "team_lydia", status: "assigned" as const },
+    ],
     teams: [
       { id: "team_barnabas", churchId: CHURCH_ID, eventId: EVENT_ID, name: "Team Barnabas", memberIds: ["volunteer_erica", "volunteer_maya", "volunteer_jordan"], territoryIds: [territories[0].id], status: "active" },
       { id: "team_priscilla", churchId: CHURCH_ID, eventId: EVENT_ID, name: "Team Priscilla", memberIds: ["volunteer_sam", "volunteer_ruth"], territoryIds: [territories[1].id], status: "active" },

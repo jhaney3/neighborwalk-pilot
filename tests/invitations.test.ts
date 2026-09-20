@@ -25,3 +25,27 @@ describe("private invitation entry", () => {
     cache.setItem(INVITATION_STORAGE_KEY, "broken"); expect(pendingInvitation(cache)).toBeNull();
   });
 });
+
+import { mobileInvitationPath, pendingInvitationKind } from "../lib/invitations";
+describe("shared invitation links", () => {
+  const token = "b".repeat(64);
+  it("preserves the new invitation type through authentication without exposing it in requests", () => {
+    const cache = storage();
+    const url = new URL(invitationLink("https://neighborwalk-pilot.vercel.app", token, "join"));
+    expect(url.search).toBe("");
+    expect(captureInvitation(url, cache)).toBe("/invite");
+    expect(pendingInvitation(cache)).toBe(token);
+    expect(pendingInvitationKind(cache)).toBe("join");
+  });
+  it("does not reinterpret old invitations as bearer invitations", () => {
+    const cache = storage();
+    cache.setItem(INVITATION_STORAGE_KEY, JSON.stringify({ token, capturedAt: Date.now() }));
+    expect(pendingInvitationKind(cache)).toBe("invite");
+    expect(() => captureInvitation(new URL(`https://neighborwalk-pilot.vercel.app/invite#join=${token}&invite=${token}`),cache)).toThrow("invalid");
+  });
+  it("accepts only allowed invitation hosts and routes", () => {
+    expect(mobileInvitationPath(`neighborwalk://invite#join=${token}`)).toBe(`/invite#join=${token}`);
+    expect(mobileInvitationPath(`https://neighborwalk-pilot.vercel.app/invite#join=${token}`)).toBe(`/invite#join=${token}`);
+    for(const url of [`https://evil.test/invite#join=${token}`,`neighborwalk://user@invite#join=${token}`,`neighborwalk://invite:80#join=${token}`,`neighborwalk://invite/extra#join=${token}`,`https://neighborwalk-pilot.vercel.app/invite#join=bad`]) expect(mobileInvitationPath(url)).toBeNull();
+  });
+});

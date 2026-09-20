@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Check, ChevronDown, ClipboardCheck, Mail, MapPin, MessageCircle, Phone, UserRound } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, CircleX, ClipboardCheck, ClipboardList, Mail, MapPin, MessageCircle, Phone, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import { calendarDate, calendarDaysFromNow, formatCalendarDate } from "../lib/calendar";
 import { dateInputValue, type FollowUp, type FollowUpCompletionInput, type NeighborWalkData } from "../lib/domain";
@@ -63,7 +63,7 @@ export function FollowUpsView(props: FollowUpsViewProps) {
   const groups = groupFollowUpsByPerson(tasks, data);
   const filterLabel = filter[0].toUpperCase() + filter.slice(1);
   return <section className={`${props.embedded ? "followups-view followups-view-embedded" : "content-view followups-view"}${props.profileMode ? " followups-profile-mode" : ""}`}>
-    {!props.embedded && <ViewHeading eyebrow="Personal follow-through" title="Follow-ups" description={"A clear next step, a responsible person, and a date. Dates use " + data.church.timezone + "."} />}
+    {!props.embedded && <ViewHeading title="Follow-ups" />}
     {props.focusedTaskId && <p className="inline-notice">{tasks.length ? "This is the task from your link." : "This task is archived, unavailable to your account, or not yet downloaded."} <button onClick={onClearPersonFocus}>Open my task list</button></p>}
     {initialPersonId && !props.profileMode && <div className="followup-person-focus"><UserRound size={18} /> Tasks for {people.get(initialPersonId)?.name ?? "this person"}<button onClick={onClearPersonFocus}>Show all</button></div>}
     {!props.focusedTaskId && !initialPersonId && canManage && unassigned > 0 && <div className="inline-notice followup-unowned-notice"><span>{unassigned} open tasks have no active owner.</span><button className="button quiet small" onClick={() => { setOwner("unowned"); setFilter("open"); }}>Review unowned</button></div>}
@@ -149,7 +149,7 @@ export function TaskCard({ task, grouped = false, ...props }: FollowUpsViewProps
       <div className="followup-date" aria-label={`${statusLabel}, ${formatCalendarDate(date)}`}>
         <span>{statusLabel}</span>
         <div><strong>{dateBlock.day}</strong><small>{dateBlock.month}</small></div>
-        <em>{dateBlock.weekday}</em>
+        <em aria-label={dateBlock.weekday}>{dateBlock.weekday.slice(0, 3)}</em>
       </div>
       <div className={`followup-card-title${grouped ? " context-hidden" : ""}`}>
         <div className="followup-card-owner-row">
@@ -185,11 +185,11 @@ export function TaskCard({ task, grouped = false, ...props }: FollowUpsViewProps
         <div id={moreActionsId} className="followup-more-actions-body" aria-hidden={!moreActionsOpen} inert={!moreActionsOpen}>
           <div className="followup-more-actions-body-inner">
             <div>
-              {props.onOpenTask && !props.focusedTaskId && <button className="button quiet small" onClick={() => props.onOpenTask!(task.id)}>Open task</button>}
+              {props.onOpenTask && !props.focusedTaskId && <button className="button quiet small" onClick={() => props.onOpenTask!(task.id)}><ClipboardList size={16} /> Open task</button>}
               {person && !grouped && <button className="button quiet small" onClick={() => onOpenPerson(person.id)}><UserRound size={16} /> Person &amp; notes</button>}
               {location && <button className="button quiet small" onClick={() => onOpenProperty(location.id)}><MapPin size={16} /> Location</button>}
               {canReschedule && <button className="button quiet small" disabled={action.busy} onClick={() => setEditing("reschedule")}><CalendarClock size={15} /> Reschedule</button>}
-              {open && canEdit && <button className="button quiet small" disabled={action.busy} onClick={() => setEditing("cancel")}>Cancel task</button>}
+              {open && canEdit && <button className="button quiet small destructive" disabled={action.busy} onClick={() => setEditing("cancel")}><CircleX size={16} /> Cancel task</button>}
             </div>
             {open && canManage && onAssign && owner && <FollowUpAssignment task={task} data={data} ownerId={owner.id} busy={action.busy} helpId={assignmentHelpId} personTask={Boolean(person)} onAssign={onAssign} run={action.run} />}
           </div>

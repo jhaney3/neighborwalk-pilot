@@ -1,4 +1,5 @@
 "use client";
+import { pendingInvitationKind } from "./invitations";
 import { isMobileApp } from "./mobile";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -115,7 +116,7 @@ function writeWorkspaceConnection(connection: WorkspaceConnection) {
 
 function invitationToken() {
   if (typeof window === "undefined") return null;
-  return pendingInvitation(window.sessionStorage);
+  return pendingInvitationKind(window.sessionStorage) === "invite" ? pendingInvitation(window.sessionStorage) : null;
 }
 
 function clearInvitationToken() {

@@ -21,8 +21,8 @@ export function Modal({ title, description, wide = false, onClose, children }: {
   </dialog>;
 }
 
-export function ViewHeading({ eyebrow, title, description, aside }: { eyebrow: string; title: string; description: string; aside?: React.ReactNode }) {
-  return <div className="view-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></div>{aside}</div>;
+export function ViewHeading({ eyebrow, title, description, aside }: { eyebrow?: string; title: string; description?: string; aside?: React.ReactNode }) {
+  return <div className="view-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{aside}</div>;
 }
 
 export function EmptyState({ icon, title, copy }: { icon: React.ReactNode; title: string; copy: string }) {

@@ -44,7 +44,7 @@ export function PeopleWorkspace({ peopleProps, followUpProps, initialPanel = "fo
   };
 
   return <section className={`content-view people-workspace${panel === "directory" && selectedResidentId ? " has-selected-person" : ""}`}>
-    <ViewHeading eyebrow="Care, person by person" title="People" description="See who needs follow-up, act on the next step, or browse everyone you can access." />
+    <ViewHeading title="People" />
     <div className="people-workspace-switcher">
       <div className="people-workspace-tabs" role="tablist" tabIndex={-1} aria-orientation="horizontal" aria-label="People views" onKeyDown={(event) => navigateTabs(event, selectPanel)}>
         <button id="people-followups-tab" type="button" role="tab" aria-controls="people-workspace-panel" aria-selected={panel === "followups"} tabIndex={panel === "followups" ? 0 : -1} className={panel === "followups" ? "active" : ""} onClick={() => selectPanel(0)} onFocus={() => selectPanel(0, false)}><ClipboardCheck size={16} /> Needs follow-up</button>

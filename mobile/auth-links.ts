@@ -1,5 +1,8 @@
+import { mobileInvitationPath } from "../lib/invitations";
 /** Accept only our registered callback, never a URL supplied by an arbitrary site. */
 export function authLinkPath(value: string): string | null {
+  const invitation = mobileInvitationPath(value);
+  if (invitation) return invitation;
   try {
     const url = new URL(value);
     if (url.protocol !== "neighborwalk:" || url.hostname !== "auth" || !["", "/"].includes(url.pathname)) return null;

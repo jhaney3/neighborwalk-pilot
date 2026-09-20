@@ -49,7 +49,7 @@ export function DataHealthView(props: Props) {
   const pendingChanges = data.sync.pending.length;
   const migrationIssueCount = data.migrationIssues?.length ?? 0;
   return <section className="content-view data-health-view">
-    <ViewHeading eyebrow="Church stewardship" title="Data & health" description="Import or export records, fix mistakes, and review older data. Choose one task to get started." />
+    <ViewHeading title="Data & health" />
     <div className="data-health-topline">
       <section className={`data-connection-card ${online ? "is-online" : "is-offline"}`} aria-labelledby="data-connection-title">
         <span className="data-connection-icon" aria-hidden="true">{online ? <Cloud size={22} /> : <CloudOff size={22} />}</span>

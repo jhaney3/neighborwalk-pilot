@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import AuthenticationServices
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -48,6 +49,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 class NeighborWalkViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(NeighborWalkPrintPlugin())
+        bridge?.registerPluginInstance(NeighborWalkApplePlugin())
+        bridge?.registerPluginInstance(NeighborWalkGooglePlugin())
         webView?.scrollView.bounces = false
     }
 }
@@ -77,5 +80,112 @@ class NeighborWalkPrintPlugin: CAPPlugin, CAPBridgedPlugin {
                 controller.present(animated: true, completionHandler: completion)
             }
         }
+    }
+}
+
+@objc(NeighborWalkApplePlugin)
+class NeighborWalkApplePlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    let identifier = "NeighborWalkApplePlugin"
+    let jsName = "NeighborWalkApple"
+    let pluginMethods: [CAPPluginMethod] = [CAPPluginMethod(name: "signIn", returnType: CAPPluginReturnPromise)]
+    private var pending: CAPPluginCall?
+    private var controller: ASAuthorizationController?
+    private var expectedState: String?
+    private var anchor: UIWindow?
+
+    @objc func signIn(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard self.pending == nil else { call.reject("Apple sign-in is already open."); return }
+            guard let nonce = call.getString("nonce"), nonce.count == 64,
+                  let anchor = self.bridge?.viewController?.view.window else { call.reject("Apple sign-in is unavailable."); return }
+            self.anchor = anchor
+            let request = ASAuthorizationAppleIDProvider().createRequest()
+            request.requestedScopes = [.fullName, .email]
+            request.nonce = nonce
+            let state = UUID().uuidString
+            request.state = state
+            self.expectedState = state
+            self.pending = call
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            self.controller = controller
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            controller.performRequests()
+        }
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        return anchor ?? ASPresentationAnchor()
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        defer { pending = nil; self.controller = nil; expectedState = nil; anchor = nil }
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              credential.state == expectedState,
+              let data = credential.identityToken,
+              let token = String(data: data, encoding: .utf8) else {
+            pending?.reject("Apple could not verify this sign-in. Please try again."); return
+        }
+        var result: [String: Any] = ["identityToken": token]
+        if let name = credential.fullName {
+            let formatted = PersonNameComponentsFormatter().string(from: name)
+            if !formatted.isEmpty { result["fullName"] = formatted }
+        }
+        pending?.resolve(result)
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        let cancelled = (error as? ASAuthorizationError)?.code == .canceled
+        pending?.reject(cancelled ? "Apple sign-in was cancelled." : "Apple sign-in could not finish. Please try again.", cancelled ? "CANCELLED" : "APPLE_AUTH_FAILED")
+        pending = nil; self.controller = nil; expectedState = nil; anchor = nil
+    }
+}
+
+@objc(NeighborWalkGooglePlugin)
+class NeighborWalkGooglePlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPresentationContextProviding {
+    let identifier = "NeighborWalkGooglePlugin"
+    let jsName = "NeighborWalkGoogle"
+    let pluginMethods: [CAPPluginMethod] = [CAPPluginMethod(name: "signIn", returnType: CAPPluginReturnPromise)]
+    private var session: ASWebAuthenticationSession?
+    private var anchor: UIWindow?
+
+    @objc func signIn(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard self.session == nil else { call.reject("Google sign-in is already open."); return }
+            guard let value = call.getString("url"), let url = URL(string: value),
+                  let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  url.scheme == "https", url.host != nil, url.user == nil, url.password == nil,
+                  url.path == "/auth/v1/authorize",
+                  parts.queryItems?.first(where: { $0.name == "provider" })?.value == "google",
+                  parts.queryItems?.first(where: { $0.name == "redirect_to" })?.value == "neighborwalk://google-auth",
+                  let anchor = self.bridge?.viewController?.view.window else {
+                call.reject("Google sign-in could not be opened."); return
+            }
+            self.anchor = anchor
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "neighborwalk") { callback, error in
+                DispatchQueue.main.async {
+                    defer { self.session = nil; self.anchor = nil }
+                    if let error = error {
+                        let cancelled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
+                        call.reject(cancelled ? "Google sign-in was cancelled." : "Google sign-in could not finish. Please try again.", cancelled ? "CANCELLED" : "GOOGLE_AUTH_FAILED")
+                    } else if let callback = callback, callback.scheme == "neighborwalk", callback.host == "google-auth" {
+                        call.resolve(["callbackUrl": callback.absoluteString])
+                    } else { call.reject("Google returned an invalid response.") }
+                }
+            }
+            session.presentationContextProvider = self
+            // Allow the system browser to reuse Google login; the account picker
+            // is still requested so the user explicitly chooses their account.
+            session.prefersEphemeralWebBrowserSession = false
+            self.session = session
+            if !session.start() {
+                self.session = nil; self.anchor = nil
+                call.reject("Google sign-in could not start. Please try again.")
+            }
+        }
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        return anchor ?? ASPresentationAnchor()
     }
 }

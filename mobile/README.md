@@ -2,7 +2,7 @@
 
 This is a Capacitor iOS app with a **bundled React application**, not a remote website wrapper. Its entry point imports only the workspace and authentication screens. No landing page, marketing navigation, Next server, or live JavaScript-update service is packaged.
 
-The website remains the Next.js app. iOS has its own HTML entry, navigation adapter, system typography, visual styling, and native integration. Shared business logic and data models remain in `components/` and `lib/` so fixes do not diverge. All native-specific branches are gated by `NEXT_PUBLIC_NATIVE_APP`, which the website does not enable.
+The website remains the Next.js app. iOS has its own HTML entry, navigation adapter and native integration. The workspace design system is shared with the website's `/app` and `/demo` routes; see **Design system** below. Shared business logic and data models remain in `components/` and `lib/` so fixes do not diverge. All native-specific branches are gated by `NEXT_PUBLIC_NATIVE_APP`, which the website does not enable.
 
 ## Try it
 
@@ -42,3 +42,14 @@ Run `npm run ios:sync` again before preparing a release. Never submit a sample-o
 - Future shared database changes must remain backward compatible with both deployed website and older installed iOS versions.
 
 See [the release guide](../docs/ios-release.md) for unresolved release requirements, signing, privacy declarations, auth callbacks, and App Review preparation.
+
+## Design system
+
+The workspace follows the native iOS idiom so it sits naturally beside Apple's own apps:
+
+- **Type**: the system font (SF Pro on Apple platforms) on the Human Interface Guidelines scale — Large Title 34/41, Title 2 22/28, Headline 17 semibold, Body 17, Subheadline 15, Footnote 13, Caption 12. Tokens are `--fs-*`/`--lh-*` in `app/styles/foundation.css`.
+- **Color**: iOS semantic tokens (`--label`, `--label-2`, `--bg-grouped`, `--bg-grouped-2`, `--separator`, `--fill-*`) with light **and dark** appearance via `prefers-color-scheme`. One evergreen tint (`--tint`, 5.3:1 on white) is used the Apple way for links, capsule buttons, tab selection and switches; `--red`, `--orange`, `--blue` carry semantics.
+- **Materials and shape**: a translucent blurred navigation bar that content scrolls beneath, a floating capsule tab bar, glass map controls, borderless grouped cards (`--radius-lg`), bottom sheets with grabbers, capsule buttons and iOS switches.
+- **Legacy names**: older stylesheets still reference `--pine-*`, `--mint-*`, `--amber*`, `--mist-*`, `--font-plex-mono`. Those are aliased to the semantic tokens at the end of `:root` so every module inherits the palette and dark mode; prefer the semantic names in new work.
+- `mobile/native.css` holds only runtime concerns (full-bleed root, safe areas, tap highlight, keyboard-safe input sizes). Visual rules belong in the shared stylesheets.
+- The launch screen is a plain `systemGroupedBackground` view (no logo splash, per HIG), the app icon lives in `ios/App/App/Assets.xcassets/AppIcon.appiconset`, and `Info.plist` no longer forces a light appearance.

@@ -11,8 +11,14 @@ import { authErrorMessage, validAuthEmail } from "../lib/auth";
 import { authServiceUnreachable, authStorageKey, getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
 import { isProductionApp } from "../lib/environment";
 import { authenticatedAppPath, safeAppPath } from "../lib/auth-navigation";
-import { pendingInvitation, rememberBrowserInvitation } from "../lib/invitations";
+import { pendingInvitationKind, pendingInvitation, rememberBrowserInvitation } from "../lib/invitations";
 import { preparedOfflineIdentity, WORKSPACE_CACHE_KEY, type PreparedIdentity } from "../lib/offline-identity";
+import { PhoneSignIn } from "./PhoneSignIn";
+import { JoinInvitation } from "./JoinInvitation";
+import { GoogleSignInButton } from "./GoogleSignInButton";
+import { signInWithGoogleNative } from "../mobile/google-auth";
+import { AppleSignInButton } from "./AppleSignInButton";
+import { signInWithApple } from "../mobile/apple-auth";
 import { MobileInvitation } from "./MobileInvitation";
 
 export function NeighborWalkRoot() {
@@ -29,7 +35,7 @@ export function NeighborWalkRoot() {
     return new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery";
   });
   const userId = session?.user.id;
-  const email = session?.user.email ?? "";
+  const email = session?.user.email || session?.user.phone || "";
   const fullName = session?.user.user_metadata?.full_name;
   const displayName = session?.user.user_metadata?.name;
   const name = typeof fullName === "string" ? fullName : typeof displayName === "string" ? displayName : undefined;
@@ -109,6 +115,7 @@ export function NeighborWalkRoot() {
   if (loading && !offlineUser) return <ConnectionLoading />;
   if (!workspaceUser) return <SignInScreen />;
   if (passwordRecovery && session) return <PasswordRecovery email={session.user.email ?? "your account"} onSave={async (password) => { await updatePassword(password); setPasswordRecovery(false); }} />;
+  if (session && pendingInvitationKind(window.sessionStorage) === "join") return <JoinInvitation token={pendingInvitation(window.sessionStorage)!} account={session.user.email ?? session.user.phone ?? "your account"} />;
   if (["/login", "/invite"].includes(pathname)) return <ConnectionLoading />;
 
   return (
@@ -131,7 +138,7 @@ function authRedirectUrl() {
   return url.toString();
 }
 
-type AuthAction = "google" | "password" | "signup" | "reset" | "link" | null;
+type AuthAction = "apple" | "google" | "password" | "signup" | "reset" | "link" | null;
 
 function SignInScreen() {
   const [email, setEmail] = useState("");
@@ -179,6 +186,7 @@ function SignInScreen() {
   };
 
   const signInWithGoogle = async () => {
+    if (isMobileApp) { await runAuthAction("google", signInWithGoogleNative); return; }
     const client = clientOrError();
     if (!client) return;
     await runAuthAction("google", async () => {
@@ -238,6 +246,7 @@ function SignInScreen() {
         <h1 id="signin-title">Pick up where care left off.</h1>
         <p className="auth-intro">{isMobileApp ? "Sign in with your church account. Your next walk and the people you care for are right here." : isProductionApp ? "Google is the quickest way in. Password sign-in is also available and does not send an email each time." : "Use your test account here. This workspace has its own data and sign-in."}</p>
         <div className="auth-form">
+          {isMobileApp && <><AppleSignInButton busy={busy} onClick={() => void runAuthAction("apple", signInWithApple)} /><GoogleSignInButton disabled={busy} loading={action === "google"} onClick={() => void signInWithGoogle()} /><div className="auth-divider"><span>or use your email</span></div></>}
           {isProductionApp && !isMobileApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or use your password</span></div></>}
           <form className="auth-credentials" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
             <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" /></label>
@@ -251,6 +260,7 @@ function SignInScreen() {
           {confirmation && <div className="auth-confirmation" role="status"><Check size={20} /><div><strong>{confirmation.title}</strong><span>{confirmation.detail}</span></div></div>}
           {error && <p className="auth-error" role="alert">{error}</p>}
           <details className="auth-email-fallback"><summary>Use a one-time email link instead</summary><p>This fallback sends an email and may be unavailable when the project email limit is reached.</p><button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}><Mail size={16} />{action === "link" ? "Sending…" : "Send one-time link"}</button></details>
+          {isMobileApp && process.env.NEXT_PUBLIC_PHONE_AUTH_ENABLED === "true" && <PhoneSignIn />}
           {isMobileApp && <MobileInvitation />}
         </div>
         <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are visible to their owner, church leaders and explicitly shared teammates. Pending handoff recipients and some historical creators may also have access, as shown on the profile.</span></div>
