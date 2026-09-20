@@ -1,6 +1,8 @@
 /* Map view: glass toolbar, capsule filters, floating controls. */
 .map-view { position: relative; height: 100%; display: flex; flex-direction: column; padding: 14px 16px 16px; overflow: hidden; }
 .mobile-context-row { display: none; }
+.map-view-controls { position: relative; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
+.map-view-controls .outreach-display-switch { margin: 0; }
 .map-toolbar { position: relative; z-index: 30; display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .map-filter-scroll { display: flex; gap: 6px; padding: 2px 0; }
 .map-filter-scroll button { min-height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: var(--radius-pill); color: var(--label); background: var(--bg-grouped-2); box-shadow: var(--shadow-sm); font-size: var(--fs-footnote); font-weight: 600; white-space: nowrap; transition: background-color .15s ease, color .15s ease; }

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { ArrowRight, CalendarClock, CheckCircle2, ChevronDown, CircleX, HeartHandshake, MapPinned, Plus } from "lucide-react";
+import { ArrowRight, CalendarClock, CheckCircle2, ChevronDown, CircleX, HeartHandshake, MapPinned } from "lucide-react";
 import { calendarDate, formatCalendarDate } from "../lib/calendar";
 import type { NeighborWalkData } from "../lib/domain";
 import { homeWalk } from "../lib/home-walk";
@@ -8,11 +8,11 @@ import type { OutingParticipant, OutingResponse } from "../lib/outing-participan
 import { useAsyncAction } from "../lib/use-async-action";
 import { ViewHeading } from "./ui";
 
-export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onPerson, onOuting, onReviewSync, onPeople, onPlanWalk, onStart, onWalkResponse, additionalAction }: {
+export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onPerson, onOuting, onReviewSync, onPeople, onViewMap, onStart, onWalkResponse, additionalAction }: {
   data: NeighborWalkData; activeVolunteerId: string; canManage: boolean;
   onFollowUps: (id?: string, scope?: "mine" | "unowned" | "declined") => void; onPerson: (id: string) => void;
   onOuting: (id?: string) => void; onReviewSync: () => void; onPeople: () => void;
-  onPlanWalk: () => void; onStart: (id: string, territoryId: string, targetId?: string) => Promise<unknown>;
+  onViewMap: () => void; onStart: (id: string, territoryId: string, targetId?: string) => Promise<unknown>;
   onWalkResponse: (participant: OutingParticipant, response: OutingResponse) => Promise<unknown>;
   additionalAction?: React.ReactNode;
 }) {
@@ -69,7 +69,7 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
     })()}
   </article>)}</div>;
   return <section className="content-view today-view">
-    <ViewHeading eyebrow={formatCalendarDate(today, { weekday: "long", month: "long", day: "numeric" })} title={"Hello, " + name + "."} aside={canManage && <button className="button quiet" onClick={onPlanWalk}><Plus size={16} /> Plan a walk</button>} />
+    <ViewHeading eyebrow={formatCalendarDate(today, { weekday: "long", month: "long", day: "numeric" })} title={"Hello, " + name + "."} aside={canManage && <button type="button" className="button quiet" onClick={onViewMap}><MapPinned size={16} aria-hidden="true" /> View map</button>} />
     {unansweredResponseOutings.length > 0 && <section className="today-card home-walk-invitations">
       <span className="eyebrow"><MapPinned size={16} /> Your walk responses</span>
       <h2>Can you join?</h2>

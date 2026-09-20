@@ -39,6 +39,9 @@
   .content-view, .map-view { padding-top: calc(var(--shell-top) + var(--header-height) + 14px); }
   .content-view { padding-inline: var(--page-inset); padding-bottom: calc(var(--tab-bar-height) + var(--bottom-inset) + 40px); }
   .map-view { padding-inline: 12px; padding-bottom: calc(var(--tab-bar-height) + var(--bottom-inset) + 20px); }
+  .map-view-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .map-view-controls .outreach-display-switch { width: auto; }
+  .map-plan-walk-button { padding-inline: 11px; }
   .mobile-context-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .mobile-context-row .eyebrow { margin-bottom: 2px; font-size: var(--fs-caption); }
   .mobile-context-row button { display: flex; align-items: center; gap: 4px; padding: 0; color: var(--label); }

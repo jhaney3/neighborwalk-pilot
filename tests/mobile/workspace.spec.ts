@@ -38,6 +38,8 @@ for (const width of [320, 393, 768]) {
       expect(bounds?.height).toBeGreaterThanOrEqual(44);
       expect(bounds?.width).toBeGreaterThanOrEqual(44);
     }
+    await page.getByRole("button", { name: "View map", exact: true }).click();
+    await expect(page.getByRole("combobox", { name: "Search any address", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     const modal = await page.getByRole("dialog").boundingBox();
