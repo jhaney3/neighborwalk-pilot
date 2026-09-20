@@ -11,6 +11,11 @@
 .walk-target-instruction,.walk-target-feedback { margin:0; color:var(--muted); font-size:var(--text-supporting); }
 .walk-target-feedback { color:#8a3b25; }
 .walk-target-options,.walk-target-edit-actions,.walk-target-suggestions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.walk-target-outcome-key { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:var(--text-supporting); }
+.walk-target-outcome-key>strong { flex:none; color:var(--pine-900); }
+.walk-target-outcome-key ul { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; margin:0; padding:0; list-style:none; }
+.walk-target-outcome-key li { display:flex; align-items:center; gap:5px; white-space:nowrap; }
+.walk-target-outcome-key i { width:9px; height:9px; border:1px solid rgba(0,0,0,.12); border-radius:50%; box-shadow:0 0 0 1px rgba(255,255,255,.8); }
 .walk-target-options label { display:flex; flex-direction:row; align-items:center; gap:7px; }
 .walk-target-options input[type=checkbox] { width:18px; min-height:18px; }
 .walk-target-suggestions span { color:var(--muted); font-size:var(--text-supporting); }
@@ -24,4 +29,4 @@
 .walk-target-list span,.walk-target-list strong,.walk-target-list small { display:block; }
 .walk-target-list small,.walk-target-attribution { color:var(--muted); font-size:11px; }
 .walk-target-list li>button:last-child { margin-right:7px; border:0; background:transparent; color:#8a3b25; cursor:pointer; }
-@media(max-width:620px){.walk-target-planner { margin:0 -15px; }.walk-target-tools,.walk-target-options,.walk-target-edit-actions,.walk-target-suggestions,.walk-target-list,.walk-target-instruction,.walk-target-feedback,.walk-target-attribution { margin-inline:12px; }.walk-target-map-wrap { min-height:55svh; border-radius:0; }.walk-target-edit-actions button{flex:1}.walk-target-tools{padding-inline:12px}.walk-target-map .maplibregl-ctrl-bottom-right{bottom:8px}}
+@media(max-width:620px){.walk-target-planner { margin:0 -15px; }.walk-target-tools,.walk-target-options,.walk-target-outcome-key,.walk-target-edit-actions,.walk-target-suggestions,.walk-target-list,.walk-target-instruction,.walk-target-feedback,.walk-target-attribution { margin-inline:12px; }.walk-target-map-wrap { min-height:55svh; border-radius:0; }.walk-target-edit-actions button{flex:1}.walk-target-tools{padding-inline:12px}.walk-target-map .maplibregl-ctrl-bottom-right{bottom:8px}}

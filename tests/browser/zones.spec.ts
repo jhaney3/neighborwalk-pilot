@@ -465,6 +465,7 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   const zoneName = `Fictional drawn zone ${suffix}`;
   const runtimeErrors = collectRuntimeErrors(page);
   const planningRequests = await openDemo(page);
+  await page.getByRole("button", { name: "View map", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("textbox", { name: "Walk name", exact: true }).fill(walkName);
@@ -578,6 +579,7 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
 
 test("the planner starts from a persistent zone and offers area and street target modes", async ({ page }) => {
   await openDemo(page);
+  await page.getByRole("button", { name: "View map", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
@@ -666,6 +668,7 @@ test("real Lawrence parcels support a new zone and ready whole-zone walk without
 
   await openDemo(page, { realPlanningGis: true });
   await installLawrenceDemoZone(page);
+  await page.getByRole("button", { name: "View map", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("textbox", { name: "Walk name", exact: true }).fill(walkName);

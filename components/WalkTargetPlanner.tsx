@@ -4,8 +4,9 @@ import { AlertTriangle, Check, LoaderCircle, Redo2, Undo2, Waypoints, X } from "
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Feature, FeatureCollection, Geometry, Point } from "geojson";
 import type { Map as MapLibreMap, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
-import type { Coordinates, Territory } from "../lib/domain";
+import { outcomeMeta, outcomeValues, type Coordinates, type Property, type Territory } from "../lib/domain";
 import { drawingBoundaryReady, drawingGestureIntent, drawingInstruction, moveDrawingCorner, rectangleBoundary, rectangleHasArea, undoDrawingPoint, type MapDrawingMode } from "../lib/map-drawing";
+import { mapLocationPointCollection } from "../lib/map-location-points";
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
 import type { ParcelFeatureCollection } from "../lib/parcels";
 import { clipLineToBoundary, closeRing, connectedStreetIds, mapLineOffsetForSide, polygonInsideBoundary, polygonSelfIntersects, polygonsOverlap, streetSidePolygons, streetsWithinMeters } from "../lib/planning-geometry";
@@ -27,6 +28,7 @@ export type WalkTargetPlannerProps = {
   onChange: (targets: WalkTargetDraft[]) => void;
   loadPlanningData?: (territory: Territory) => Promise<PlanningMapData>;
   visitedParcelKeys?: ReadonlySet<string>;
+  locationProperties?: readonly Property[];
   demo: boolean;
   readOnly?: boolean;
 };
@@ -36,6 +38,7 @@ type DraftKind = MapDrawingMode | "streets";
 const TARGET_COLORS = ["#286c59", "#a9660d", "#376f9e", "#95598a", "#8a593e"];
 const PLANNING_LOAD_TIMEOUT_MS = 20_000;
 const EMPTY_PARCEL_KEYS = new Set<string>();
+const EMPTY_LOCATION_PROPERTIES: readonly Property[] = [];
 
 function polygon(points: Coordinates[]): Extract<WalkTargetGeometry, { type: "Polygon" }> { return { type: "Polygon", coordinates: [closeRing(points)] }; }
 function collection(features: Feature<Geometry>[]): FeatureCollection { return { type: "FeatureCollection", features }; }
@@ -74,11 +77,12 @@ function planningLayerSummary(label: "Streets" | "Parcels", layer: PlanningStree
   return layerSummary(label, layer.status, count, noun);
 }
 
-export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedTargetId, mapStyleUrl, onSelectedTargetChange, onChange, loadPlanningData, visitedParcelKeys = EMPTY_PARCEL_KEYS, demo, readOnly = false }: WalkTargetPlannerProps) {
+export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedTargetId, mapStyleUrl, onSelectedTargetChange, onChange, loadPlanningData, visitedParcelKeys = EMPTY_PARCEL_KEYS, locationProperties = EMPTY_LOCATION_PROPERTIES, demo, readOnly = false }: WalkTargetPlannerProps) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const locationPoints = useMemo(() => mapLocationPointCollection(locationProperties), [locationProperties]);
   const stateRef = useRef({ mode: "select" as Mode, points: [] as Coordinates[], streets: EMPTY_STREETS, parcels: EMPTY_PLANNING_PARCELS,
-    connected: false, streetIds: new Set<string>(), automaticParcelIds: new Set<string>(), parcelIds: new Set<string>(), claimedParcelIds: new Set<string>(), visitedParcelKeys, targets, selectedTargetId, parentTerritory, readOnly });
+    locationPoints, connected: false, streetIds: new Set<string>(), automaticParcelIds: new Set<string>(), parcelIds: new Set<string>(), claimedParcelIds: new Set<string>(), visitedParcelKeys, targets, selectedTargetId, parentTerritory, readOnly });
   const dragVertex = useRef<number | null>(null);
   const rectangleStart = useRef<Coordinates | null>(null);
   const rectanglePointerStart = useRef<[number, number] | null>(null);
@@ -125,6 +129,10 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
   const parcelIds = useMemo(() => new Set([...applyParcelSelectionOverrides(automaticParcelIds, parcelOverrides)].filter((id) => !claimedParcelIds.has(id))), [automaticParcelIds, claimedParcelIds, parcelOverrides]);
   const excludedParcelCount = useMemo(() => [...candidateAutomaticParcelIds].filter((id) => claimedParcelIds.has(id)).length, [candidateAutomaticParcelIds, claimedParcelIds]);
   const visitedParcelCount = useMemo(() => eligibleParcels.features.filter((feature) => visitedParcelKeys.has(`${feature.properties.countyFips}:${feature.properties.gislink}`)).length, [eligibleParcels.features, visitedParcelKeys]);
+  const locationOutcomes = useMemo(() => {
+    const present = new Set(locationPoints.features.map((feature) => feature.properties?.outcome));
+    return outcomeValues.filter((outcome) => present.has(outcome));
+  }, [locationPoints.features]);
 
   useEffect(() => {
     if (!overlapNotice) return;
@@ -132,7 +140,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
     return () => window.clearTimeout(timeout);
   }, [overlapNotice]);
 
-  useEffect(() => { stateRef.current = { mode, points, streets, parcels: displayedParcels, connected, streetIds, automaticParcelIds, parcelIds, claimedParcelIds, visitedParcelKeys, targets, selectedTargetId, parentTerritory, readOnly }; }, [automaticParcelIds, claimedParcelIds, connected, displayedParcels, mode, parentTerritory, parcelIds, points, readOnly, selectedTargetId, streetIds, streets, targets, visitedParcelKeys]);
+  useEffect(() => { stateRef.current = { mode, points, streets, parcels: displayedParcels, locationPoints, connected, streetIds, automaticParcelIds, parcelIds, claimedParcelIds, visitedParcelKeys, targets, selectedTargetId, parentTerritory, readOnly }; }, [automaticParcelIds, claimedParcelIds, connected, displayedParcels, locationPoints, mode, parentTerritory, parcelIds, points, readOnly, selectedTargetId, streetIds, streets, targets, visitedParcelKeys]);
   const updateSource = useCallback((id: string, data: FeatureCollection) => {
     const source = mapRef.current?.getSource(id) as { setData: (data: FeatureCollection) => void } | undefined;
     source?.setData(data);
@@ -195,7 +203,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
       map.addControl(new maplibre.NavigationControl({ showCompass: false }), "bottom-right");
       const configure = () => {
         const addSource = (id: string) => { if (!map.getSource(id)) map.addSource(id, { type: "geojson", data: collection([]) }); };
-        ["plan-parent", "plan-targets", "plan-draft", "plan-streets", "plan-parcels"].forEach(addSource);
+        ["plan-parent", "plan-targets", "plan-draft", "plan-streets", "plan-parcels", "plan-locations"].forEach(addSource);
         const add = (layer: Parameters<MapLibreMap["addLayer"]>[0]) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
         add({ id: "plan-parent-fill", type: "fill", source: "plan-parent", paint: { "fill-color": ["get", "color"], "fill-opacity": .06 } });
         add({ id: "plan-parent-line", type: "line", source: "plan-parent", paint: { "line-color": ["get", "color"], "line-width": 3 } });
@@ -205,6 +213,12 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
         add({ id: "plan-streets-line", type: "line", source: "plan-streets", paint: { "line-color": ["case", ["==", ["get", "chosen"], true], "#e28f16", "#53796d"], "line-width": ["case", ["==", ["get", "chosen"], true], 7, 2], "line-opacity": ["case", ["==", ["get", "chosen"], true], .9, .55] } });
         add({ id: "plan-target-fill", type: "fill", source: "plan-targets", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": ["get", "color"], "fill-opacity": ["case", ["get", "selected"], .34, .18] } });
         add({ id: "plan-target-line", type: "line", source: "plan-targets", filter: ["!=", ["get", "displayKind"], "side-fill"], paint: { "line-color": ["get", "color"], "line-width": ["case", ["get", "selected"], 6, 4], "line-offset": ["case", ["==", ["get", "side"], "left"], mapLineOffsetForSide("left"), ["==", ["get", "side"], "right"], mapLineOffsetForSide("right"), 0] } });
+        add({ id: "plan-location-dots", type: "circle", source: "plan-locations", minzoom: 12.5, paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 12.5, 2.2, 16, 4.2, 19, 5.2],
+          "circle-color": ["get", "statusColor"],
+          "circle-stroke-color": ["get", "outlineColor"],
+          "circle-stroke-width": ["case", ["==", ["get", "visited"], true], 1.4, 1.8],
+        } });
         add({ id: "plan-draft-fill", type: "fill", source: "plan-draft", paint: { "fill-color": "#e9a84a", "fill-opacity": .22 } });
         add({ id: "plan-draft-line", type: "line", source: "plan-draft", paint: { "line-color": "#9c6411", "line-width": 3 } });
         add({ id: "plan-draft-point-hit", type: "circle", source: "plan-draft", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 18, "circle-color": "#9c6411", "circle-opacity": .01 } });
@@ -216,6 +230,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
         updateSource("plan-draft", draftFeatures(current.points));
         updateSource("plan-streets", { ...displayStreets, features: displayStreets.features.map((feature) => ({ ...feature, properties: { ...feature.properties, chosen: current.streetIds.has(String(feature.properties?.id)) } })) });
         updateSource("plan-parcels", planningParcelDisplayCollection(current.parcels, current.parcelIds, current.claimedParcelIds, current.visitedParcelKeys, current.readOnly));
+        updateSource("plan-locations", current.locationPoints);
         setStatus("ready");
       };
       map.on("style.load", configure);
@@ -312,6 +327,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
   useEffect(() => updateSource("plan-draft", draftFeatures(points)), [points, updateSource]);
   useEffect(() => { const display = streetDisplayCollection(streets, parentTerritory.boundary); updateSource("plan-streets", { ...display, features: display.features.map((feature) => ({ ...feature, properties: { ...feature.properties, chosen: streetIds.has(String(feature.properties?.id)) } })) }); }, [parentTerritory.boundary, streetIds, streets, updateSource]);
   useEffect(() => updateSource("plan-parcels", planningParcelDisplayCollection(displayedParcels, parcelIds, claimedParcelIds, visitedParcelKeys, readOnly)), [claimedParcelIds, displayedParcels, parcelIds, readOnly, updateSource, visitedParcelKeys]);
+  useEffect(() => updateSource("plan-locations", locationPoints), [locationPoints, updateSource]);
 
   const duplicateStreet = useMemo(() => targets.some((target) => target.streetSelection?.segmentIds.some((id) => streetIds.has(id))), [streetIds, targets]);
   const overlapsArea = useMemo(() => points.length >= 3 && targets.some((target) => target.geometry.type === "Polygon" && polygonsOverlap(points, target.geometry.coordinates[0])), [points, targets]);
@@ -350,6 +366,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
       <button type="button" disabled={readOnly || !planningComplete || targets.length > 0} onClick={addWhole}>Whole zone</button>
     </div>
     <div className={`walk-target-map-wrap${mode === "polygon" || mode === "rectangle" ? " map-drawing-active" : ""}`}><div ref={container} className="walk-target-map" role="application" aria-label="Interactive target map"/>{status !== "ready" && <div className={`walk-target-state ${status}`}>{status === "loading" ? <LoaderCircle className="spin"/> : <AlertTriangle/>}<span>{status === "loading" ? "Loading planning map…" : "Map unavailable. Try again or draw the parent zone later."}</span></div>}{overlapNotice && <div key={overlapNotice.id} className="walk-target-map-toast" role="status"><AlertTriangle size={16} aria-hidden="true"/>{overlapNotice.message}</div>}</div>
+    {locationOutcomes.length > 0 && <div className="walk-target-outcome-key" role="group" aria-label="Visit outcome map key"><strong>Map dots</strong><ul>{locationOutcomes.map((outcome) => <li key={outcome}><i style={{ background: outcomeMeta[outcome].color }} /><span>{outcomeMeta[outcome].short}</span></li>)}</ul></div>}
     {!readOnly && <div className="walk-target-options" aria-live="polite">
       <span>{planningLayerSummary("Streets", currentStreetLayer, streets.features.length, "section")}</span>
       <span>{planningLayerSummary("Parcels", currentParcelLayer, eligibleParcels.features.length, "residential parcel")}</span>

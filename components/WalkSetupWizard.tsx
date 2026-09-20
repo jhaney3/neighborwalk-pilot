@@ -56,6 +56,7 @@ function TargetPlanPreview({ data, territory, targets, label }: {
   }), [targets]);
   const loadReviewData = useMemo(() => async () => reviewData, [reviewData]);
   const visitedParcelKeys = useMemo(() => parentZoneTouchedParcelKeys(data, territory.id), [data, territory.id]);
+  const locationProperties = useMemo(() => data.properties.filter((property) => property.territoryId === territory.id), [data.properties, territory.id]);
   return <section className="walk-plan-preview" aria-label={label}>
     <WalkTargetPlanner
       parentTerritory={territory}
@@ -67,6 +68,7 @@ function TargetPlanPreview({ data, territory, targets, label }: {
       onChange={ignoreTargetChange}
       loadPlanningData={loadReviewData}
       visitedParcelKeys={visitedParcelKeys}
+      locationProperties={locationProperties}
       readOnly
     />
     <ul className="walk-plan-preview-legend">
@@ -124,6 +126,7 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
     : data.territories.filter((item) => item.kind !== "list");
   const planned = targets.map((draft) => plannedTarget(draft, {}));
   const visitedParcelKeys = useMemo(() => activeTerritoryId ? parentZoneTouchedParcelKeys(data, activeTerritoryId) : new Set<string>(), [activeTerritoryId, data]);
+  const locationProperties = useMemo(() => data.properties.filter((property) => property.territoryId === activeTerritoryId), [activeTerritoryId, data.properties]);
   const issues = targetPlanIssues(planned);
   const parsedTimes = useMemo(() => parseWalkDateTimes(start, end, selectedTimezone), [start, end, selectedTimezone]);
   const outingInput = parsedTimes.error ? undefined : {
@@ -190,7 +193,7 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
             </>}
             <label><input type="radio" checked={community} onChange={() => setCommunity(true)} /><span><strong>Community setting</strong><small>No mapped assignment is needed.</small></span></label>
           </fieldset>
-          {territory && !community && <WalkTargetPlanner parentTerritory={territory} eventId={outing?.id ?? "draft-event"} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} visitedParcelKeys={visitedParcelKeys} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} />}
+          {territory && !community && <WalkTargetPlanner parentTerritory={territory} eventId={outing?.id ?? "draft-event"} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} visitedParcelKeys={visitedParcelKeys} locationProperties={locationProperties} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} />}
         </>}
       </section>}
 

@@ -21,6 +21,9 @@
   .desktop-sidebar { display: none; }
   .workspace { height: 100%; }
   .map-view { padding: 10px; }
+  .map-view-controls { display: grid; grid-template-columns: minmax(0,1fr) auto; }
+  .map-view-controls .outreach-display-switch { width: auto; }
+  .map-plan-walk-button { padding-inline: 11px; }
   .mobile-context-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
   .mobile-context-row .eyebrow { margin-bottom: 2px; font-size: var(--text-caption); }
   .mobile-context-row button { display: flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; }
