@@ -251,7 +251,7 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
 
   await openDemo(page);
   await page.getByRole("button", { name: "View map", exact: true }).click();
-  await expect(page.getByRole("searchbox", { name: "Search any address", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Search any address", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   await page.getByRole("dialog", { name: "Plan a walk" }).getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Home", exact: true }).click();
