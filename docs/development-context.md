@@ -61,8 +61,12 @@ settings. It tracks locations and objective visit outcomes, with separate
 person-oriented discipleship records. Coverage measures operational activity;
 there are no conversion scores or volunteer leaderboards.
 
-The repository contains no native iOS/Android project, React Native/Expo app,
-or Capacitor wrapper. App Store packaging is future work.
+At this September 8 orientation checkpoint the repository contained no native
+project. A subsequent owner-directed implementation on `codex/neighborwalk-ios`
+now adds a bundled Capacitor/Xcode iOS client under `mobile/` and `ios/`, with
+checkpoint `5046a8a30528747f7b7706bbdf7b4dcf5eb15974`. It is not merged into the
+deployed website branch or released through TestFlight/App Store. Android remains
+the responsive PWA; there is no native Android project.
 
 ## Code map
 
@@ -81,6 +85,7 @@ or Capacitor wrapper. App Store packaging is future work.
 | Scripture | `components/ScriptureReader.tsx`, `app/api/scripture/route.ts` | Reference-only external links; the retired API route returns a provider-free reference response |
 | Appearance | `app/globals.css`, `app/styles/*.css` | Feature CSS, responsive layout, shared controls; preserve the documented import order |
 | PWA | `public/sw.js`, `public/manifest.webmanifest` | Installation and bounded caching; service worker registers only in production |
+| Native iOS branch | `mobile/`, `ios/`, `capacitor.config.ts` on `codex/neighborwalk-ios` | Bundled workspace, native auth/link/share/print integrations and independent Xcode/TestFlight/App Store release path |
 | Database | `supabase/migrations/` | Actual pilot schema history, grants, RLS, guard functions, parcel RPCs |
 | Supporting designs | `docs/database/postgres.sql`, `docs/api/openapi.yaml` | Archived proposals, not the implemented backend or an executable migration/API contract |
 

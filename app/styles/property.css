@@ -85,6 +85,12 @@
 .visit-details-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .visit-optional-details { display: grid; gap: 11px; margin-top: 11px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--mist-50); }
 .visit-optional-details .form-field textarea,.visit-optional-details .form-field select,.visit-optional-details .form-field input { background: white; }
+.visit-person-create { display: grid; gap: 11px; padding: 13px; border: 1px solid var(--line-positive); border-radius: 11px; background: white; }
+.visit-person-create-title { display: flex; align-items: flex-start; gap: 9px; color: var(--pine-700); }
+.visit-person-create-title > svg { flex: none; margin-top: 1px; }
+.visit-person-create-title strong, .visit-person-create-title small { display: block; }
+.visit-person-create-title strong { color: var(--ink); font-size: var(--text-control); }
+.visit-person-create-title small { margin-top: 2px; color: var(--muted); font-size: var(--text-supporting); line-height: 1.4; }
 .encounter-optional-details { container-type: inline-size; display: grid; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--mist-50); }
 .encounter-person-heading { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 8px; }
 .encounter-person-heading > label { min-width: 0; }
@@ -138,8 +144,10 @@
 .people-panel { display: grid; gap: 11px; padding-top: 13px; }
 .people-add { width: 100%; }
 .resident-list { display: grid; gap: 7px; }
-.resident-card { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--mist-50); }
+.resident-card { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--mist-50); }
 .resident-avatar { width: 33px; height: 33px; display: grid; place-items: center; border-radius: 50%; color: var(--pine-700); background: var(--mint-100); font-size: var(--text-control); font-weight: 750; }
+.resident-card-details { min-width: 0; overflow-wrap: anywhere; }
+.resident-card-actions { display: flex; align-items: center; gap: 6px; }
 .resident-card strong, .resident-card small { display: block; }
 .resident-card strong { font-size: var(--text-control); }
 .resident-card small { margin-top: 2px; color: var(--muted); font-size: var(--text-supporting); }

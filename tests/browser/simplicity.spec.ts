@@ -73,6 +73,7 @@ async function demoSnapshot(page: Page, filters: { walkName?: string; targetName
         frozenAt?: string;
       }>;
       properties?: Array<{ id: string; address: string }>;
+      residents?: Array<{ id: string; propertyId?: string; name?: string }>;
       assignments?: Array<{
         id: string;
         eventId: string;
@@ -167,8 +168,12 @@ async function demoSnapshot(page: Page, filters: { walkName?: string; targetName
             objectiveNote: objectiveNote ?? null,
           }))
           .sort((left, right) => left.id.localeCompare(right.id));
+        const residents = (data.residents ?? [])
+          .filter(({ propertyId }) => Boolean(propertyId && propertyIds.includes(propertyId)))
+          .map(({ id, propertyId, name }) => ({ id, propertyId: propertyId!, name: name ?? null }))
+          .sort((left, right) => left.id.localeCompare(right.id));
 
-        return { eventIds, targetIds, territoryIds, walkTargets, propertyIds, assignments, crews, participants, visits };
+        return { eventIds, targetIds, territoryIds, walkTargets, propertyIds, assignments, crews, participants, visits, residents };
       } finally {
         database.close();
       }
@@ -230,6 +235,12 @@ test("People opens to follow-ups, switches to the directory, and keeps task link
   const profileActivity = profileTabs.getByRole("tab", { name: /Activity/ });
   const profileDetails = profileTabs.getByRole("tab", { name: "Details", exact: true });
   await expect(profileFollowUps).toHaveAttribute("aria-selected", "true");
+  await profileActivity.click();
+  await page.getByRole("button", { name: "View task controls", exact: true }).click();
+  const profileTask = page.locator(".person-profile-followups .followup-card").first();
+  await expect(profileFollowUps).toHaveAttribute("aria-selected", "true");
+  await expect(profileTask).toBeInViewport();
+  await expect(profileTask.getByRole("button", { name: "Complete", exact: true })).toBeVisible();
   await profileFollowUps.focus();
   await profileFollowUps.press("ArrowRight");
   await expect(profileActivity).toBeFocused();
@@ -439,6 +450,37 @@ test("recording no answer never asks for a person", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
   const reloaded = await demoSnapshot(page, { address: "118 Maple Avenue" });
   expect(reloaded.visits.find(({ id }) => id === savedVisits[0].id)).toEqual(savedVisits[0]);
+});
+
+test("a person can be added and linked while recording a visit", async ({ page }) => {
+  await openDemo(page);
+  const navigation = page.getByRole("navigation", { name: "Main sections" });
+  await navigation.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("button", { name: "Locations & address lists", exact: true }).click();
+  await page.getByRole("group", { name: "Outreach display" }).getByRole("button", { name: "Address list", exact: true }).click();
+  await page.getByRole("button", { name: /^118 Maple Avenue/ }).click();
+
+  const before = await demoSnapshot(page, { address: "118 Maple Avenue" });
+  const drawer = page.getByRole("dialog", { name: "Location details for 118 Maple Avenue" });
+  await drawer.getByRole("button", { name: "Add a person or note", exact: true }).click();
+  const personSelect = drawer.getByRole("combobox", { name: /^Person/ });
+  await expect(personSelect.getByRole("option", { name: "＋ Add a new person…", exact: true })).toBeAttached();
+  await personSelect.selectOption({ label: "＋ Add a new person…" });
+  await drawer.getByRole("textbox", { name: "Name or useful description", exact: true }).fill("Playwright Neighbor");
+  await drawer.getByRole("button", { name: "Save person", exact: true }).click();
+
+  await expect(drawer.getByRole("region", { name: "Add a person for this visit", exact: true })).toHaveCount(0);
+  await expect(personSelect.locator("option:checked")).toHaveText("Playwright Neighbor");
+  await drawer.getByRole("button", { name: "Save visit", exact: true }).click();
+  await expect(drawer).toBeHidden();
+
+  const after = await demoSnapshot(page, { address: "118 Maple Avenue" });
+  const beforeResidentIds = new Set(before.residents.map(({ id }) => id));
+  const addedResident = after.residents.find(({ id }) => !beforeResidentIds.has(id));
+  expect(addedResident).toMatchObject({ propertyId: before.propertyIds[0], name: "Playwright Neighbor" });
+  const beforeVisitIds = new Set(before.visits.map(({ id }) => id));
+  const addedVisit = after.visits.find(({ id }) => !beforeVisitIds.has(id));
+  expect(addedVisit).toMatchObject({ propertyId: before.propertyIds[0], outcome: "conversation", residentId: addedResident?.id });
 });
 
 test("a person’s follow-up can be completed in their profile", async ({ page }) => {

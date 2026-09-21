@@ -35,6 +35,12 @@
   pointer-events: none;
 }
 
+body:has(.auth-shell, .workspace-setup-shell, .app-loading) .sandbox-banner {
+  top: 6px;
+  bottom: auto;
+}
+
 @media (max-width: 820px) {
   .sandbox-banner { bottom: calc(68px + env(safe-area-inset-bottom)); }
+  body:has(.auth-shell, .workspace-setup-shell, .app-loading) .sandbox-banner { top: 6px; bottom: auto; }
 }

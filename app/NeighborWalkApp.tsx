@@ -725,9 +725,9 @@ function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; er
         <div className="workspace-setup-mark"><Users size={22} /></div>
         <p className="eyebrow">Invitation required</p>
         <h1 id="workspace-title">Ask your leader for an invitation link.</h1>
-        <p>NeighborWalk is private to your church team. Open the one-time link from a leader, then sign in with the exact email address they invited.</p>
+        <p>NeighborWalk is private to your church team. Open the one-time link from a leader, then sign in with Apple, Google, or a verified email account.</p>
         <div className="workspace-account"><CircleUserRound size={17} /><span><strong>Signed in</strong>{user.email}</span></div>
-        <div className="data-note"><ShieldCheck size={16} /><span>Invitation links expire after 7 days, work once, and cannot be used by a different email.</span></div>
+        <div className="data-note"><ShieldCheck size={16} /><span>New invitation links expire after 7 days and work once. Keep the link private; the signed-in recipient must review and confirm before joining.</span></div>
         {error && <p className="auth-error" role="alert">{error}</p>}
         {onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onSignOut)}>Use a different account</button>}
         {action.error && <p role="alert">{action.error}</p>}

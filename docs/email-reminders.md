@@ -1,6 +1,6 @@
 # Opt-in next-step reminders
 
-Implemented on the rework branch; **production sending and scheduling are not enabled or verified**. This is operational follow-up for consenting church members, not bulk neighbor messaging or marketing email.
+The reminder code and database support are deployed; **production sending and scheduling are not enabled or verified**. As of September 19, 2026, `/api/reminders/status` returns `available: false`. This is operational follow-up for consenting church members, not bulk neighbor messaging or marketing email.
 
 ## Product contract
 
@@ -25,7 +25,7 @@ Signed unsubscribe links reveal no member/church identifier beyond an opaque pre
 ## Owner-approved activation checklist
 
 1. Approve commercial-compatible hosting, the operator/support identity, data handling and the email provider. Do not treat setting an approval environment flag as obtaining real policy/legal approval.
-2. Rehearse and release the complete rework database/application cutover first. This migration is additive, enrolls no one and does not send email by itself.
+2. Confirm the deployed application/schema checkpoint, then complete the fresh backup, hosted-history reconciliation and authenticated production checks in [the release gates](production-checklist.md). The additive reminder migration enrolls no one and does not send email by itself.
 3. Configure a verified sending domain with the provider's requested DNS records, a domain-scoped sending API key, a monitored sender/support address and appropriate provider retention/access. Use production-scoped server secrets only. Review sending quotas and [current provider limits](https://resend.com/docs/api-reference/rate-limit). A shared provider team may also have other senders; 429 errors are safely deferred, not bypassed.
 4. Set `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `REMINDER_FROM_EMAIL`, `CRON_SECRET`, and independent `REMINDER_UNSUBSCRIBE_SECRET` (random, at least 32 characters). Set the canonical HTTPS `NEXT_PUBLIC_SITE_URL`, operator/support details and approved-policy flag. Do not export any of these secrets through a `NEXT_PUBLIC_` name.
 5. Configure the signed webhook at `/api/reminders/webhook` for `email.delivered`, `email.bounced`, `email.complained`, `email.failed`, and `email.suppressed`. Disable open/click tracking. Verify signed test events, invalid signature rejection, duplicate replay and storage-failure retry behavior.

@@ -22,6 +22,7 @@
     "sandbox:verify": "tsx scripts/sandbox.ts verify",
     "sandbox:status": "tsx scripts/sandbox.ts status",
     "test": "vitest run --config vitest.config.ts",
+    "test:invitations": "node scripts/test-shared-invitations.mjs",
     "test:database": "node scripts/test-database.mjs",
     "test:browser": "playwright test",
     "backup:database": "node scripts/backup-database.mjs",
@@ -43,6 +44,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@eslint/js": "9.39.4",
     "@next/eslint-plugin-next": "16.3.4",
     "@playwright/test": "1.63.0",

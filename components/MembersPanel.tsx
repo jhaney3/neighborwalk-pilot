@@ -1,13 +1,13 @@
 "use client";
 import { useAsyncAction } from "../lib/use-async-action";
+import { LeaderInvitations } from "./LeaderInvitations";
 import { Modal } from "./ui";
 
-import { Check, Copy, Link2, PencilLine, Plus, RefreshCcw, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
+import { Check, Link2, PencilLine, Plus, RefreshCcw, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { Team, TeamUpdate } from "../lib/domain";
 import type { WorkspaceMembership } from "../lib/use-neighborwalk";
 import { getSupabaseBrowserClient, type NeighborWalkDatabase } from "../lib/supabase";
-import { invitationLink } from "../lib/invitations";
 
 type Member = Pick<
   NeighborWalkDatabase["public"]["Tables"]["church_memberships"]["Row"],
@@ -39,9 +39,6 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
 }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"leader" | "volunteer">("volunteer");
-  const [createdLink, setCreatedLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -102,47 +99,6 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
 
   const activeCount = members.filter((member) => member.active).length;
 
-  const createInvitation = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
-      setError("Enter the email address this invitation is for.");
-      return;
-    }
-    const client = getSupabaseBrowserClient();
-    if (!client) return;
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const { data, error: invitationError } = await client.rpc("create_church_invitation", {
-        invited_email: normalizedEmail,
-        invitation_role: role,
-        valid_for_hours: 168,
-      });
-      if (invitationError) throw invitationError;
-      const invitation = data?.[0];
-      if (!invitation) throw new Error("The invitation link was not created.");
-      setCreatedLink(invitationLink(window.location.origin, invitation.invitation_token));
-      setEmail("");
-      setMessage(`Invitation ready for ${invitation.email}. It expires in 7 days.`);
-      await load();
-      await onAccessChanged();
-    } catch (invitationError) {
-      setError(readableError(invitationError));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(createdLink);
-      setMessage("Invitation link copied. Send it only to the intended person.");
-    } catch {
-      setError("Copy was blocked by the browser. Select and copy the link manually.");
-    }
-  };
-
   const revokeInvitation = async (invitationId: string) => {
     const client = getSupabaseBrowserClient();
     if (!client) return;
@@ -152,7 +108,6 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
       const { data, error: revokeError } = await client.rpc("revoke_church_invitation", { invitation_id: invitationId });
       if (revokeError) throw revokeError;
       if (!data) throw new Error("That invitation is no longer pending.");
-      setCreatedLink("");
       setMessage("Invitation revoked.");
       await load();
       await onAccessChanged();
@@ -201,18 +156,12 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
         <form className="form-stack" onSubmit={(event) => { event.preventDefault(); setBusy(true); setError(""); void onAuthenticate(password).then(() => { setPassword(""); setMessage("Sign-in confirmed. Access changes are still checked by the server."); }).catch((failure) => setError(readableError(failure))).finally(() => setBusy(false)); }}><label className="form-field"><span>Current password</span><input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="button quiet" disabled={busy}>Confirm my sign-in</button></form>
         <p>Using an email link or sign-in provider? Share pending work, sign out safely, and sign in again.</p>
         <button className="button quiet" disabled={busy} onClick={() => { setBusy(true); void load().catch((failure) => setError(readableError(failure))).finally(() => setBusy(false)); }}>Refresh roster</button>
+        {message && <p className="member-message" role="status"><Check size={14} />{message}</p>}
+        {error && <p className="member-message error" role="alert"><X size={14} />{error}</p>}
       </div>
 
       <div className="member-management-grid">
-        <div className="member-invite-card">
-          <div className="member-card-heading"><span><UserPlus size={18} /></span><div><strong>Invite a member</strong><small>The link works once and only for this email.</small></div></div>
-          <label className="form-field"><span>Email address</span><input type="email" autoComplete="off" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="member@example.com" /></label>
-          <label className="form-field"><span>Access level</span><select value={role} onChange={(event) => setRole(event.target.value as "leader" | "volunteer")}><option value="volunteer">Volunteer — field tools only</option><option value="leader">Leader — members, territories, and settings</option></select></label>
-          <button className="button primary" disabled={busy || !email.trim()} onClick={() => void createInvitation()}><Link2 size={15} /> Create invitation link</button>
-          {createdLink && <div className="created-invitation"><div><Check size={16} /><span><strong>Link ready</strong>Copy it now; the secret token is not shown again after this page refreshes.</span></div><div className="invite-link-row"><input readOnly value={createdLink} onFocus={(event) => event.currentTarget.select()} aria-label="Invitation link" /><button className="button quiet" onClick={() => void copyLink()}><Copy size={14} /> Copy</button></div></div>}
-          {message && <p className="member-message" role="status"><Check size={14} />{message}</p>}
-          {error && <p className="member-message error" role="alert"><X size={14} />{error}</p>}
-        </div>
+        <LeaderInvitations onChanged={async () => { await load(); return onAccessChanged(); }} />
 
         <div className="member-roster-card">
           <div className="member-card-heading"><span><Users size={18} /></span><div><strong>Church roster</strong><small>Roles come from the signed-in account, not this device.</small></div></div>
@@ -230,7 +179,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
         </div>
       </div>
 
-      {invitations.length > 0 && <div className="pending-invitations"><div className="member-card-heading"><span><Link2 size={17} /></span><div><strong>Pending invitations</strong><small>Unused links expire automatically after 7 days.</small></div></div><div>{invitations.map((invitation) => <div className="pending-invitation-row" key={invitation.id}><p><strong>{invitation.invited_email}</strong><small>{invitation.role} · expires {new Date(invitation.expires_at).toLocaleDateString()}</small></p><button className="button quiet" disabled={busy} onClick={() => void revokeInvitation(invitation.id)}>Revoke</button></div>)}</div></div>}
+      {invitations.length > 0 && <div className="pending-invitations"><div className="member-card-heading"><span><Link2 size={17} /></span><div><strong>Earlier email-bound invitations</strong><small>These older links still require the exact invited email and can be revoked here.</small></div></div><div>{invitations.map((invitation) => <div className="pending-invitation-row" key={invitation.id}><p><strong>{invitation.invited_email}</strong><small>{invitation.role} · expires {new Date(invitation.expires_at).toLocaleDateString()}</small></p><button className="button quiet" disabled={busy} onClick={() => void revokeInvitation(invitation.id)}>Revoke</button></div>)}</div></div>}
 
       <div className="group-management">
         <div className="section-heading"><div><p className="eyebrow">Field organization</p><h2>Outreach groups</h2></div><button className="button quiet small" onClick={() => setEditingTeam("new")}><Plus size={14} /> New group</button></div>

@@ -1,20 +1,22 @@
 # Audit delivery status
 
-Updated September 11, 2026. This is an acceptance map for the [original audit](market-readiness-audit.md) and [approved plan](market-readiness-plan.md), not a replacement scope or a production-readiness certificate. Exact commits, failures and completed checks are in the [execution ledger](rework-progress.md).
+Updated September 19, 2026. This is an acceptance map for the [original audit](market-readiness-audit.md) and [approved plan](market-readiness-plan.md), not a replacement scope or a production-readiness certificate. Exact commits, failures and completed checks are in the [execution ledger](rework-progress.md).
 
 ## Bottom line
 
-The earlier improvements were deployed first, then the rework branch was created. The rework implements a substantially different, coherent workflow around **turning neighborhood conversations into personal follow-through**: prepare → encounter → owned next step → accepted handoff/completion → leader review. The differentiated offer is respectful fieldwork and accountable follow-through, not a full church-management suite or spiritual scoring.
+The earlier improvements were deployed first, then the rework was built and verified on `rework/church-ready-neighborwalk`. PR #2 merged that work to `main`; PR #3 added the prior-visit planner overlay. Production now tracks `14b117485bd8c100f743bbf495d8bf99bb679a88`. The release implements a coherent workflow around **turning neighborhood conversations into personal follow-through**: prepare → encounter → owned next step → accepted handoff/completion → leader review. The differentiated offer is respectful fieldwork and accountable follow-through, not a full church-management suite or spiritual scoring.
 
-The rework is **not complete, production-deployed, commercially approved, or validated by real church pilots**. Existing production data has not been migrated. Local preservation and encrypted restore drills are verified within their documented scopes. Fresh complete production recovery, operational ownership and external release decisions remain outstanding.
+The rework application and latest checked-in schema are **production-deployed**, but the release is not commercially approved or validated by real church pilots. Read-only checks confirmed the live public GIS contract and the table added by the final checked-in migration; this status review did not mutate church data or independently reconcile every historical row or hosted migration-history entry. Local preservation and encrypted restore drills are verified within their documented scopes. Fresh complete production recovery, authenticated production workflow checks, operational ownership and external release decisions remain outstanding.
 
-“Branch implementation” below means implemented code with regression evidence for specified flows; it does not mean every release acceptance case or production gate has passed.
+Native iOS is no longer merely deferred: `codex/neighborwalk-ios` at `5046a8a30528747f7b7706bbdf7b4dcf5eb15974` contains a bundled Capacitor/Xcode client with native authentication, invitations, sharing/printing and release scaffolding. It is not merged, backend-activated, signed for distribution, in TestFlight or submitted to Apple. The website and its 43-migration production schema remain the live release; the iOS branch adds two undeployed migrations.
+
+“Release implementation” below means deployed code with regression evidence for specified flows; it does not mean every release acceptance case or production gate has passed.
 
 ## Audit blockers
 
-| ID | Branch implementation / current boundary |
+| ID | Release implementation / current boundary |
 | --- | --- |
-| B01 — Broad history rewrites | Legacy bulk writes revoked; server-authorized, atomic normalized commands and retained audit. Must deploy with compatible app and reconciled old devices. |
+| B01 — Broad history rewrites | Legacy bulk writes revoked; server-authorized, atomic normalized commands and retained audit. The compatible app/schema pair is deployed; old-device pending-work reconciliation remains an operator gate. |
 | B02 — Durable restrictions | Independent restrictions enforced by the server; later encounters do not lift them; reviewed correction preserves history. Person/location follow-up composers also block restricted channels before submission. |
 | B03 — Retention and recent work | Recent resolution timestamps and linked responsibility protected; reviewed server archival has an exact manifest. Approved erasure policy/operation is still separate. |
 | B04 — Administrative merges | Reviewed moves and duplicate aliases preserve original history; reusable-group cleanup is centralized. Remaining concurrent archive/failure matrix still required. |
@@ -27,7 +29,7 @@ The rework is **not complete, production-deployed, commercially approved, or val
 | B11 — Recovery scope | Encrypted consistent operator capture and isolated exact-data restore, plus authored device recovery. Fresh full production capture, off-site custody, managed/provider recovery and tenant operational restoration are not complete. |
 | B12 — Invalid state becomes demo | Corrupt/future/cross-account state is preserved or quarantined; explicit fictional demo remains separate. No silent live-to-demo write fallback. |
 | B13 — Dependencies | Patched dependencies and clean-install/dependency-audit CI. Must recheck exact release; a historical clean audit is not a permanent assurance. |
-| B14 — Production hardening | Local/hosted test foundation, session security and headers implemented; configured HTTPS map/geocoder origins are represented in CSP and unsupported runtime map origins are rejected. Monitoring, staging/cutover, live delivery, operator runbooks and runtime verification remain open. |
+| B14 — Production hardening | Local/hosted test foundation, session security and headers are implemented and the current public deployment serves the expected headers. Monitoring, isolated staging, authenticated runtime checks, live delivery, operator runbooks and recovery verification remain open. |
 | B15 — Licensing | Reference-only Scripture, no automatic map-imagery caching, address-list printing fallback. Map/geography/provider licensing and actual printing still need review. |
 
 ## Integration findings
@@ -66,15 +68,30 @@ settings versioning and assignment acknowledgement. The
 [execution ledger](rework-progress.md) records verification. No
 production deployment, provider change or church-data mutation was part of this audit.
 
+## September 19 deployment update
+
+- PR #2 merged the church-readiness rework to `main`; PR #3 merged the prior-visit planner overlay. Production now tracks `14b117485bd8c100f743bbf495d8bf99bb679a88`.
+- GitHub Actions run `35461832264` passed quality and database jobs on that exact merge, including clean install, lint, types, unit tests, optimized build, local migrations/database suites, sandbox verification and Chromium browser regressions.
+- Vercel reported a successful deployment. The public routes, login, fictional demo, robots and sitemap returned HTTP 200; the demo Home, Walks and Plan-a-walk entry rendered without browser errors.
+- Read-only production Supabase checks returned HTTP 200 from `public_map_parcels_for_boundary_v1` and the expected anonymous permission denial for `outreach_outing_participants`, confirming the final checked-in table is present without exposing its rows.
+- Reminder delivery remains disabled (`/api/reminders/status` returned `available: false`). No church record was written and no authenticated church workflow, provider delivery or recovery operation was exercised by this status check.
+
+## September 19 iOS checkpoint
+
+- The owner proceeded with a separate native iOS client on `codex/neighborwalk-ios`; checkpoint `5046a8a30528747f7b7706bbdf7b4dcf5eb15974` is two commits ahead of the deployed web release.
+- The branch contains a bundled Capacitor/Xcode application rather than a remote website wrapper, plus native Apple/Google auth bridges, shared invitations, native export/AirPrint, haptics, privacy protections, simulator tests and an unsigned archive record.
+- The checkpoint documents successful local lint/types/unit/mobile-browser and simulator checks. Its GitHub quality job passed, but the database job fails during sandbox seeding with `Target, outing and parent zone must match`; the dedicated iOS workflow has not run on GitHub.
+- Neither mobile migration, the invitation handoff site, Universal Links, Apple/provider configuration, deletion fulfillment, signing, TestFlight nor App Store submission is complete. The failed branch Vercel preview did not replace the successful `main` production deployment.
+
 ## Remaining engineering is not just paperwork
 
 - Controlled first-church/verified-first-leader provisioning and explicit paused/archived-person semantics, supervised correction/erasure/offboarding.
 - Privacy-safe operational monitoring and alerting, incident/access/lost-device/recovery procedures with named operators.
 - Mixed-entity production-shaped load and concurrent-user testing; complete service-worker update/held-queue/archival failure matrix.
 - Actual iPhone/Android installation/offline/backgrounding and proportionate desktop coverage; screen-reader/200%/keyboard/printing verification.
-- Fresh production backup, hosted migration-history reconciliation, isolated staging, existing-device pending-work reconciliation and coordinated application/schema cutover.
+- Fresh production backup, hosted migration-history reconciliation, isolated staging, existing-device pending-work reconciliation and authenticated post-deployment application/schema verification.
 
-Historical guide editions and archived-guide reading are explicit limitations; retain the prepared current-guide promise without pretending a version number stores old text. Full ChMS integration, self-service billing, bulk SMS, native rewrite, national parcels and speculative AI remain out of the initial scope unless pilot evidence justifies them.
+Historical guide editions and archived-guide reading are explicit limitations; retain the prepared current-guide promise without pretending a version number stores old text. The implemented iOS client now has its own release gates. Full ChMS integration, self-service billing, bulk SMS, native Android/additional native clients, national parcels and speculative AI remain out of the initial scope unless pilot evidence justifies them.
 
 ## Owner inputs and external evidence required
 
@@ -83,5 +100,6 @@ Historical guide editions and archived-guide reading are explicit limitations; r
 3. Approved sender/domain/provider and production authentication/reminder delivery configuration; no paid activation is implied by the rework request.
 4. Off-site destination/key-custody owner, recovery objectives and coordination with existing devices.
 5. Authorized real-device testers/design partners, repeated pilot use and willingness-to-pay evidence. The prepared [pilot kit](church-pilot-kit.md) is not completed research.
+6. Apple Developer/App Store Connect ownership, an iOS release owner, provider/link configuration authority, privacy/support decisions and a staffed account-deletion process.
 
 Use [production release gates](production-checklist.md) for the final decision. Do not open enrollment or call the app production-ready merely because a branch checkpoint passes CI.

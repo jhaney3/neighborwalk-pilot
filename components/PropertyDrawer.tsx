@@ -66,6 +66,8 @@ const recordableOutcomes: Exclude<Outcome, "unvisited">[] = [
   "inaccessible",
 ];
 
+const addResidentOptionValue = "__add_resident__";
+
 export function PropertyDrawer({
   property,
   parcelDwellings,
@@ -136,6 +138,7 @@ export function PropertyDrawer({
   const [address, setAddress] = useState(property.address);
   const [unit, setUnit] = useState(property.unit ?? "");
   const [editingResident, setEditingResident] = useState<Resident | "new" | null>(null);
+  const [addingVisitResident, setAddingVisitResident] = useState(false);
   const residents = data.residents.filter((resident) => !resident.mergedIntoId && resident.propertyId === property.id);
   const selectedResident = residents.find((resident) => resident.id === linkedResidentId);
   const followUpRestricted = outcome === "follow_up" && Boolean(selectedResident)
@@ -274,6 +277,7 @@ export function PropertyDrawer({
                     if (value === "no_answer") {
                       setNote("");
                       setLinkedResidentId("");
+                      setAddingVisitResident(false);
                       setDetailsOpen(false);
                     } else if (value === "follow_up") setDetailsOpen(true);
                   }}
@@ -297,10 +301,34 @@ export function PropertyDrawer({
           {outcome !== "no_answer" && outcome !== "follow_up" && <button type="button" className="visit-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>{detailsOpen ? "Hide optional details" : outcome === "conversation" ? "Add a person or note" : "Add a note"}<ChevronDown size={15} /></button>}
 
           {outcome !== "no_answer" && (detailsOpen || outcome === "follow_up") && <div className="visit-optional-details">
-            {["conversation", "follow_up"].includes(outcome) && <label className="form-field">
-              <span>Person <small>Optional</small></span>
-              <div className="select-wrap"><select value={linkedResidentId} onChange={(event) => setLinkedResidentId(event.target.value)}><option value="">No person record</option>{residents.map((resident) => <option value={resident.id} key={resident.id}>{resident.name || "Name not provided"}</option>)}</select><ChevronDown size={15} /></div>
-            </label>}
+            {["conversation", "follow_up"].includes(outcome) && <>
+              <label className="form-field">
+                <span>Person <small>Optional</small></span>
+                <div className="select-wrap"><select value={linkedResidentId} onChange={(event) => {
+                  if (event.target.value === addResidentOptionValue) {
+                    setAddingVisitResident(true);
+                    return;
+                  }
+                  setLinkedResidentId(event.target.value);
+                  setAddingVisitResident(false);
+                }}><option value="">No person record</option><option value={addResidentOptionValue}>＋ Add a new person…</option>{residents.map((resident) => <option value={resident.id} key={resident.id}>{resident.name || "Name not provided"}</option>)}</select><ChevronDown size={15} /></div>
+              </label>
+              {addingVisitResident && <section className="visit-person-create" aria-label="Add a person for this visit">
+                <div className="visit-person-create-title"><UserRound size={17} /><div><strong>Add a person</strong><small>They will be saved at this property and selected for this visit.</small></div></div>
+                <ResidentForm
+                  volunteers={data.volunteers.filter((volunteer) => volunteer.active)}
+                  activeVolunteerId={activeVolunteerId}
+                  pathwayEnabled={Boolean(data.church.pathwayEnabled)}
+                  autoFocusName
+                  onCancel={() => setAddingVisitResident(false)}
+                  onSave={async (input) => {
+                    const residentId = await onUpsertResident(property.id, input);
+                    setLinkedResidentId(residentId);
+                    setAddingVisitResident(false);
+                  }}
+                />
+              </section>}
+            </>}
 
             <label className="form-field">
               <span>{outcome === "follow_up" ? "Requested next step" : "Visit note"} <small>Optional</small></span>
@@ -382,15 +410,17 @@ export function PropertyDrawer({
                 {residents.map((resident) => (
                   <article className="resident-card" key={resident.id}>
                     <span className="resident-avatar">{resident.name?.charAt(0).toUpperCase() || <UserRound size={17} />}</span>
-                    <div>
+                    <div className="resident-card-details">
                       <strong>{resident.name || "Name not provided"}</strong>
                       {data.church.pathwayEnabled && <small>{faithStatusLabels[resident.faithStatus]}</small>}
                       {(resident.phone || resident.email) && <p><Phone size={12} /> {resident.preferredContact === "none" ? "Contact details saved" : `Prefers ${resident.preferredContact}`}</p>}
                     </div>
-                    {(canManage || resident.assignedVolunteerId === activeVolunteerId) && <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>}
-                    {(canManage || resident.assignedVolunteerId === activeVolunteerId) && <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
-                      if (window.confirm("Archive this person and their care records? History and restrictions are preserved on the server.")) void action.run(() => onDeleteResident(resident.id));
-                    }}><Trash2 size={14} /></button>}
+                    {(canManage || resident.assignedVolunteerId === activeVolunteerId) && <div className="resident-card-actions">
+                      <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>
+                      <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
+                        if (window.confirm("Archive this person and their care records? History and restrictions are preserved on the server.")) void action.run(() => onDeleteResident(resident.id));
+                      }}><Trash2 size={14} /></button>
+                    </div>}
                   </article>
                 ))}
                 {!residents.length && <div className="empty-mini"><Users size={21} /><strong>No people added</strong></div>}

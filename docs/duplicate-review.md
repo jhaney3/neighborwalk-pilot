@@ -24,7 +24,7 @@ Leaders use **Data & health → Combine reviewed duplicates** while connected an
 
 There is no automatic undo. Do not combine records to experiment with the tool. If a mistake is discovered, stop further changes to the affected records, preserve a fresh private backup and relevant immutable receipts, and ask the designated operator for a supervised correction. Review later tasks, restrictions, sharing changes, and handoffs before deciding which links can safely be restored. Never restore an entire old database over new church work to undo one combination, or clear a restriction merely to repair an identity link.
 
-The current UI supports preserved history, not permanent erasure or full database backup/restore. See the release ledger for those separate operational gates. No production combination or production migration was performed during implementation.
+The current UI supports preserved history, not permanent erasure or full database backup/restore. See the release ledger for those separate operational gates. The feature's schema is deployed, but no live duplicate combination was performed during implementation or the September 19 deployment-status review.
 
 ## Verification
 

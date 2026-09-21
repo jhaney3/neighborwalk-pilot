@@ -137,7 +137,8 @@
 
 @media (max-width: 480px) {
   .auth-card, .workspace-setup-card { padding: 29px 22px; border-radius: 19px; }
-  .auth-card h1, .workspace-setup-card h1 { font-size: 35px; }
+  .auth-card h1 { font-size: 32px; }
+  .workspace-setup-card h1 { font-size: 35px; }
   .auth-connection-actions > .button { flex: 1 1 calc(50% - 5px); }
   .auth-connection-actions > a:not(.button) { flex-basis: 100%; margin: 2px 0 0; text-align: center; }
   .brand small { max-width: 120px; }
@@ -216,7 +217,6 @@
   .member-controls select, .member-controls .button { flex: 1; }
   .invite-link-row { grid-template-columns: 1fr; }
   .resident-card { grid-template-columns: auto minmax(0,1fr) auto; }
-  .resident-card .small-icon-button.danger { grid-column: 3; }
   .contact-fields { grid-template-columns: 1fr; }
   .contact-fields .form-field:last-child { grid-column: 1; }
   .clear-data-summary { grid-template-columns: 1fr 1fr; }

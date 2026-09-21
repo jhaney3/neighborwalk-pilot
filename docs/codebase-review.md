@@ -106,16 +106,19 @@ membership. MapTiler and ESV settings remain absent locally.
 
 ## Web and mobile direction
 
-The existing responsive PWA remains the working product. Keep domain validation,
-geometry, and outreach rules independent from browser APIs; add platform-specific
-storage, navigation, notifications, and authentication adapters when a native
-delivery approach is selected. There is no native shell in this repository yet.
+The responsive PWA remains the deployed cross-platform product. After this
+historical review, the owner selected a native iOS delivery approach and branch
+`codex/neighborwalk-ios` added a bundled Capacitor/Xcode client with
+platform-specific navigation, authentication, linking and sharing adapters.
+Domain validation, geometry, outreach rules and Supabase authorization remain
+shared. The iOS checkpoint is not merged or released through TestFlight/App Store.
 
-Before store distribution, validate the app on real iPhones and Android devices,
-including large text, interrupted connectivity, installation/upgrades, auth
-redirects, and cache lifecycle. Full offline map regions and background push
-delivery remain separate capabilities; the current PWA provides bounded map
-caching and notifications while it is running.
+Before iOS store distribution, complete signing, production-provider/link setup,
+account-deletion fulfillment, physical iPhone/iPad checks, large text/VoiceOver,
+interrupted connectivity, auth redirects, TestFlight and App Review preparation.
+Continue validating the PWA on Android devices. Full offline map regions and
+background push delivery remain separate capabilities and are not claimed by
+either client.
 
 ## Follow-up: development isolation
 

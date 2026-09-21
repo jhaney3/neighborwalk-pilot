@@ -9,7 +9,7 @@ describe("authentication guidance", () => {
 
   it("turns the Supabase email limit into an actionable sign-in choice", () => {
     expect(authErrorMessage({ code: "over_email_send_rate_limit", message: "Email rate limit exceeded" }))
-      .toContain("Sign in with Google or your password");
+      .toContain("Sign in with Apple, Google, or your password");
   });
 
   it("makes invalid password credentials understandable", () => {

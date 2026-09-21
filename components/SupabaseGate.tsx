@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, KeyRound, Mail, MapPinned, Navigation, ShieldCheck } from "lucide-react";
+import { Check, KeyRound, MapPinned, Navigation } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -10,8 +10,10 @@ import { authErrorMessage, validAuthEmail } from "../lib/auth";
 import { authServiceUnreachable, authStorageKey, getSupabaseBrowserClient, isSupabaseConfigured } from "../lib/supabase";
 import { isProductionApp } from "../lib/environment";
 import { authenticatedAppPath, safeAppPath } from "../lib/auth-navigation";
-import { pendingInvitation, rememberBrowserInvitation } from "../lib/invitations";
+import { pendingInvitation, pendingInvitationKind, rememberBrowserInvitation } from "../lib/invitations";
 import { preparedOfflineIdentity, WORKSPACE_CACHE_KEY, type PreparedIdentity } from "../lib/offline-identity";
+import { JoinInvitation } from "./JoinInvitation";
+import { AppleSignInButton, GoogleSignInButton } from "./OAuthSignInButton";
 
 export function NeighborWalkRoot() {
   const router = useRouter();
@@ -36,7 +38,8 @@ export function NeighborWalkRoot() {
   const workspaceUser = useMemo(() => offlineUser ?? (userId ? { id: userId, email, name } : null), [offlineUser, userId, email, name]);
 
   useEffect(() => {
-    if (!loading && !connectionError && session && !passwordRecovery && ["/login", "/invite"].includes(pathname)) router.replace(authenticatedAppPath(window.location.search));
+    const acceptingSharedInvitation = pendingInvitationKind(window.sessionStorage) === "join";
+    if (!loading && !connectionError && session && !passwordRecovery && !acceptingSharedInvitation && ["/login", "/invite"].includes(pathname)) router.replace(authenticatedAppPath(window.location.search));
   }, [loading, connectionError, session, passwordRecovery, pathname, router]);
 
   useEffect(() => {
@@ -107,6 +110,7 @@ export function NeighborWalkRoot() {
   if (loading && !offlineUser) return <ConnectionLoading />;
   if (!workspaceUser) return <SignInScreen />;
   if (passwordRecovery && session) return <PasswordRecovery email={session.user.email ?? "your account"} onSave={async (password) => { await updatePassword(password); setPasswordRecovery(false); }} />;
+  if (session && pendingInvitationKind(window.sessionStorage) === "join") return <JoinInvitation token={pendingInvitation(window.sessionStorage)!} account={session.user.email ?? session.user.phone ?? "your account"} />;
   if (["/login", "/invite"].includes(pathname)) return <ConnectionLoading />;
 
   return (
@@ -129,7 +133,7 @@ function authRedirectUrl() {
   return url.toString();
 }
 
-type AuthAction = "google" | "password" | "signup" | "reset" | "link" | null;
+type AuthAction = "apple" | "google" | "password" | "signup" | "reset" | "link" | null;
 
 function SignInScreen() {
   const [email, setEmail] = useState("");
@@ -176,11 +180,18 @@ function SignInScreen() {
     finally { setAction(null); }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithProvider = async (provider: "apple" | "google") => {
+    if (!isProductionApp && process.env.NEXT_PUBLIC_LOCAL_SOCIAL_AUTH_ENABLED !== "true") {
+      setError(`${provider === "apple" ? "Apple" : "Google"} sign-in is visible for local UI testing, but this sandbox does not have local OAuth credentials. Use the test account below or configure the local provider first.`);
+      return;
+    }
     const client = clientOrError();
     if (!client) return;
-    await runAuthAction("google", async () => {
-      const { error } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: authRedirectUrl() } });
+    await runAuthAction(provider, async () => {
+      const { error } = await client.auth.signInWithOAuth({ provider, options: {
+        redirectTo: authRedirectUrl(),
+        ...(provider === "apple" ? { scopes: "name email" } : { queryParams: { prompt: "select_account" } }),
+      } });
       if (error) throw error;
     });
   };
@@ -228,15 +239,17 @@ function SignInScreen() {
   };
 
   const busy = action !== null;
+  const appleEnabled = !isProductionApp || process.env.NEXT_PUBLIC_APPLE_AUTH_ENABLED === "true";
   return (
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="signin-title">
-        <div className="auth-route" aria-hidden="true"><span><Navigation size={18} /></span><i /><span><MapPinned size={18} /></span></div>
-        <p className="eyebrow">NeighborWalk church workspace</p>
-        <h1 id="signin-title">Pick up where care left off.</h1>
-        <p className="auth-intro">{isProductionApp ? "Google is the quickest way in. Password sign-in is also available and does not send an email each time." : "Use your test account here. This workspace has its own data and sign-in."}</p>
+        <div className="auth-brand"><span aria-hidden="true"><Navigation size={18} /></span><strong>NeighborWalk</strong></div>
+        <h1 id="signin-title">{mode === "signin" ? "Sign in" : "Create account"}</h1>
+        <p className="auth-intro">Your church workspace</p>
         <div className="auth-form">
-          {isProductionApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or use your password</span></div></>}
+          {appleEnabled && <AppleSignInButton disabled={busy} loading={action === "apple"} onClick={() => void signInWithProvider("apple")} />}
+          <GoogleSignInButton disabled={busy} loading={action === "google"} onClick={() => void signInWithProvider("google")} />
+          <div className="auth-divider"><span>or</span></div>
           <form className="auth-credentials" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
             <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" /></label>
             <label className="form-field"><span>Password</span><input type="password" minLength={8} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label>
@@ -248,10 +261,9 @@ function SignInScreen() {
           {mode === "signup" && <p className="auth-hint">Account confirmation uses one email. After that, routine password sign-ins do not.</p>}
           {confirmation && <div className="auth-confirmation" role="status"><Check size={20} /><div><strong>{confirmation.title}</strong><span>{confirmation.detail}</span></div></div>}
           {error && <p className="auth-error" role="alert">{error}</p>}
-          <details className="auth-email-fallback"><summary>Use a one-time email link instead</summary><p>This fallback sends an email and may be unavailable when the project email limit is reached.</p><button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}><Mail size={16} />{action === "link" ? "Sending…" : "Send one-time link"}</button></details>
+          <details className="auth-email-fallback"><summary>More options</summary><button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}>{action === "link" ? "Sending…" : "Email me a sign-in link"}</button></details>
         </div>
-        <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are visible to their owner, church leaders and explicitly shared teammates. Pending handoff recipients and some historical creators may also have access, as shown on the profile.</span></div>
-        <p><Link href="/help">Sign-in help</Link> · <Link href="/">About NeighborWalk</Link> · <Link href="/privacy">Privacy</Link></p>
+        <nav className="auth-links" aria-label="Sign-in support"><Link href="/help">Help</Link><Link href="/privacy">Privacy</Link></nav>
       </section>
     </main>
   );

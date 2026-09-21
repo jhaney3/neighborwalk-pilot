@@ -1,6 +1,6 @@
 # Database recovery and cutover safeguards
 
-This runbook describes implemented **application-database capture and isolated restore**, not a claim that production managed backups, off-site storage, provider recovery, or a production cutover are complete.
+This runbook describes implemented **application-database capture and isolated restore**. The current application/schema pair is live, but that deployment is not evidence that production managed backups, off-site storage, provider recovery, hosted migration-history reconciliation or an authenticated restore exercise are complete.
 
 ## Three different tools
 
@@ -74,17 +74,17 @@ npm run backup:rehearse:local
 
 This fixed-target drill retains a private artifact directory, a test encryption key, a report, and its newly restored database. It is not a hosted production export, off-site backup service, or a reason to put keys into CI artifacts. Schedule drills on an operator-controlled machine with matching PostgreSQL clients. Unit tests for source isolation, private file handling, authenticated encryption, tampering, wrong keys, wrong projects and interrupted producers run in ordinary CI.
 
-## Production cutover gate
+## Production recovery and future schema-change gate
 
-Before applying the normalized migrations to the live church:
+Complete the following as post-deployment remediation for the current release and before any further production schema change or wider enrollment:
 
 1. Verify a current managed/off-site recovery point and responsible operator, target recovery time and acceptable data-loss window. Confirm auth/encryption keys, storage objects, provider configuration, DNS and external schedules are recoverable separately.
 2. Capture a fresh complete scoped application bundle from production with the actual database credential. The earlier partial export is not this artifact: its 66,252 reference parcels were not downloaded. Do not alter that parcel dataset on the strength of the partial copy.
 3. Rehearse restoration and all additive migrations against the new private isolated copy. Verify full field/relationship reconciliation and permission/workflow tests. Original bytes, actors, timestamps, guide settings, receipts and restrictions must be accounted for.
 4. Reconcile the actual hosted migration history against local migrations. The hosted project's 17 older versions do not simply match this repository's historical filenames. Do not blindly run `db push` or mark unexecuted migrations applied.
-5. Coordinate every pilot device's pending/legacy work before the cutover. Preserve originals and immutable receipts; a server backup cannot capture fieldwork that exists only on a volunteer's phone.
+5. Reconcile every pilot device's pending/legacy work after the schema transition and before retiring any legacy recovery path. Preserve originals and immutable receipts; a server backup cannot capture fieldwork that exists only on a volunteer's phone.
 6. Validate the two staged relationship constraints, isolated staging configuration, supported client/update behavior, production authentication and delivery, operational monitoring, policies and commercial hosting gates.
-7. Apply the reviewed cutover under its maintenance/runbook controls, verify the live build and workflows, and record the exact database/app checkpoints. Once new writes exist, use a reviewed forward repair where possible; restoring the entire old database would discard those writes.
+7. For the next schema release, apply the reviewed change under maintenance/runbook controls, verify the live build and workflows, and record the exact database/app checkpoints. Current production writes already exist, so use a reviewed forward repair where possible; restoring the entire old database would discard newer work.
 
 None of these remaining production gates is waived by a successful local drill. An app “restore” button that replaces a church with arbitrary uploaded JSON is intentionally not provided.
 

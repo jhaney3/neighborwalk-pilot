@@ -55,6 +55,12 @@ All 18 scenarios passed together against the final optimized local build in 6.9 
 
 Separate read-only browser reviews covered every public route and each distinct demo surface at desktop and narrow widths. Final focused checks confirmed that active fieldwork exposes one outing-linked community-encounter launcher, property follow-up dates use the church-local minimum, the mobile recovery page has no horizontal overflow, Settings stays inside the demo route, `/invite` without a token reaches sign-in, changed dialogs contain and restore keyboard focus, and automated accessibility checks found no violations on the exercised People, property and community-encounter surfaces. These checks are Chromium evidence, not the outstanding physical-device or screen-reader matrix.
 
+## Native iOS checkpoint
+
+Branch `codex/neighborwalk-ios` at `5046a8a30528747f7b7706bbdf7b4dcf5eb15974` adds separate mobile Chromium/WebKit suites and an XCUITest for the bundled Capacitor application. Its release notes record responsive sample-workspace navigation, repeated walk-sheet interactions, an iPhone simulator pass and an unsigned archive. These are development artifacts, not signed physical-device, live-provider, TestFlight or App Review evidence.
+
+The branch's general quality job passed. Its shared database job failed during sandbox seeding before database/browser execution, and the dedicated iOS workflow has not run on GitHub because no pull request or manual dispatch has exercised it. Resolve both gaps before treating the checkpoint as release-green.
+
 ## Offline design
 
 `npm run build` generates an ignored `public/sw-build.js` manifest containing only immutable Next.js JS/CSS/font paths. The cache version includes asset content, the worker source, build ID and public icons. Current app assets total roughly 2.9 MiB uncompressed; generation fails above 16 MiB pending review.
@@ -71,13 +77,14 @@ Protected view navigation uses Next.js's documented native History integration. 
 
 References: [Next.js native History integration](https://nextjs.org/docs/app/getting-started/linking-and-navigating#native-history-api), [Playwright service-worker testing and limitations](https://playwright.dev/docs/service-workers).
 
-## Still required before release
+## Still required before wider enrollment
 
 - Repeat the automated session/account-switch and while-open expiry scenarios on actual supported devices. The local behavior and limitations are documented in [session security](session-security.md).
 - Service-worker version transition with pending records and multiple open tabs/windows; storage eviction and backgrounding/screen lock.
 - Live permission conflict/recovery; concurrent area/group archival and person moves with open tasks.
 - iPhone Safari/installed PWA, Android Chrome/installed PWA and proportionate desktop Safari/Firefox checks. Chromium emulation is not a substitute for actual devices.
 - Keyboard/screen reader, 200% enlargement, narrow-screen layouts and physical printing.
-- Staging/production headers, real provider delivery, deployment cutover and operational restore checks.
+- Isolated staging, authenticated production workflows, real provider delivery, service-worker update behavior on the deployed origin and operational restore checks. Public production routes and headers have been verified.
+- Native iOS: green shared database and dedicated iOS CI; signed physical-iPhone/iPad testing; live Apple/Google auth and invitation links; deletion fulfillment/revocation; native permissions, sharing/AirPrint, accessibility, TestFlight and App Review preparation.
 
 Passing these local tests is evidence for the tested flows, not a claim that all release gates or church pilots are complete.

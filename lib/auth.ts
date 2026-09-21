@@ -11,7 +11,7 @@ export function authErrorMessage(error: unknown) {
   const normalized = message.toLowerCase();
 
   if (code === "over_email_send_rate_limit" || normalized.includes("email rate limit") || normalized.includes("rate limit for sending emails")) {
-    return "Email sending is temporarily limited. Sign in with Google or your password, or try email again after the limit resets.";
+    return "Email sending is temporarily limited. Sign in with Apple, Google, or your password, or try email again after the limit resets.";
   }
   if (code === "invalid_credentials" || normalized.includes("invalid login credentials")) {
     return "That email and password do not match. Try again or reset your password.";

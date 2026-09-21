@@ -1,20 +1,20 @@
 # NeighborWalk: implementation and approval plan
 
-Date: September 9, 2026
+Date: September 9, 2026; updated September 19, 2026
 
-Status: proposed; all decisions and implementation packages below await approval
+Status: D01–D10 were approved. Packages 0–3 and the website portion of Package 4 are substantially implemented; the web application/schema pair is deployed from `main`, while Package 4's operating and church-pilot gates remain open. A separate native iOS development checkpoint is implemented on `codex/neighborwalk-ios` at `5046a8a30528747f7b7706bbdf7b4dcf5eb15974`. It remains separate from `main` and has not been signed for distribution, uploaded to TestFlight/App Store, or activated with its two production database migrations.
 
-Evidence: [Comprehensive audit](market-readiness-audit.md)
+Evidence: [Comprehensive audit](market-readiness-audit.md) · [Web release status](audit-delivery-status.md) · [iOS checkpoint](https://github.com/jhaney3/neighborwalk-pilot/blob/codex/neighborwalk-ios/docs/RESUME-IOS.md)
 
 Quick links: [Decisions](#1-recommended-decision) · [Work packages](#5-implementation-packages) · [Migration safeguards](#6-migration-and-rollout-safeguards) · [Release tests](#7-acceptance-tests-and-release-gates) · [Approval worksheet](#10-approval-worksheet)
 
 ## 1. Recommended decision
 
-Build NeighborWalk into a focused church outreach-and-follow-up product, with a public marketing website and an installable mobile-friendly web app.
+Build NeighborWalk into a focused church outreach-and-follow-up product, with a public marketing website, an installable mobile-friendly web app and a separately released native iOS client.
 
-Retain Next.js, Supabase, MapLibre, IndexedDB, and the existing visual identity. Replace fragile whole-workspace coordination incrementally. Make the volunteer experience simpler while making permissions, recovery, and data handling more rigorous.
+Retain Next.js, Supabase, MapLibre, IndexedDB, and the existing visual identity. The iOS client uses Capacitor/Xcode with a bundled React workspace, reusing the web application's components, domain rules and Supabase authorization contracts without packaging the marketing site or pointing at a remote web shell. Keep the website and iOS release trains independent and keep shared backend changes compatible with both deployed web clients and installed iOS versions.
 
-Recommended initial authorization: approve the product direction and **Packages 0–1** only. Package 0 approves the target design and validation plan; Package 1 establishes a safer baseline. Review its results and the migration design before authorizing Package 2. You can approve a broader sequence, but production migration, external spending, customer communications, and public release still need explicit checkpoints.
+The original staged authorization through Packages 0–4 is complete. The product owner subsequently proceeded with the iOS implementation recorded as Package 4A below. Production migrations, Apple/provider configuration, paid developer services, TestFlight distribution, App Store submission, customer communications and public release still require their explicit checkpoints.
 
 ### Decisions for your review
 
@@ -25,13 +25,13 @@ Recommended initial authorization: approve the product direction and **Packages 
 | D03: Person model | People do not require a home address | Enables encounters at meals, community events, and referrals without fake locations |
 | D04: Faith/pathway fields | Optional, default off or secondary; preserve existing data | Removes unnecessary sensitive classification from the normal field flow |
 | D05: Access policy | Leaders have explicitly disclosed access; owners/named collaborators get scoped access; creator identity alone does not imply permanent access after handoff | Requires a reviewed migration from today's creator-always-access policy; no silent historical access change |
-| D06: Mobile strategy | Responsive PWA first, tested on actual iPhones and Android phones | No native rewrite until pilot evidence shows a specific limitation worth the cost |
+| D06: Mobile strategy | Keep the responsive PWA as the cross-platform web client and advance the bundled iOS client on `codex/neighborwalk-ios` from its implemented development checkpoint through a separate release path; retain shared business rules/backend contracts | iOS now has its own Xcode/App Store release path. Android remains PWA-first unless later evidence supports a separate native client |
 | D07: Commercial entry | Assisted design-partner pilot, then church-level pricing | Avoids premature self-service billing/provisioning; does not authorize charging anyone now |
 | D08: Content/providers | Confirm commercial licensing; use reference links if embedded ESV permission is unavailable | Avoids making paid launch depend on unresolved text licensing |
 | D09: Growth scope | CSV exchange first; Planning Center integration and neighbor-request QR experiment after core validation | Keeps new integrations and intake channels from delaying reliability |
 | D10: Data policy | Minimal encounter/contact data, durable scoped restrictions, explicit retention and recovery policies | Requires product-owner and appropriate legal/security review before release |
 
-All are proposals, not assumed approvals. In particular, changing theological labels, contact-permission behavior, or who can see existing notes is a product-policy decision, not a routine refactor.
+D01–D10 were approved on September 9, 2026 and now describe the implemented product direction. Any later change to theological labels, contact-permission behavior, retention, or who can see existing notes remains a product-policy decision, not a routine refactor.
 
 ## 2. Definition of the first marketable product
 
@@ -49,10 +49,11 @@ All are proposals, not assumed approvals. In particular, changing theological la
 - An optional prepared guide; embedded scripture only under an appropriate content arrangement.
 - Safe export/recovery, audited administration, essential reporting, help, and support.
 - Public website explaining the product, its actual capabilities, pilot/pricing, and trust policies.
+- Separately distributed iOS client with the core workspace, native authentication handoff, native sharing/printing, privacy protections and a fictional sample mode.
 
 ### Explicitly excluded from the first release
 
-Full church CRM replacement; giving/accounting; worship/service planning; child check-in; advanced safeguarding/clinical case management; public prayer social network; automated bulk SMS; complex workflow builder; national parcel ingestion; conversion scores; AI-generated assessments of neighbors; live volunteer surveillance; native apps; multi-church federation.
+Full church CRM replacement; giving/accounting; worship/service planning; child check-in; advanced safeguarding/clinical case management; public prayer social network; automated bulk SMS; complex workflow builder; national parcel ingestion; conversion scores; AI-generated assessments of neighbors; live volunteer surveillance; native Android or additional native-platform clients; multi-church federation.
 
 Excluding these is how the initial product stays understandable and supportable. Existing records are not to be deleted merely because a field or feature is hidden.
 
@@ -139,11 +140,19 @@ Use separate public and authenticated routes, sharing brand/components where app
 /app/settings/...         Account and permitted administration
 ~~~
 
-These are proposed routes, not implemented endpoints. Keep all protected links authorized at the data boundary; possession of a URL is never sufficient permission.
+These routes are implemented in the current web release. Keep all protected links authorized at the data boundary; possession of a URL is never sufficient permission. The iOS binary has its own bundled entry point and native navigation adapter; it does not package the public website or depend on these routes as a remote application shell.
+
+### Native iOS client
+
+The checkpoint on `codex/neighborwalk-ios` at `5046a8a30528747f7b7706bbdf7b4dcf5eb15974` contains a Capacitor 8/Xcode project with a locally bundled React workspace. It opens directly to authentication or an explicitly separate fictional sample workspace. Signed-in builds use the same Supabase church records, permissions, command API and account-scoped local storage as the website.
+
+Implemented native boundaries include Apple and Google authentication bridges, custom auth/invitation links, native share/export sheets, AirPrint, haptic navigation, safe-area/keyboard handling, app-switcher privacy protection, an app icon/launch screen, a privacy manifest and iOS-specific responsive styling. The branch also contains additive shared-invitation and account-deletion-request migrations. The request queue is not deletion fulfillment, and neither mobile migration is deployed.
+
+The checkpoint records local TypeScript/lint/unit/mobile-browser checks, an iOS simulator XCUITest and an unsigned Release archive. It is not an App Store release: Apple signing/provider configuration, physical-device authentication and field testing, hosted invitation handoff/Universal Links, deletion fulfillment and Apple-token revocation, policy/support disclosures, TestFlight and App Review remain open. The branch's ordinary quality job passes, but its database job currently fails during sandbox seeding; the dedicated iOS workflow has not yet run on GitHub.
 
 ## 4. Target data and sync architecture
 
-This is a logical model for approval, not executable SQL. Validate exact columns, policies, migration steps, and indexes in Package 2. Do not apply the older database design document as a substitute.
+This section records the approved logical model now implemented by the migration sequence and shared web/iOS domain contracts. The exact columns, policies, grants, indexes and command behavior in `supabase/migrations/` remain authoritative; do not apply the older database design document as a substitute.
 
 ### Data model
 
@@ -169,7 +178,7 @@ Use tenant-consistent foreign keys and indexed access paths; do not allow a pers
 
 JSON remains appropriate for bounded guide content/configuration. It should not be the sole authority for ordinary entities, cross-record permissions, or all church history.
 
-### Proposed access rules
+### Approved access rules
 
 | Action | Volunteer | Owner / explicitly authorized collaborator | Leader |
 | --- | --- | --- | --- |
@@ -326,6 +335,32 @@ Work:
 
 Exit: 3–5 design-partner churches complete repeated outings/follow-up cycles; support and reliability are workable; pricing evidence exists; launch claims match verified capabilities.
 
+### Package 4A — Native iOS release
+
+Status: implemented development checkpoint; release activation incomplete.
+
+Current checkpoint: `codex/neighborwalk-ios` at `5046a8a30528747f7b7706bbdf7b4dcf5eb15974`, two commits ahead of the deployed web release. Keep it separate from `main` unless a reviewed shared-code/backend integration requires a compatible merge; an App Store submission does not require redeploying the marketing website.
+
+Implemented:
+
+- Bundled Capacitor/Xcode application that reuses the workspace components/domain logic but excludes the marketing site and remote JavaScript delivery.
+- Native Apple/Google authentication bridges, custom callback handling, shared invitation UI/handoff, account-deletion request UI, native file sharing/AirPrint, haptics and app-switcher privacy protection.
+- iOS app icon, launch screen, privacy manifest, Swift Package Manager project, simulator XCUITest, mobile Chromium/WebKit coverage and an unsigned archive checkpoint.
+- Additive account-deletion-request and flexible shared-invitation migrations, tested in isolated fixtures but not deployed to the complete production schema.
+
+Remaining before TestFlight/App Store release:
+
+1. Fix the branch's sandbox-seed/database CI failure, rerun the full database/browser suite, and manually dispatch or open a reviewed PR to exercise both jobs in `.github/workflows/ios.yml`.
+2. Rehearse both additive migrations against the complete schema, run advisors/regressions, and deploy them as an independently reviewed backward-compatible backend release.
+3. Configure Apple Developer/App Store Connect, bundle ownership, signing/capabilities and production Apple/Google/Supabase callback settings without replacing working web settings.
+4. Host the separate invitation handoff site, configure its origin and Universal Links, and test expired/revoked/different-account acceptance on a signed physical iPhone.
+5. Implement and staff actual account-deletion fulfillment, including session cleanup, applicable shared-content handling, user confirmation and Apple authorization revocation. A queued request alone is insufficient.
+6. Finalize publisher/support/policy information and App Store privacy, age-rating, reviewer-access and shared-content moderation/reporting decisions.
+7. Test the final signed build on supported iPhone/iPad layouts, including authentication, invitations, walks, offline/reconnect, permissions, accessibility, sharing/printing and deletion.
+8. Produce a signed archive, distribute through TestFlight, resolve findings, prepare genuine screenshots/listing/review notes and submit to App Review.
+
+Exit: the exact signed candidate passes the shared backend, physical-device and accessibility matrices; deletion and invitation operations are staffed and verified; TestFlight findings are resolved; operator/product approval authorizes App Store submission. Apple approval is an external outcome, not an engineering assertion.
+
 ### Package 5 — Evidence-led growth
 
 Effort: estimate individual experiments after pilot evidence.
@@ -342,11 +377,13 @@ Choose at most one or two initially:
 - Multi-campus/multi-workspace membership when a paying use case requires it.
 - Licensed additional geography or advanced routing when manual areas/list preparation becomes the bottleneck.
 
-Native mobile should require a documented gap that materially blocks adoption or reliability and cannot be resolved acceptably in the web app. “An app sounds more marketable” is not enough.
+The owner has already chosen to build the iOS client, so native iOS is no longer a hypothetical Package 5 experiment. Further native expansion—especially Android—should still require a documented adoption or reliability gap that cannot be resolved acceptably in the PWA or current iOS client. “Another app sounds more marketable” is not enough.
 
 ### Planning envelope
 
 Allow roughly **10–18 focused engineering/design weeks through a controlled paid-pilot candidate**, plus external reviews and field observation. Re-estimate after Package 1 and again after migration rehearsal. A small containment release can happen much sooner; it is not the same thing as a commercially dependable product.
+
+The iOS work was undertaken outside this original web planning envelope. Treat signing, provider activation, backend migration, physical-device validation, TestFlight/App Review and ongoing two-client compatibility as additional release/operating work rather than assuming the completed source files make it costless.
 
 If budget/time is tight, reduce breadth: one outreach template, one church per account in the UI, manual onboarding, address-list printing, reference-only scripture, CSV rather than ChMS integration, and email rather than push. Do not cut authorization, durable saves, suppression, or recovery.
 
@@ -365,6 +402,8 @@ The existing church data is more valuable than a cleaner schema.
 9. Reject incompatible old-client writes with a clear update/recovery message.
 10. Monitor discrepancies and support needs, then expand gradually.
 11. Remove legacy write paths only after a stable observation period and reconciled queues.
+
+The iOS branch adds `20260919191901_mobile_account_deletion_requests.sql` and `20260919214330_flexible_church_invitations.sql`. Rehearse them after all 43 currently deployed repository migrations, fix the current full-sandbox seed failure, and deploy them separately from the iOS binary. Their APIs must remain compatible with the deployed website and already-installed iOS versions. Do not merge the iOS UI into `main` merely to release these backend additions.
 
 Rollback must account for writes made after cutover. Reverting a deployment is not sufficient if the previous app cannot understand the new schema. Prefer forward-compatible transitions; define a tested forward-repair or export/replay procedure where reverse migration would lose data.
 
@@ -416,6 +455,11 @@ Treat these as executable scenarios, not a checklist to mark complete from sourc
 - Dialog focus, Escape, keyboard flow, form errors, screen-reader labels, 200% text enlargement, and narrow-screen layout pass manual review.
 - Church timezone, DST boundaries, and a volunteer traveling to another timezone do not shift a date-only task.
 - Coverage states whether it counts known locations, dwellings, parcels, or an incomplete dataset, and which outing/time window applies.
+- The signed iOS build starts from bundled reviewed assets rather than a remote website, opens authentication/sample mode correctly, and preserves account/church storage isolation.
+- Native Apple and Google sign-in, email recovery and invitation acceptance work on a physical iPhone with the app open, backgrounded and terminated; invalid/cancelled callbacks fail closed.
+- Native sharing, AirPrint, safe areas, keyboard resizing, app-switcher privacy, denied/allowed location access, VoiceOver, large text and supported iPhone/iPad layouts pass manual review.
+- Airplane-mode fieldwork and cold reopening preserve authorized pending work; reconnect shares it exactly once through the same server contracts as the web client.
+- Account deletion can be requested in-app and is actually fulfilled within the disclosed period, including session/provider revocation and confirmation; queueing alone does not pass.
 
 ### Operational and commercial behavior
 
@@ -427,6 +471,8 @@ Treat these as executable scenarios, not a checklist to mark complete from sourc
 - Subscription cancellation/export/offboarding is understandable if charging is enabled.
 - Provider/content permissions and public legal/trust copy have been reviewed.
 - Every public feature claim has a corresponding verified flow or clearly stated limitation.
+- App Store publisher/support details, privacy labels, age rating, screenshots, review notes and a fictional reviewer account match the signed candidate and deployed backend.
+- TestFlight findings are resolved before App Review submission; no claim of Apple approval, push notifications, offline maps or background tracking appears unless separately implemented and verified.
 
 The original 68 passing unit tests remain a baseline, not the release gate by themselves. Add browser, database/RLS, migration, two-client, and failure-injection coverage.
 
@@ -501,6 +547,8 @@ Obtain current provider quotes and measure actual pilot usage before setting mar
 | Retention/notices/provider permissions | Product owner with qualified legal/vendor review |
 | Church recruitment, training, and customer support | Pilot/customer-success owner |
 | Production access, backups, incident response | Named operations owner |
+| Apple Developer signing, TestFlight, App Store metadata/review and provider callbacks | Product owner plus designated iOS release owner |
+| Account-deletion queue, fulfillment and Apple authorization revocation | Named privacy/operations owner with engineering support |
 
 At the end of each package, provide:
 
@@ -519,10 +567,12 @@ Suggested checkpoints:
 - Approve one-church migration after rehearsal.
 - Approve design-partner onboarding and any outbound communication.
 - Approve paid/public release only after release gates and pilot review.
+- Approve the two iOS backend migrations and provider/link configuration separately from the website and binary.
+- Approve the exact signed TestFlight candidate before App Store submission.
 
 ## 10. Approval worksheet
 
-Nothing below is checked because this is your review copy.
+The completed boxes record the approvals already given. The open iOS boxes are separate release authorizations, not missing permission to retain the source checkpoint.
 
 - [x] Approve D01–D10 as written, or provide amendments.
 - [x] Authorize Package 0: product decisions, prototypes, and research preparation.
@@ -532,5 +582,8 @@ Nothing below is checked because this is your review copy.
 - [x] Authorize Package 4 after safety, operational, and content/license gates.
 - [x] Keep Package 5 as separately approved experiments.
 - [x] Confirm who approves production changes, paid services, external communications, and public release.
+- [x] Record the owner's decision to proceed with the separate native iOS client on `codex/neighborwalk-ios`.
+- [ ] Approve the iOS backend migrations, Apple/provider configuration and TestFlight distribution after their release gates pass.
+- [ ] Approve the exact signed candidate for App Store submission.
 
-**My recommendation is to start with Packages 0–1, preserve the current work, and make reliability and a simpler volunteer experience the foundation of the commercial version.**
+**Current recommendation: preserve the live web release, finish Package 4's operating/pilot gates, and harden the implemented iOS checkpoint through its database, provider, deletion, physical-device and TestFlight gates before App Store submission. Keep both clients on one compatible authorization/domain contract.**

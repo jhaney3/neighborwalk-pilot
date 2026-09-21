@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
@@ -30,6 +30,41 @@ if (!cliEnv.DOCKER_HOST && existsSync(resolve(runtime, "docker.sock"))) cliEnv.D
 
 function runCli(args: string[]) {
   return execFileSync(cli, args, { env: cliEnv, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+}
+
+function safeCliDiagnostic(output: string) {
+  return output
+    .split("\n")
+    .filter((line) => !/(anon|publishable|service_role|secret|jwt|s3_access)[ _-]?key/i.test(line))
+    .slice(-16)
+    .join("\n")
+    .trim();
+}
+
+async function startSupabase() {
+  const logPath = resolve(runtime, "supabase-start.log");
+  const args = ["start", "-x", "realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor"];
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    const log = openSync(logPath, "w", 0o600);
+    chmodSync(logPath, 0o600);
+    const result = spawnSync(cli, args, { env: cliEnv, stdio: ["ignore", log, log] });
+    closeSync(log);
+    if (result.status === 0) return;
+
+    const output = readFileSync(logPath, "utf8");
+    const containersAreStarting = /container is not ready:\s*starting/i.test(output);
+    if (!containersAreStarting || attempt === 20) {
+      const diagnostic = safeCliDiagnostic(output);
+      throw new Error([
+        `Supabase could not start (exit ${result.status ?? `signal ${result.signal ?? "unknown"}`}).`,
+        diagnostic,
+        `Full startup log: ${logPath}`,
+      ].filter(Boolean).join("\n"));
+    }
+
+    console.log(`Supabase containers are still becoming healthy; retrying (${attempt}/20).`);
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 3_000));
+  }
 }
 
 function localSettings() {
@@ -221,10 +256,9 @@ if (command === "start") {
     cliEnv.DOCKER_HOST = `unix://${runtime}/docker.sock`;
   }
   console.log("Starting the isolated Supabase services. First startup downloads container images.");
-  const log = openSync(resolve(runtime, "supabase-start.log"), "a");
-  try {
-    execFileSync(cli, ["start", "-x", "realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor"], { env: cliEnv, stdio: ["ignore", log, log] });
-  } finally { closeSync(log); }
+  await startSupabase();
+  console.log("Applying pending migrations to the retained local database.");
+  runCli(["migration", "up", "--local"]);
   const settings = localSettings();
   configureApp(settings);
   await seed();

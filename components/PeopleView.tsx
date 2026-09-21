@@ -35,7 +35,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   discipleshipStageLabels,
   discipleshipStageValues,
@@ -294,6 +294,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
   const [noteBody, setNoteBody] = useState("");
   const [noteKind, setNoteKind] = useState<PersonNoteKind>("general");
   const [panel, setPanel] = useState<ProfilePanel>("followups");
+  const followUpsPanelRef = useRef<HTMLElement>(null);
   const tabsId = useId();
   const action = useAsyncAction();
   const handoffQueued = data.sync.commands?.some((q) => q.command.operations.some((op) => op.entityType === "handoff" && op.entityId === resident.id));
@@ -326,6 +327,18 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
     const nextPanel = profilePanels[index];
     if (nextPanel) setPanel(nextPanel);
   };
+  const scrollToFollowUpTask = () => {
+    setPanel("followups");
+    window.requestAnimationFrame(() => {
+      const followUpsPanel = followUpsPanelRef.current;
+      if (!followUpsPanel) return;
+      const task = nextFollowUp
+        ? Array.from(followUpsPanel.querySelectorAll<HTMLElement>("[data-follow-up-id]"))
+            .find((item) => item.dataset.followUpId === nextFollowUp.id)
+        : undefined;
+      (task ?? followUpsPanel).scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   return (
     <article className="person-profile">
@@ -355,7 +368,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
           <div><span className="profile-section-label">Follow-up plan</span>{nextFollowUp && <em><CalendarClock size={12} /> {nextState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "long", day: "numeric" })}</em>}</div>
           {nextFollowUp ? <p>{nextFollowUp.note || "Follow up with this person."}</p> : <p className="care-next-empty">No open follow-up is planned.</p>}
           {openFollowUps.length > 1 && <small>{openFollowUps.length - 1} more open {openFollowUps.length === 2 ? "task" : "tasks"}</small>}
-          <div className="care-next-actions">{canEdit && !followUpRestricted && <FollowUpPlanner timezone={data.church.timezone} defaultDays={data.church.defaultFollowUpDays} noteLimit={data.church.noteCharacterLimit} onSave={onAddFollowUp} />}{!followUps && <button onClick={onOpenFollowUps}>Open follow-ups <ChevronRight size={13} /></button>}</div>
+          <div className="care-next-actions">{canEdit && !followUpRestricted && <FollowUpPlanner timezone={data.church.timezone} defaultDays={data.church.defaultFollowUpDays} noteLimit={data.church.noteCharacterLimit} onSave={onAddFollowUp} />}{followUps && nextFollowUp ? <button type="button" onClick={scrollToFollowUpTask}>View task controls <ChevronRight size={13} /></button> : !followUps ? <button type="button" onClick={onOpenFollowUps}>Open follow-ups <ChevronRight size={13} /></button> : null}</div>
         </section>
         <section className="care-owner-card">
           <span className="profile-section-label">Responsible person</span>
@@ -377,7 +390,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
         <button id={`${tabsId}-details-tab`} type="button" role="tab" aria-controls={`${tabsId}-details-panel`} aria-selected={panel === "details"} tabIndex={panel === "details" ? 0 : -1} onClick={() => setPanel("details")}>Details</button>
       </div>
 
-      <section id={`${tabsId}-followups-panel`} role="tabpanel" aria-labelledby={`${tabsId}-followups-tab`} className="person-profile-panel person-profile-followups" hidden={panel !== "followups"}>
+      <section ref={followUpsPanelRef} id={`${tabsId}-followups-panel`} role="tabpanel" aria-labelledby={`${tabsId}-followups-tab`} className="person-profile-panel person-profile-followups" hidden={panel !== "followups"}>
         <div className="person-profile-followups-heading"><div><span className="profile-section-label">Follow-ups</span><h3>Tasks and outcomes</h3></div><small>Complete, reschedule, or review history here.</small></div>
         {followUps ?? <div className="person-tab-empty"><CalendarClock size={22} /><p>Open the follow-up workspace to review this person’s tasks and outcomes.</p><button className="button quiet small" onClick={onOpenFollowUps}>Open follow-ups</button></div>}
       </section>

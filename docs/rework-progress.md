@@ -5,17 +5,21 @@ Approved by the product owner on September 9, 2026. The original audit and plan 
 ## Release checkpoints
 
 - Existing improvements committed and pushed to `main`: `d94d17c6a24075e6cc657759b676dba988789a97`.
-- Vercel production deployment `dpl_C4sMrQ52ewYiZdrAyMF3YCc9qjho`: READY; public URL returned HTTP 200.
-- Rework branch: `rework/church-ready-neighborwalk`, created after production verification.
-- Rework checkpoints through `b1c0f3c` are pushed to the same verified private repository. A safety review initially paused the push; read-only verification confirmed the existing private destination, administrator access and excluded private backup/environment files before the retry succeeded. `main` remains the original production checkpoint.
+- Historical pre-rework Vercel deployment `dpl_C4sMrQ52ewYiZdrAyMF3YCc9qjho`: READY; public URL returned HTTP 200.
+- Rework branch `rework/church-ready-neighborwalk` was created after that verification. PR #2 later merged it to `main` at `f620979b58b5fa59eb9bbb43cc4343be87faa1b5`.
+- PR #3 merged the tested prior-visit planner overlay. Production now tracks `14b117485bd8c100f743bbf495d8bf99bb679a88`; Vercel reported deployment success and the public site/demo returned HTTP 200.
+- GitHub Actions run `35461832264` passed the quality and database jobs for the exact production merge, including clean install, lint, types, unit tests, optimized build, local migrations/database suites, sandbox verification, dependency audit and Chromium browser regressions.
+- Read-only production checks confirmed the new public GIS RPC and `outreach_outing_participants`, the table introduced by the final checked-in migration. Exact hosted migration-history reconciliation and authenticated production workflow checks remain open.
+- Separate iOS development branch `codex/neighborwalk-ios` currently points to `5046a8a30528747f7b7706bbdf7b4dcf5eb15974`, two commits beyond the deployed web merge. It adds a bundled Capacitor/Xcode client and two undeployed migrations. It is not merged, signed, in TestFlight or submitted to Apple; the live web release remains `main`.
 - GitHub Actions run `34446494932` passed both quality and database jobs for `1c337c0`, including clean `npm ci`, full verification, dependency audit, clean Supabase startup, database regressions and normalized sandbox verification. Browser regressions are added in the subsequent checkpoint.
 - GitHub Actions run `34450072005` passed both jobs for `0d2c075`, including the new isolated Chromium browser job and its 100-entry offline round trip.
 - Baseline checks: lint, TypeScript, 68 tests / 14 files, optimized production build all passed.
-- No production database mutations performed yet.
+
+The chronological entries below record what was true at each checkpoint. Statements such as “no production deployment occurred” remain historical evidence for that dated checkpoint; the current deployment state is the one recorded above.
 
 ## Approved product decisions
 
-D01–D10 in the [plan](market-readiness-plan.md#1-recommended-decision) are approved for implementation. The core promise is **turn neighborhood conversations into personal follow-through**. Keep the PWA, optional guides, maps with a list alternative, address-optional people, owned next steps, minimal data, and explicit restrictions. No full church-management replacement, bulk messaging, native rewrite, or inferred religious scoring.
+D01–D10 in the [plan](market-readiness-plan.md#1-recommended-decision) are approved for implementation. The core promise is **turn neighborhood conversations into personal follow-through**. Keep the PWA, optional guides, maps with a list alternative, address-optional people, owned next steps, minimal data, and explicit restrictions. The owner later authorized the separate iOS client now tracked as Package 4A; full church-management replacement, bulk messaging, native Android/additional native clients, and inferred religious scoring remain outside the core scope.
 
 Historical fields and access must be preserved during additive migration. Creator access changes require explicit migration disclosure and reconciliation, not silent removal. Package 5 remains evidence-led: approval does not make unvalidated experiments prerequisites for the core release.
 
@@ -23,11 +27,12 @@ Historical fields and access must be preserved during additive migration. Creato
 
 | Package | Status | Evidence / next gate |
 | --- | --- | --- |
-| 0 — Product decisions and preservation | Core preservation complete; external decisions open | Production checkpoint published; scoped backup restored and compared; commercial hosting/operator details still needed |
-| 1 — Safer baseline | Implemented and CI-verified; production verification incomplete | Patched dependencies, regression coverage, scoped storage and clean-install/database/browser CI jobs; final release and production verification remain |
-| 2 — Durable domain, permissions and migration | Implemented locally in substantial part; not released | Nineteen additive migrations; restored-record fields/relationships compared and staged FKs validated in rehearsal; transactional/coherent guide library implemented; fresh cutover backup, legacy-device reconciliation, staging/cutover and remaining failure/scale matrix still required |
-| 3 — Coherent church workflow | Implemented locally in substantial part; not complete | Routed outings, non-map field flow, community encounters, people/tasks, restrictions, reviewed moves/duplicates/encounter corrections and permitted history; actual-phone/accessibility matrix and remaining integration work remain |
-| 4 — Website and controlled pilot | Implemented locally in part; not ready for enrollment | Public site, CSV exchange, admin review, leader setup guide and opt-in reminder implementation; provider activation, operations, owner details, commercial hosting and external pilot gates remain |
+| 0 — Product decisions and preservation | Core preservation implemented; external decisions open | Deployed checkpoint published; scoped backup restored and compared; fresh complete production recovery and commercial hosting/operator details still needed |
+| 1 — Safer baseline | Released and CI-verified; operational verification incomplete | Patched dependencies, regression coverage, scoped storage and clean-install/database/browser CI jobs passed on the production merge; authenticated runtime, monitoring and recovery evidence remain |
+| 2 — Durable domain, permissions and migration | Implemented and deployed; reconciliation still open | Twenty-five additive rework migrations (43 repository migrations total) are represented by the live schema; restored-record fields/relationships and staged FKs passed rehearsal; fresh backup, hosted-history reconciliation, legacy-device review and remaining failure/scale matrix still required |
+| 3 — Coherent church workflow | Core workflow implemented and deployed; not complete | Routed outings, map/list field flow, community encounters, people/tasks, restrictions, reviewed moves/duplicates/encounter corrections and permitted history; archival/offboarding semantics, broader accessibility/device evidence and remaining integration work remain |
+| 4 — Website and controlled pilot | Website deployed; enrollment remains closed | Public site, demo, CSV exchange, admin review, leader setup guide and opt-in reminder implementation are live; provider activation, operations, owner details, commercial hosting and external pilot gates remain |
+| 4A — Native iOS client | Development checkpoint implemented; release incomplete | Bundled Capacitor/Xcode workspace, native auth/link/share/print integrations, simulator tests and unsigned archive are recorded on `codex/neighborwalk-ios`; database CI, two backend migrations, signing/providers, deletion fulfillment, physical-device matrix, TestFlight and App Review remain |
 | 5 — Evidence-led growth | Deferred by approved sequencing | Select experiments after core/pilot evidence |
 
 ## Data preservation
@@ -43,7 +48,7 @@ Restore rehearsal completed in `neighborwalk_rehearsal_20260909`, a separate loc
 - Next 16.3.4 / MapLibre 6.4.1 patched; production and development dependency audits report zero vulnerabilities. A compatible npm 12 invocation resolved the npm 10 dependency-resolution bug. Vitest 4.1.11 passes.
 - 92 tests / 20 files pass, including retention, durable do-not-visit summaries, concurrent territory moves, team cleanup, legacy bulk-write refusal, account storage separation, invalid-data quarantine, a 2,501-item queue round trip, install feature detection, headers, service-worker cache boundaries, immutable commands, serialized storage, quota failure, work queued during a receipt, and church-calendar dates.
 - Lint/types passed after the client integration. Optimized production build passed outside the process sandbox; the sandboxed TypeScript subprocess could not return its configuration. Rerun all checks on the final release.
-- Local browser snapshot and protected-person direct writes are revoked. The connected hook now reads the normalized API and sends transactional commands. **Do not deploy the containment migration without its compatible application release.** Production remains on the published checkpoint.
+- Local browser snapshot and protected-person direct writes are revoked. The connected hook reads the normalized API and sends transactional commands. The containment migration and compatible application are now deployed together; future schema/application changes must preserve that paired-release boundary.
 - Normalized schema, preservation backfill, RLS read API, bounded keyset pagination, versioned transactional command API and idempotent receipts implemented locally. Database regression tests pass for cross-church/role denials, 1,001-record pagination, malformed commands, reused-ID conflicts, atomic rollback, server-authoritative actors, restriction precedence, handoff acceptance/task transfer, former-creator access removal, and audited restriction corrections.
 - Schema 11 makes person/location links and coordinates optional. Queued payloads and device state persist together before UI acknowledgement; rejected/conflicting commands remain for review. Legacy unsent work and pre-upgrade storage are retained for supervised recovery; recovery controls remain to be built.
 - Browser-to-database verification with fictional local records passed: create person without address; plan owned/date-only follow-up; complete with care note and next step. Confirmed one completed task, one care note and one linked next step on the server. Browser forms wait for device persistence and retain input on failure.
@@ -284,7 +289,8 @@ Restore rehearsal completed in `neighborwalk_rehearsal_20260909`, a separate loc
 - Person archival/paused/tracking-state semantics and supervised correction/erasure/offboarding; distinguish soft archive from permanent deletion and preserve independent restrictions/backups as required by approved policy.
 - First-church/verified-first-leader provisioning with empty normalized records, live sign-in/delivery, operator runbooks and privacy-safe monitoring/alerts. [Church pilot kit](church-pilot-kit.md) prepares sessions and evaluation; it does not implement or verify those operational services.
 - Production-shaped scale and the remaining failure matrix: concurrent archive/conflict recovery and service-worker build transitions with pending clients; repeat tested session revocation/account switching and while-open offline expiry on actual supported phones; complete 200%/screen reader and printing.
-- Fresh complete production backup, off-site/key custody, hosted-history reconciliation, isolated staging, device cutover and exact production app/schema verification. No database password or new paid-provider authority has been supplied.
+- Fresh complete production backup, off-site/key custody, hosted-history reconciliation, isolated staging, existing-device reconciliation and authenticated post-deployment app/schema verification. Public read-only checks confirm the latest application/schema surface, but no database password or new paid-provider authority has been supplied.
+- iOS: repair the branch's sandbox seed/database CI regression; run dedicated iOS CI; rehearse/deploy its two additive migrations; complete provider/link setup, deletion fulfillment, signing, signed physical-device/iPad/accessibility tests, TestFlight and App Review preparation.
 
 ## External launch gates — do not claim these are implemented or verified
 
@@ -293,6 +299,7 @@ Restore rehearsal completed in `neighborwalk_rehearsal_20260909`, a separate loc
 - Production auth/email delivery and any additional reminder provider require configuration and delivery verification. No unsupported reminder claims or invented delivery success.
 - Embedded commercial ESV use and offline/printed map imagery require appropriate permission; reference-only scripture and address-list printing are the initial fallback.
 - Actual iPhone/Android field testing, church recruitment, interviews, repeated pilot use, willingness-to-pay evidence and legal review cannot be replaced by automated tests.
+- The iOS source checkpoint is not Apple approval. Apple Developer/App Store authority, production provider changes, deletion operations and submission remain separately controlled external actions.
 
 ## Verification policy
 

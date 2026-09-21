@@ -21,12 +21,14 @@ Use these **local-only test accounts**, not your production account:
 The yellow test-workspace indicator identifies the isolated app. The initial
 church, people, visit history, tasks, and guide are fictional. The 16 parcel
 rectangles are explicitly labeled synthetic test parcels. Production data has
-not been copied. Google sign-in is available on production; test accounts use
-passwords. Local recovery/invitation emails are captured at
+not been copied. Apple and Google controls are visible locally so the real web
+layout and error states can be reviewed, but test accounts use passwords unless
+separate local OAuth credentials are configured. Local recovery/invitation emails are captured at
 http://127.0.0.1:54324 instead of being delivered to real recipients.
 
 `sandbox:start` preserves existing test records on subsequent runs. It updates
-only the two Supabase values in ignored `.env.local`, preserving map-provider
+only the two Supabase values in ignored `.env.local`, applies any pending local
+database migrations, and preserves map-provider
 settings. Starting after a reboot restarts the local services. On this Linux
 device, the project uses a rootless Docker daemon without sudo, Docker-group
 membership, or changes to the system Docker service. Its files live in ignored

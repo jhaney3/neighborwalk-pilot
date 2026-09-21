@@ -144,7 +144,7 @@ export function TaskCard({ task, grouped = false, ...props }: FollowUpsViewProps
     || (open && canEdit)
     || (open && canManage && onAssign && owner),
   );
-  return <article className={`followup-card ${task.status}${overdue ? " overdue" : ""}`}>
+  return <article className={`followup-card ${task.status}${overdue ? " overdue" : ""}`} data-follow-up-id={task.id}>
     <header className="followup-card-header">
       <div className="followup-date" aria-label={`${statusLabel}, ${formatCalendarDate(date)}`}>
         <span>{statusLabel}</span>

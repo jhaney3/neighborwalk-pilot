@@ -1,6 +1,8 @@
-# Current rework architecture
+# Current production architecture
 
-This describes the checked-in church-readiness branch, **not a completed production cutover**. The [execution ledger](rework-progress.md) records verified commits and migration counts. Production remains the pre-rework checkpoint until the [release gates](production-checklist.md) are fulfilled.
+This describes the church-readiness application/schema pair deployed from `main`. PR #2 released the rework and PR #3 released the prior-visit planner overlay at merge commit `14b117485bd8c100f743bbf495d8bf99bb679a88`. The Vercel deployment completed successfully, and read-only production checks confirm contracts from the latest checked-in schema. The [execution ledger](rework-progress.md) records the evidence and the [release gates](production-checklist.md) distinguish this technical deployment from approval for wider enrollment.
+
+The separate `codex/neighborwalk-ios` branch at `5046a8a30528747f7b7706bbdf7b4dcf5eb15974` adds a bundled Capacitor/Xcode client that reuses the workspace/domain layer and shared Supabase backend. It is an implemented development checkpoint, not a deployed App Store client. Its two additional migrations, provider/link configuration and deletion operations are not active in production.
 
 ## Authoritative contracts
 
@@ -16,6 +18,7 @@ This describes the checked-in church-readiness branch, **not a completed product
 | Reminders | Self-only `outreach_reminder_preference`; restricted worker plus `/api/reminders/*` routes; provider activation remains gated |
 | Browser persistence | Account/church/environment-scoped IndexedDB, immutable outbox, a single live writer per account/browser profile, preserved reviewed originals |
 | Offline app shell | Build-pinned anonymous assets; no protected API responses, auth secrets or map imagery in the service-worker cache |
+| Native iOS checkpoint | Bundled React workspace in Capacitor/Xcode; shared domain/Supabase contracts, native auth/link/share/print integrations; independent signing/TestFlight/App Store release path |
 
 The migration SQL is authoritative for exact request fields, permissions and error conditions; clients and database suites exercise those contracts. The RPC inventory above is a map, not an alternative manually maintained API schema. The old SQL/OpenAPI design proposals in `docs/database/` and `docs/api/` use a different identity model and fictional REST routes. They are marked archived and must not be executed or used to generate a production client.
 
@@ -29,8 +32,9 @@ Guide and reviewed-administration journals are separate from fieldwork but remai
 
 ## Deliberate boundaries and outstanding work
 
-- The main hook still coordinates several domains; continue extracting cohesive modules when it reduces risk, not with a cosmetic rewrite during cutover.
+- The main hook still coordinates several domains; continue extracting cohesive modules when it reduces risk, not with a cosmetic rewrite during release hardening.
 - Large complete downloads have explicit safety limits; production-shaped mixed-entity/concurrent-user and lower-end phone performance remain unverified.
 - Historical guide editions, supervised permanent erasure/offboarding and first-church/verified-first-leader operational provisioning are not completed features.
 - Actual supported phones, service-worker build transitions with pending devices, accessibility/printing, monitored production delivery and recovery need release-specific evidence.
-- Local, staging and production must stay isolated. Historical hosted migrations differ from local baseline filenames; reconcile them against a fresh private production restore before applying the additive sequence. Never solve this with a blind reset, duplicate schema application or preview-to-production connection.
+- The iOS source exists, but signed physical-device authentication/invitations, its two additive migrations, hosted invitation handoff, deletion fulfillment, TestFlight and App Review remain open. Keep future backend changes compatible with both web and installed iOS clients.
+- Local, staging and production must stay isolated. The latest schema is present in production, but the historical hosted migration ledger still needs operator-authenticated reconciliation with the repository before the next schema change. Verify it against a fresh private production restore; never solve a history difference with a blind reset, duplicate schema application or preview-to-production connection.
