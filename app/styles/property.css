@@ -14,14 +14,11 @@
 .drawer-address > small { display: block; margin-top: 2px; color: var(--label-2); font-size: var(--fs-footnote); }
 .address-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 70px auto; gap: 6px; }
 .address-edit-row input { min-width: 0; height: 36px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--fill-3); font-size: var(--fs-subhead); }
-.drawer-parcel-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-top: 12px; padding: 6px 6px 6px 8px; border-radius: var(--radius-sm); background: var(--bg-grouped-3); }
-.drawer-parcel-row > button { color: var(--tint); }
-.drawer-parcel-row > button:first-child { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px; text-align: left; }
-.drawer-parcel-row span, .drawer-parcel-row strong, .drawer-parcel-row small { display: block; }
-.drawer-parcel-row strong { color: var(--label); font-size: var(--fs-subhead); font-weight: 600; }
-.drawer-parcel-row small { margin-top: 1px; color: var(--label-2); font-size: var(--fs-footnote); }
+.drawer-parcel-row { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.drawer-parcel-row > button:first-child { min-width: 0; display: flex; align-items: center; gap: 5px; padding: 4px 2px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 500; text-align: left; }
+.drawer-parcel-row > button:first-child span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawer-parcel-row > button:first-child > svg:last-child { color: var(--label-3); }
-.drawer-add-dwelling { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50% !important; color: var(--on-tint) !important; background: var(--tint) !important; }
+.drawer-add-dwelling { width: 28px; height: 28px; display: grid; flex: 0 0 28px; place-items: center; border-radius: 50% !important; color: var(--tint) !important; background: var(--tint-soft) !important; }
 .do-not-visit-banner, .drawer-followup-banner { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; padding: 12px 14px; border-radius: var(--radius-sm); }
 .do-not-visit-banner { color: var(--red-text); background: var(--red-soft); }
 .drawer-followup-banner { color: var(--orange-text); background: var(--orange-soft); }

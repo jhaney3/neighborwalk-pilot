@@ -102,6 +102,7 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
   const [community, setCommunity] = useState(Boolean(outing && !initialTerritoryId));
   const [territoryId, setTerritoryId] = useState(initialTerritoryId);
   const [createdZone, setCreatedZone] = useState<Territory>();
+  const [zoneCreatorOpen, setZoneCreatorOpen] = useState(false);
   const [targets, setTargets] = useState<WalkTargetDraft[]>(() => existingTargets.map((item) => ({ ...item, clientId: item.id })));
   const [invitedMemberIds, setInvitedMemberIds] = useState<string[]>(() => data.outingParticipants.filter((participant) => participant.eventId === outing?.id).map((participant) => participant.volunteerId));
   const [selectedTargetId, setSelectedTargetId] = useState<string>();
@@ -166,7 +167,7 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
     });
   };
 
-  return <Modal title={outing ? "Resume walk setup" : "Plan a walk"} description="Choose the lasting zone, then divide tonight’s work visually." onClose={action.busy ? () => undefined : onClose} wide>
+  return <Modal title={outing ? "Resume walk setup" : "Plan a walk"} description="Choose the lasting zone, then divide tonight’s work visually." onClose={action.busy ? () => undefined : zoneCreatorOpen ? () => setZoneCreatorOpen(false) : onClose} mobileImmersive={zoneCreatorOpen} wide>
     <div className="walk-setup form-stack" aria-busy={action.busy}>
       <ol className="walk-steps" aria-label="Walk setup progress">{steps.map((label, index) => <li key={label} className={index === step ? "active" : index < step ? "complete" : ""} aria-current={index === step ? "step" : undefined}><span>{index < step ? <Check size={14} /> : index + 1}</span>{label}</li>)}</ol>
 
@@ -186,11 +187,11 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
             <label><input type="radio" checked={!community} onChange={() => setCommunity(false)} /><span><strong>Neighborhood zone</strong><small>Take one or more visual bites out of a persistent mapped zone.</small></span></label>
             {!community && <>
               <select aria-label="Persistent parent zone" value={territoryId} onChange={(event) => { setTerritoryId(event.target.value); setTargets([]); }}><option value="">Choose a mapped zone</option>{mappedTerritories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-              {targets.length === 0 ? <ParentZoneCreator churchId={data.church.id} mapStyleUrl={data.preferences.mapStyleUrl} baseTerritory={territory} demo={data.sync.mode === "device_only"} onAddZone={onAddZone} onCreated={(zone) => { setCreatedZone(zone); setTerritoryId(zone.id); setCommunity(false); }} /> : <small className="walk-help">Remove tonight’s target drafts before switching to a newly drawn parent zone.</small>}
+              {targets.length === 0 ? <ParentZoneCreator churchId={data.church.id} mapStyleUrl={data.preferences.mapStyleUrl} baseTerritory={territory} demo={data.sync.mode === "device_only"} open={zoneCreatorOpen} onOpenChange={setZoneCreatorOpen} onAddZone={onAddZone} onCreated={(zone) => { setCreatedZone(zone); setTerritoryId(zone.id); setCommunity(false); }} /> : <small className="walk-help">Remove tonight’s target drafts before switching to a newly drawn parent zone.</small>}
             </>}
             <label><input type="radio" checked={community} onChange={() => setCommunity(true)} /><span><strong>Community setting</strong><small>No mapped assignment is needed.</small></span></label>
           </fieldset>
-          {territory && !community && <WalkTargetPlanner parentTerritory={territory} eventId={outing?.id ?? "draft-event"} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} visitedParcelKeys={visitedParcelKeys} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} />}
+          {territory && !community && <div className="walk-target-planner-host" aria-hidden={zoneCreatorOpen || undefined} inert={zoneCreatorOpen || undefined}><WalkTargetPlanner parentTerritory={territory} eventId={outing?.id ?? "draft-event"} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} visitedParcelKeys={visitedParcelKeys} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} /></div>}
         </>}
       </section>}
 

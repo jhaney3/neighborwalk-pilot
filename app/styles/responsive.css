@@ -271,5 +271,5 @@
 
 @media (prefers-contrast: more) {
   :root { --label-2: rgba(60, 60, 67, .78); --hairline: rgba(60, 60, 67, .3); --glass: rgba(255, 255, 255, .94); }
-  @media (prefers-color-scheme: dark) { :root { --label-2: rgba(235, 235, 245, .8); --hairline: rgba(84, 84, 88, .8); --glass: rgba(28, 28, 30, .94); } }
+  :root[data-theme="dark"] { --label-2: rgba(235, 235, 245, .8); --hairline: rgba(84, 84, 88, .8); --glass: rgba(28, 28, 30, .94); }
 }

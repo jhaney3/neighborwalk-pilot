@@ -12,9 +12,10 @@ export type PeopleWorkspaceProps = {
   followUpProps: ComponentProps<typeof FollowUpsView>;
   initialPanel?: "followups" | "directory";
   onPanelChange?: (panel: "followups" | "directory") => void;
+  hidden?: boolean;
 };
 
-export function PeopleWorkspace({ peopleProps, followUpProps, initialPanel = "followups", onPanelChange }: PeopleWorkspaceProps) {
+export function PeopleWorkspace({ peopleProps, followUpProps, initialPanel = "followups", onPanelChange, hidden }: PeopleWorkspaceProps) {
   const initialSelection = peopleProps.initialSelectedResidentId ?? null;
   const [localSelectedResidentId, setSelectedResidentId] = useState<string | null>(initialSelection);
   const [addPersonRequested, setAddPersonRequested] = useState(false);
@@ -43,7 +44,7 @@ export function PeopleWorkspace({ peopleProps, followUpProps, initialPanel = "fo
     }
   };
 
-  return <section className={`content-view people-workspace${panel === "directory" && selectedResidentId ? " has-selected-person" : ""}`}>
+  return <section hidden={hidden} className={`content-view people-workspace${panel === "directory" && selectedResidentId ? " has-selected-person" : ""}`}>
     <ViewHeading title="People" />
     <div className="people-workspace-switcher">
       <div className="people-workspace-tabs" role="tablist" tabIndex={-1} aria-orientation="horizontal" aria-label="People views" onKeyDown={(event) => navigateTabs(event, selectPanel)}>

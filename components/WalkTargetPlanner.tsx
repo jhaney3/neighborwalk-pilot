@@ -13,6 +13,7 @@ import { EMPTY_PLANNING_PARCELS, EMPTY_STREETS, loadPlanningLayers, loadingPlann
 import { OVERTURE_TRANSPORTATION_SOURCE, streetSegmentDisplayLines, streetSegmentLines, type StreetSegmentCollection } from "../lib/street-segments";
 import { applyParcelSelectionOverrides, parcelInsideZone, planningDatasetIdentity, planningParcelDisplayCollection, planningParcelRoster, polygonParcelKeys, snapshotParcelFeatureCollection, STREET_PARCEL_CORRIDOR_METERS, streetParcelKeys, toggleParcelSelectionOverride } from "../lib/target-parcels";
 import type { WalkTargetGeometry, WalkTargetInput } from "../lib/walk-targets";
+import { compactToastMessage } from "../lib/toasts";
 import { MapDrawingModeControl } from "./MapDrawingModeControl";
 
 export type WalkTargetDraft = WalkTargetInput & { clientId: string; id?: string };
@@ -289,7 +290,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
           const hit = map.queryRenderedFeatures(event.point, { layers: ["plan-parcels-fill"] })[0]; const props = hit?.properties; if (!props || !current.streetIds.size) return;
           const countyFips = String(Reflect.get(props, "countyFips") ?? ""); const gislink = String(Reflect.get(props, "gislink") ?? "");
           const id = `${countyFips}:${gislink}`;
-          if (current.claimedParcelIds.has(id)) { setOverlapNotice({ id: Date.now(), message: "That parcel is already included in another target for this outing." }); return; }
+          if (current.claimedParcelIds.has(id)) { setOverlapNotice({ id: Date.now(), message: "Already included" }); return; }
           setOverlapNotice(undefined);
           setParcelOverrides((overrides) => toggleParcelSelectionOverride(overrides, id, current.automaticParcelIds));
         }
@@ -349,7 +350,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
       <button type="button" className={draftKind === "streets" ? "active" : ""} disabled={readOnly || !streetInspectable || targets.some((target) => target.selectionKind === "whole_zone")} onClick={() => { if (draftKind === "streets") return; suppressMapClick.current = false; setDraftKind("streets"); setMode("streets"); setPoints([]); setParcelOverrides(new Map()); setOverlapNotice(undefined); }}><Waypoints size={16}/> Streets</button>
       <button type="button" disabled={readOnly || !planningComplete || targets.length > 0} onClick={addWhole}>Whole zone</button>
     </div>
-    <div className={`walk-target-map-wrap${mode === "polygon" || mode === "rectangle" ? " map-drawing-active" : ""}`}><div ref={container} className="walk-target-map" role="application" aria-label="Interactive target map"/>{status !== "ready" && <div className={`walk-target-state ${status}`}>{status === "loading" ? <LoaderCircle className="spin"/> : <AlertTriangle/>}<span>{status === "loading" ? "Loading planning map…" : "Map unavailable. Try again or draw the parent zone later."}</span></div>}{overlapNotice && <div key={overlapNotice.id} className="walk-target-map-toast" role="status"><AlertTriangle size={16} aria-hidden="true"/>{overlapNotice.message}</div>}</div>
+    <div className={`walk-target-map-wrap${mode === "polygon" || mode === "rectangle" ? " map-drawing-active" : ""}`}><div ref={container} className="walk-target-map" role="application" aria-label="Interactive target map"/>{status !== "ready" && <div className={`walk-target-state ${status}`}>{status === "loading" ? <LoaderCircle className="spin"/> : <AlertTriangle/>}<span>{status === "loading" ? "Loading planning map…" : "Map unavailable. Try again or draw the parent zone later."}</span></div>}{overlapNotice && <div key={overlapNotice.id} className="walk-target-map-toast" role="status"><AlertTriangle size={16} aria-hidden="true"/>{compactToastMessage(overlapNotice.message)}</div>}</div>
     {!readOnly && <div className="walk-target-options" aria-live="polite">
       <span>{planningLayerSummary("Streets", currentStreetLayer, streets.features.length, "section")}</span>
       <span>{planningLayerSummary("Parcels", currentParcelLayer, eligibleParcels.features.length, "residential parcel")}</span>

@@ -101,7 +101,7 @@ dialog.property-drawer .contact-restrictions { margin-top: 20px; padding: 16px; 
 .today-priority .button.primary:hover { background: #f2f2f7; }
 .today-priority > .button.quiet, .today-priority li > .button.quiet { color: #fff; background: rgba(255, 255, 255, .18); }
 .today-priority .inline-error { color: #fff; background: rgba(0, 0, 0, .18); }
-@media (prefers-color-scheme: dark) { .today-priority .button.primary { color: #17633f; } }
+:root[data-theme="dark"] .today-priority .button.primary { color: #17633f; }
 .home-walk-invitations { display: grid; gap: 6px; }
 .home-walk-invitations > h2 { margin-bottom: 0; }
 .home-walk-invitations > p { margin: 0 0 8px; color: var(--label-2); line-height: 1.45; }

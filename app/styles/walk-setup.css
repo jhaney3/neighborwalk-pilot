@@ -31,8 +31,10 @@
 .walk-parent-zone-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .walk-parent-zone-heading strong,.walk-parent-zone-heading small { display: block; }
 .walk-parent-zone-heading small { margin-top: 3px; color: var(--muted); line-height: 1.4; }
+.walk-parent-zone-mobile-bar,.walk-parent-zone-review,.walk-parent-zone-back { display: none; }
 .walk-parent-zone-map { height: 410px; overflow: hidden; border: 0; border-radius: var(--radius-md); }
 .walk-parent-zone-map .map-engine-shell,.walk-parent-zone-map .map-engine { height: 100%; }
+.walk-parent-zone-draw-panel,.walk-parent-zone-details-panel,.walk-parent-zone-details-actions { display: contents; }
 .walk-parent-zone-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .walk-parent-zone-tools > span { margin-left: auto; color: var(--muted); font-size: var(--text-supporting); }
 .walk-parent-zone-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(110px,160px); gap: 12px; }
@@ -78,6 +80,7 @@
 .walk-target-tools,.walk-target-edit-actions,.walk-target-suggestions,.walk-target-options { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
 
 .walk-target-planner { display: grid; gap: 10px; }
+.walk-target-planner-host { display: contents; }
 
 .outing-fieldwork-entry { display: grid; justify-items: stretch; gap: 6px; width: min(250px,100%); }
 .outing-fieldwork-entry label { gap: 4px; font-size: var(--text-supporting); }
@@ -124,7 +127,39 @@
   .walk-crew-status { grid-template-columns: auto 1fr; }
   .walk-crew-status span { grid-column: 1 / -1; }
   .walk-target-map-wrap { min-height: 52vh; }
-  .walk-parent-zone-map { height: 52vh; }
+  dialog.modal-card.mobile-immersive { width: 100%; height: 100svh; height: 100dvh; max-height: none; margin: 0; padding: 0; overflow: hidden; border-radius: 0; animation: none; }
+  dialog.modal-card.mobile-immersive::before,dialog.modal-card.mobile-immersive > .modal-heading { display: none; }
+  dialog.modal-card.mobile-immersive .walk-setup { visibility: hidden; }
+  dialog.modal-card.mobile-immersive .walk-parent-zone-creator { position: fixed; z-index: 100; inset: 0; width: 100%; height: 100svh; height: 100dvh; display: block; padding: 0; overflow: hidden; border-radius: 0; background: var(--bg-elevated); }
+  dialog.modal-card.mobile-immersive .walk-parent-zone-creator { visibility: visible; }
+  .mobile-immersive .walk-parent-zone-heading { display: none; }
+  .mobile-immersive .walk-parent-zone-mobile-bar { position: absolute; z-index: 32; top: 0; left: 0; right: 0; min-height: calc(56px + var(--top-inset)); display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(8px + var(--top-inset)) 12px 8px 16px; background: linear-gradient(180deg,var(--bg-elevated) 0%,var(--glass-strong) 72%,transparent 100%); }
+  .mobile-immersive .walk-parent-zone-mobile-bar h3 { margin: 0; font-size: var(--fs-headline); line-height: 1.2; outline: 0; }
+  .mobile-immersive .walk-parent-zone-mobile-bar .button { min-width: 72px; min-height: 44px; padding-inline: 12px; background: var(--glass-strong); }
+  .mobile-immersive .walk-parent-zone-map { position: absolute; inset: 0; height: auto; border-radius: 0; }
+  .mobile-immersive .walk-parent-zone-map .map-engine-shell,.mobile-immersive .walk-parent-zone-map .map-engine,.mobile-immersive .walk-parent-zone-map .maplibregl-canvas { min-height: 0; border-radius: 0; }
+  .mobile-immersive .walk-parent-zone-map .map-drawing-panel { top: calc(66px + var(--top-inset)); }
+  .mobile-immersive .walk-parent-zone-draw-panel,.mobile-immersive .walk-parent-zone-details-panel { position: absolute; z-index: 31; left: 10px; right: 10px; bottom: 10px; display: grid; gap: 10px; max-height: calc(100dvh - var(--top-inset) - 76px); padding: 14px 14px calc(14px + var(--bottom-inset)); overflow-y: auto; border-radius: var(--radius-sheet); background: var(--glass-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--shadow-float); }
+  .mobile-immersive .stage-draw .walk-parent-zone-details-panel,.mobile-immersive .stage-details .walk-parent-zone-draw-panel { display: none; }
+  .mobile-immersive .walk-parent-zone-draw-panel > .walk-help { margin: 0; overflow: hidden; color: var(--label-2); font-size: var(--fs-caption); line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-immersive .walk-parent-zone-tools { display: grid; grid-template-columns: repeat(2,minmax(0,auto)); gap: 8px; }
+  .mobile-immersive .walk-parent-zone-tools > span { grid-column: 1 / -1; grid-row: 1; margin: 0; color: var(--label); font-size: var(--fs-footnote); font-weight: 600; }
+  .mobile-immersive .walk-parent-zone-tools .button { min-height: 44px; }
+  .mobile-immersive .walk-parent-zone-review { width: 100%; min-height: 48px; display: inline-flex; }
+  .mobile-immersive .walk-parent-zone-details-panel { left: 0; right: 0; bottom: 0; gap: 12px; max-height: min(430px,calc(100dvh - var(--top-inset) - 70px)); padding: 18px 18px calc(18px + var(--bottom-inset)); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; background: var(--bg-elevated); }
+  .mobile-immersive .walk-parent-zone-fields { grid-template-columns: minmax(0,1fr) 88px; align-items: end; }
+  .mobile-immersive .walk-parent-zone-fields input { min-height: 48px; }
+  .mobile-immersive .walk-parent-zone-details-actions { display: grid; grid-template-columns: minmax(92px,auto) minmax(0,1fr); gap: 10px; }
+  .mobile-immersive .walk-parent-zone-details-actions .button { min-height: 48px; min-width: 0; }
+  .mobile-immersive .walk-parent-zone-back { display: inline-flex; }
+  .mobile-immersive .stage-draw .map-engine .maplibregl-ctrl-bottom-left,.mobile-immersive .stage-draw .map-engine .maplibregl-ctrl-bottom-right { bottom: calc(210px + var(--bottom-inset)); }
+  .mobile-immersive .stage-details .map-engine .maplibregl-ctrl-bottom-left,.mobile-immersive .stage-details .map-engine .maplibregl-ctrl-bottom-right { bottom: calc(260px + var(--bottom-inset)); }
+}
+
+@media (max-width: 620px) and (orientation: landscape) {
+  .mobile-immersive .walk-parent-zone-draw-panel { left: auto; top: calc(62px + var(--top-inset)); width: min(330px,46vw); max-height: calc(100dvh - var(--top-inset) - 72px); }
+  .mobile-immersive .walk-parent-zone-details-panel { left: auto; top: calc(62px + var(--top-inset)); width: min(360px,48vw); max-height: calc(100dvh - var(--top-inset) - 62px); border-radius: var(--radius-sheet) 0 0 0; }
+  .mobile-immersive .stage-draw .map-engine .maplibregl-ctrl-bottom-left,.mobile-immersive .stage-draw .map-engine .maplibregl-ctrl-bottom-right,.mobile-immersive .stage-details .map-engine .maplibregl-ctrl-bottom-left,.mobile-immersive .stage-details .map-engine .maplibregl-ctrl-bottom-right { bottom: 10px; right: calc(min(360px,48vw) + 10px); }
 }
 .walk-step-panel .form-field input, .walk-step-panel .form-field select, .walk-step-panel .form-field textarea, .walk-step-panel .form-stack input, .walk-step-panel .form-stack select, .walk-step-panel .form-stack textarea { background: var(--bg-grouped-2); }
 

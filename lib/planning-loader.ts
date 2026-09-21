@@ -1,4 +1,6 @@
 import type { Territory } from "./domain";
+import { lawrenceburgDemoParcelResult, lawrenceburgDemoStreets } from "./demo-planning";
+import { isMobileApp } from "./mobile";
 import type { ParcelFeatureCollection } from "./parcels";
 import { fetchStreetSegmentsForBoundary, type StreetSegmentCollection } from "./street-segments";
 import {
@@ -113,9 +115,14 @@ export async function loadPlanningLayers(
   const getCached = dependencies.getCached ?? getCompletePlanningDataset;
   const cacheComplete = dependencies.cacheComplete ?? cacheCompletePlanningDataset;
   const cachedPromise = getCached(territory.id, territory.boundary).catch(() => null);
+  const nativeDemo = options.publicMap === true && isMobileApp;
 
-  const streetPromise = fetchStreets({ boundary: territory.boundary, publicMap: options.publicMap, signal: options.signal });
-  const parcelPromise = fetchParcels(territory.boundary, { publicMap: options.publicMap, signal: options.signal });
+  const streetPromise = nativeDemo
+    ? Promise.resolve(lawrenceburgDemoStreets(territory.boundary))
+    : fetchStreets({ boundary: territory.boundary, publicMap: options.publicMap, signal: options.signal });
+  const parcelPromise = nativeDemo
+    ? Promise.resolve(lawrenceburgDemoParcelResult(territory.boundary))
+    : fetchParcels(territory.boundary, { publicMap: options.publicMap, signal: options.signal });
 
   const publishStreet = streetPromise.then(async (data) => {
     if (options.signal?.aborted) return liveStreetLayer(identity, data);

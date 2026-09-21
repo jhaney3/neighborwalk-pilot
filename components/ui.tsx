@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef } from "react";
 
-export function Modal({ title, description, wide = false, onClose, children }: { title: string; description?: string; wide?: boolean; onClose: () => void; children: React.ReactNode }) {
+export function Modal({ title, description, wide = false, mobileImmersive = false, onClose, children }: { title: string; description?: string; wide?: boolean; mobileImmersive?: boolean; onClose: () => void; children: React.ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -16,7 +16,7 @@ export function Modal({ title, description, wide = false, onClose, children }: {
     };
   }, []);
   const requestClose = () => { if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose(); };
-  return <dialog ref={dialog} className={`modal-card${wide ? " wide" : ""}`} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
+  return <dialog ref={dialog} className={`modal-card${wide ? " wide" : ""}${mobileImmersive ? " mobile-immersive" : ""}`} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
     <div className="modal-heading"><div><h2 id={titleId}>{title}</h2>{description && <p id={descriptionId}>{description}</p>}</div><button type="button" className="close-button" onClick={requestClose} aria-label="Close dialog">×</button></div>{children}
   </dialog>;
 }

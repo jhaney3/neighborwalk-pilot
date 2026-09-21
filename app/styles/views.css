@@ -19,7 +19,7 @@
 .segmented-control, .outreach-display-switch, .people-workspace-tabs, .drawer-tabs { display: flex; gap: 2px; padding: 2px; border: 0; border-radius: 10px; background: var(--fill-3); }
 .segmented-control button, .outreach-display-switch button, .people-workspace-tabs button, .drawer-tabs button { min-height: 32px; min-width: 0; flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 0; border-radius: 8px; color: var(--label); background: transparent; font-size: var(--fs-footnote); font-weight: 600; white-space: nowrap; transition: background-color .15s ease, box-shadow .15s ease; }
 .segmented-control button.active, .outreach-display-switch button[aria-pressed="true"], .people-workspace-tabs button.active, .drawer-tabs button.active { color: var(--label); background: var(--bg-elevated); box-shadow: 0 3px 8px rgba(0, 0, 0, .12), 0 3px 1px rgba(0, 0, 0, .04); }
-@media (prefers-color-scheme: dark) { .segmented-control button.active, .outreach-display-switch button[aria-pressed="true"], .people-workspace-tabs button.active, .drawer-tabs button.active { background: #636366; } }
+:root[data-theme="dark"] :is(.segmented-control button.active, .outreach-display-switch button[aria-pressed="true"], .people-workspace-tabs button.active, .drawer-tabs button.active) { background: #636366; }
 .segmented-control button:disabled, .outreach-display-switch button:disabled { opacity: .35; }
 .outreach-display-switch { width: fit-content; margin: 12px 0; }
 .outreach-display-switch button { min-width: 110px; min-height: 34px; }

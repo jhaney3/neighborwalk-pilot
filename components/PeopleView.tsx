@@ -35,7 +35,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   discipleshipStageLabels,
   discipleshipStageValues,
@@ -295,6 +295,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
   const [noteKind, setNoteKind] = useState<PersonNoteKind>("general");
   const [panel, setPanel] = useState<ProfilePanel>("followups");
   const tabsId = useId();
+  const followUpsTab = useRef<HTMLButtonElement>(null);
   const action = useAsyncAction();
   const handoffQueued = data.sync.commands?.some((q) => q.command.operations.some((op) => op.entityType === "handoff" && op.entityId === resident.id));
   const followUpChannel = resident.preferredContact === "none" ? "other" : resident.preferredContact;
@@ -326,6 +327,15 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
     const nextPanel = profilePanels[index];
     if (nextPanel) setPanel(nextPanel);
   };
+  const showFollowUps = () => {
+    setPanel("followups");
+    window.requestAnimationFrame(() => {
+      const tab = followUpsTab.current;
+      if (!tab) return;
+      tab.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+      tab.focus({ preventScroll: true });
+    });
+  };
 
   return (
     <article className="person-profile">
@@ -352,9 +362,12 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
 
       <div className="person-care-grid">
         <section className={`care-next-card ${nextState}`}>
-          <div><span className="profile-section-label">Next step</span>{nextFollowUp && <em><CalendarClock size={12} /> {nextState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "long", day: "numeric" })}</em>}</div>
-          {nextFollowUp ? <p>{nextFollowUp.note || "Follow up with this person."}</p> : <p className="care-next-empty">No open follow-up is planned.</p>}
-          {openFollowUps.length > 1 && <small>{openFollowUps.length - 1} more open {openFollowUps.length === 2 ? "task" : "tasks"}</small>}
+          {nextFollowUp ? <button type="button" className="care-next-summary" onClick={showFollowUps} aria-label={`Open follow-ups for ${resident.name || "this person"}`}>
+            <span className="care-next-heading"><span className="profile-section-label">Next step</span><em><CalendarClock size={12} /> {nextState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "long", day: "numeric" })}</em></span>
+            <span className="care-next-copy">{nextFollowUp.note || "Follow up with this person."}</span>
+            {openFollowUps.length > 1 && <span className="care-next-count">{openFollowUps.length - 1} more open {openFollowUps.length === 2 ? "task" : "tasks"}</span>}
+            <span className="care-next-disclosure">View follow-ups <ChevronRight size={14} aria-hidden="true" /></span>
+          </button> : <><div><span className="profile-section-label">Next step</span></div><p className="care-next-empty">No open follow-up is planned.</p></>}
           <div className="care-next-actions">{canEdit && !followUpRestricted && <FollowUpPlanner timezone={data.church.timezone} defaultDays={data.church.defaultFollowUpDays} noteLimit={data.church.noteCharacterLimit} onSave={onAddFollowUp} />}{!followUps && <button onClick={onOpenFollowUps}>Open follow-ups <ChevronRight size={13} /></button>}</div>
         </section>
         <section className="care-owner-card">
@@ -372,7 +385,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
       </div>
 
       <div className="person-profile-tabs" role="tablist" tabIndex={-1} aria-label="Profile sections" onKeyDown={(event) => navigateTabs(event, selectPanel)}>
-        <button id={`${tabsId}-followups-tab`} type="button" role="tab" aria-controls={`${tabsId}-followups-panel`} aria-selected={panel === "followups"} tabIndex={panel === "followups" ? 0 : -1} onClick={() => setPanel("followups")}>Follow-ups{openFollowUps.length > 0 && <span>{openFollowUps.length}</span>}</button>
+        <button ref={followUpsTab} id={`${tabsId}-followups-tab`} type="button" role="tab" aria-controls={`${tabsId}-followups-panel`} aria-selected={panel === "followups"} tabIndex={panel === "followups" ? 0 : -1} onClick={() => setPanel("followups")}>Follow-ups{openFollowUps.length > 0 && <span>{openFollowUps.length}</span>}</button>
         <button id={`${tabsId}-activity-tab`} type="button" role="tab" aria-controls={`${tabsId}-activity-panel`} aria-selected={panel === "activity"} tabIndex={panel === "activity" ? 0 : -1} onClick={() => setPanel("activity")}>Activity<span>{timeline.length}</span></button>
         <button id={`${tabsId}-details-tab`} type="button" role="tab" aria-controls={`${tabsId}-details-panel`} aria-selected={panel === "details"} tabIndex={panel === "details" ? 0 : -1} onClick={() => setPanel("details")}>Details</button>
       </div>

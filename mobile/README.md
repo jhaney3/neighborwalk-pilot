@@ -11,7 +11,8 @@ Requires Node 22, Xcode 26 or newer, and an iOS simulator.
 ```sh
 npm ci
 npm run mobile:dev
-# Open http://127.0.0.1:4173/demo for fictional data.
+# Open http://127.0.0.1:4173/login to preview sign-in.
+# Open http://127.0.0.1:4173/demo for fictional workspace data.
 ```
 
 Production public Supabase configuration lives in ignored `mobile/.env.production.local` (already configured on this machine). This contains only the public URL and publishable key, never service-role keys. A production bundle cannot use the local database; local browser builds cannot access production. The `capacitor://localhost` native runtime is the one intentional exception to the browser-loopback guard.
@@ -48,7 +49,7 @@ See [the release guide](../docs/ios-release.md) for unresolved release requireme
 The workspace follows the native iOS idiom so it sits naturally beside Apple's own apps:
 
 - **Type**: the system font (SF Pro on Apple platforms) on the Human Interface Guidelines scale — Large Title 34/41, Title 2 22/28, Headline 17 semibold, Body 17, Subheadline 15, Footnote 13, Caption 12. Tokens are `--fs-*`/`--lh-*` in `app/styles/foundation.css`.
-- **Color**: iOS semantic tokens (`--label`, `--label-2`, `--bg-grouped`, `--bg-grouped-2`, `--separator`, `--fill-*`) with light **and dark** appearance via `prefers-color-scheme`. One evergreen tint (`--tint`, 5.3:1 on white) is used the Apple way for links, capsule buttons, tab selection and switches; `--red`, `--orange`, `--blue` carry semantics.
+- **Color**: iOS semantic tokens (`--label`, `--label-2`, `--bg-grouped`, `--bg-grouped-2`, `--separator`, `--fill-*`) with light **and dark** appearance. A fresh install starts with the system appearance; the device-local Settings toggle can then override it. One evergreen tint (`--tint`, 5.3:1 on white) is used the Apple way for links, capsule buttons, tab selection and switches; `--red`, `--orange`, `--blue` carry semantics.
 - **Materials and shape**: a translucent blurred navigation bar that content scrolls beneath, a floating capsule tab bar, glass map controls, borderless grouped cards (`--radius-lg`), bottom sheets with grabbers, capsule buttons and iOS switches.
 - **Legacy names**: older stylesheets still reference `--pine-*`, `--mint-*`, `--amber*`, `--mist-*`, `--font-plex-mono`. Those are aliased to the semantic tokens at the end of `:root` so every module inherits the palette and dark mode; prefer the semantic names in new work.
 - `mobile/native.css` holds only runtime concerns (full-bleed root, safe areas, tap highlight, keyboard-safe input sizes). Visual rules belong in the shared stylesheets.

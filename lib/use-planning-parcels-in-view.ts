@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import type { Coordinates } from "./domain";
 import { type MapViewport, type ParcelFeatureCollection, viewportKey } from "./parcels";
+import { lawrenceburgDemoParcelResult } from "./demo-planning";
+import { isMobileApp } from "./mobile";
 import { fetchPlanningParcelsForBoundary } from "./target-parcels";
 
 const EMPTY: ParcelFeatureCollection = { type: "FeatureCollection", features: [] };
 type Result = { key: string; parcels: ParcelFeatureCollection; message: string; failed: boolean };
 
-/** The creator displays real inventory for the visible neighborhood, not invented lots. */
+/** The creator displays live inventory, with bundled fictional parcels only in the native sample workspace. */
 export function usePlanningParcelsInView(viewport: MapViewport | null, publicMap: boolean) {
   const [result, setResult] = useState<Result>();
   const [attempt, setAttempt] = useState(0);
@@ -23,7 +25,10 @@ export function usePlanningParcelsInView(viewport: MapViewport | null, publicMap
     const boundary: Coordinates[] = [[west, south], [east, south], [east, north], [west, north]];
     const deadline = window.setTimeout(() => controller.abort(), 15_000);
     const debounce = window.setTimeout(() => {
-      void fetchPlanningParcelsForBoundary(boundary, { publicMap, signal: controller.signal }).then((loaded) => {
+      const loading = isMobileApp && publicMap
+        ? Promise.resolve(lawrenceburgDemoParcelResult(boundary))
+        : fetchPlanningParcelsForBoundary(boundary, { publicMap, signal: controller.signal });
+      void loading.then((loaded) => {
         if (cancelled) return;
         const message = loaded.availability === "unsupported_area" ? "Parcel coverage is limited to Giles, Lawrence, Lewis and Wayne counties."
           : loaded.availability === "missing_inventory" ? "Residential parcel data has not been loaded for this area yet."

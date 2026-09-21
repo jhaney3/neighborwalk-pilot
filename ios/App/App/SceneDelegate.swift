@@ -27,12 +27,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneWillResignActive(_ scene: UIScene) {
         guard let window = window, privacyCover == nil else { return }
         let cover = UIView(frame: window.bounds)
-        cover.backgroundColor = UIColor(red: 0.96, green: 0.965, blue: 0.95, alpha: 1)
+        cover.backgroundColor = .systemGroupedBackground
         cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         let title = UILabel()
         title.text = "NeighborWalk"
         title.font = .systemFont(ofSize: 28, weight: .semibold)
-        title.textColor = UIColor(red: 0.13, green: 0.30, blue: 0.24, alpha: 1)
+        title.textColor = .label
         title.translatesAutoresizingMaskIntoConstraints = false
         cover.addSubview(title)
         NSLayoutConstraint.activate([title.centerXAnchor.constraint(equalTo: cover.centerXAnchor), title.centerYAnchor.constraint(equalTo: cover.centerYAnchor)])
@@ -51,7 +51,29 @@ class NeighborWalkViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(NeighborWalkPrintPlugin())
         bridge?.registerPluginInstance(NeighborWalkApplePlugin())
         bridge?.registerPluginInstance(NeighborWalkGooglePlugin())
+        bridge?.registerPluginInstance(NeighborWalkAppearancePlugin())
         webView?.scrollView.bounces = false
+    }
+}
+
+@objc(NeighborWalkAppearancePlugin)
+class NeighborWalkAppearancePlugin: CAPPlugin, CAPBridgedPlugin {
+    let identifier = "NeighborWalkAppearancePlugin"
+    let jsName = "NeighborWalkAppearance"
+    let pluginMethods: [CAPPluginMethod] = [CAPPluginMethod(name: "setTheme", returnType: CAPPluginReturnPromise)]
+
+    @objc func setTheme(_ call: CAPPluginCall) {
+        guard let theme = call.getString("theme"), theme == "light" || theme == "dark" else {
+            call.reject("Choose light or dark appearance.")
+            return
+        }
+        DispatchQueue.main.async {
+            let style: UIUserInterfaceStyle = theme == "dark" ? .dark : .light
+            self.bridge?.viewController?.overrideUserInterfaceStyle = style
+            self.bridge?.viewController?.view.window?.overrideUserInterfaceStyle = style
+            self.bridge?.viewController?.setNeedsStatusBarAppearanceUpdate()
+            call.resolve()
+        }
     }
 }
 

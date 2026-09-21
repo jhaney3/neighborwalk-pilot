@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, BookOpenText, Check, Church, CloudOff, Database, Download, FileJson, LockKeyhole, LogOut, MapPinned, RefreshCcw, Save, Smartphone, Star, Trash2, Upload, Wifi } from "lucide-react";
+import { AlertTriangle, BookOpenText, Check, Church, CloudOff, Database, Download, FileJson, LockKeyhole, LogOut, MapPinned, Moon, RefreshCcw, Save, Smartphone, Star, Trash2, Upload, Wifi } from "lucide-react";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useAsyncAction } from "../lib/use-async-action";
@@ -11,6 +11,7 @@ import { isSafeWebUrl, type ConversationGuide, type NeighborWalkData } from "../
 import { isSupportedMapStyleUrl } from "../lib/map-config";
 import { Modal, ViewHeading } from "./ui";
 import { ReminderSettings } from "./ReminderSettings";
+import { getMobileColorTheme, setMobileColorTheme } from "../mobile/theme";
 
 export function SettingsView({
   data,
@@ -68,6 +69,7 @@ export function SettingsView({
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => getMobileColorTheme() === "dark");
   const pendingDeviceChanges = data.sync.commands?.length ?? data.sync.pending.length;
   const deviceNeedsAttention = Boolean(data.sync.legacyRecoveryRequired || pendingDeviceChanges || data.sync.lastError || (data.sync.mode === "connected" && !online));
 
@@ -137,6 +139,10 @@ export function SettingsView({
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
       {storageError && <div className="settings-message error" role="alert"><AlertTriangle size={15} />{storageError}</div>}
       <div className="settings-grid">
+        {isMobileApp && <SettingsSection icon={<Moon size={18} />} title="Appearance" description="Choose how NeighborWalk looks on this iPhone or iPad.">
+          <label className="toggle-row"><input type="checkbox" checked={darkMode} onChange={(event) => { const enabled = event.target.checked; setDarkMode(enabled); setMobileColorTheme(enabled ? "dark" : "light"); }} /><span><strong>Dark mode</strong>Use darker surfaces and lighter text throughout the app.</span></label>
+        </SettingsSection>}
+
         {data.sync.mode === "connected" && <SettingsSection icon={<LockKeyhole size={18} />} title="Account and access" description="Your access level is assigned by a church leader.">
           <div className="connection-card connected"><LockKeyhole size={18} /><span><strong>Signed-in church account</strong>{accountEmail || "Authenticated member"} · {canManage ? "Leader access" : "Volunteer access"}</span></div>
           {onUpdatePassword && <details className="account-password"><summary>Set or change password</summary><div><p>Use a password for routine sign-in without waiting for an email.</p><label className="form-field"><span>New password</span><input type="password" minLength={8} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><label className="form-field"><span>Confirm password</span><input type="password" minLength={8} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label><button className="button quiet" disabled={updatingPassword} onClick={() => void saveAccountPassword()}><Save size={15} /> {updatingPassword ? "Saving…" : "Save password"}</button></div></details>}

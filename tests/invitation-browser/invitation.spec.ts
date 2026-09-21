@@ -17,7 +17,7 @@ for (const provider of ["apple", "google"]) test(`${provider} account with a dif
     return route.fulfill({ json: [] });
   });
   await page.goto(`/invite#join=${token}`);
-  await expect(page.getByRole("button", { name: "Sign in with Apple", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with Apple", exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Email address", exact: true }).fill(providerUser.email);
   await page.getByLabel("Password", { exact: true }).fill("sample-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -27,7 +27,8 @@ for (const provider of ["apple", "google"]) test(`${provider} account with a dif
   await expect(page).not.toHaveURL(/join=/);
   await page.getByRole("button", { name: "Join church", exact: true }).click();
   await expect.poll(() => accepted).toBe(true);
-  await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.includes("pending-invitation")).length)).toBe(0);
+  await expect(page).toHaveURL(/\/app\/today$/);
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.includes("pending-invitation")).length)).toBe(0);
 });
 
 test("phone signup sends normalized number and verifies the one-time code", async ({ page }) => {
@@ -38,6 +39,7 @@ test("phone signup sends normalized number and verifies the one-time code", asyn
     return route.fulfill({ json: [] });
   });
   await page.goto("/login");
+  await page.getByText("More options", { exact: true }).click();
   await page.getByText("Sign in with your phone number", { exact: true }).click();
   await page.getByLabel("Phone number with country code").fill("+1 (615) 555-0123");
   await page.getByRole("button", { name: "Text me a code" }).click();
@@ -53,6 +55,7 @@ test("pasted links use the dedicated invite host and fit a small iPhone", async 
   await page.setViewportSize({ width: 320, height: 740 });
   await page.route("http://127.0.0.1:54321/**", (route) => route.fulfill({ json: [] }));
   await page.goto("/login");
+  await page.getByText("More options", { exact: true }).click();
   await page.getByText("Have a church invitation?", { exact: true }).click();
   await page.getByLabel("Invitation link", { exact: true }).fill(`https://invite.example.test/invite#join=${token}`);
   await page.getByRole("button", { name: "Use invitation" }).click();

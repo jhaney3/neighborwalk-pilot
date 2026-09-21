@@ -32,7 +32,7 @@
 .map-engine .maplibregl-ctrl button { width: 40px; height: 40px; }
 .map-engine .maplibregl-ctrl button + button { border-top: 1px solid var(--hairline); }
 .map-engine .maplibregl-ctrl-attrib { border-radius: 8px; background: var(--glass); font-size: 10px; }
-@media (prefers-color-scheme: dark) {
+:root[data-theme="dark"] {
   .map-engine .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(1); }
   .map-engine .maplibregl-ctrl-attrib, .map-engine .maplibregl-ctrl-attrib a { color: var(--label-2); }
 }

@@ -4,6 +4,7 @@ import { calendarDaysFromNow } from "../lib/calendar";
 
 import {
   AlertOctagon,
+  ArrowLeft,
   ArrowRight,
   BookOpenText,
   Building2,
@@ -66,6 +67,8 @@ const recordableOutcomes: Exclude<Outcome, "unvisited">[] = [
   "inaccessible",
 ];
 
+const addResidentOptionValue = "__add_resident__";
+
 export function PropertyDrawer({
   property,
   parcelDwellings,
@@ -77,6 +80,7 @@ export function PropertyDrawer({
   canManage,
   activeVolunteerId,
   startGuided = false,
+  onBack,
   onClose,
   onViewParcel,
   onAddDwelling,
@@ -96,6 +100,7 @@ export function PropertyDrawer({
   canManage: boolean;
   activeVolunteerId: string;
   startGuided?: boolean;
+  onBack?: () => void;
   onClose: () => void;
   onViewParcel?: () => void;
   onAddDwelling?: () => void;
@@ -125,6 +130,7 @@ export function PropertyDrawer({
   );
   const [guideIndex, setGuideIndex] = useState(0);
   const [guidedPersonEntry, setGuidedPersonEntry] = useState(false);
+  const [visitPersonEntry, setVisitPersonEntry] = useState(false);
   const [workflowNotice, setWorkflowNotice] = useState("");
   const [outcome, setOutcome] = useState<Exclude<Outcome, "unvisited">>("conversation");
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -170,6 +176,13 @@ export function PropertyDrawer({
     setTab("record");
   };
 
+  const finishVisitPersonEntry = (message?: string) => {
+    setEditingResident(null);
+    setVisitPersonEntry(false);
+    if (message) setWorkflowNotice(message);
+    setTab("record");
+  };
+
   const saveVisit = () => {
     if (!canSave) return;
     void action.run(async () => {
@@ -191,6 +204,7 @@ export function PropertyDrawer({
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
       {property.currentOutcome === "do_not_visit" && <p className="inline-notice">Do not visit this location. A church leader must review any restriction correction.</p>}
       <div className="drawer-handle" aria-hidden="true" />
+      {onBack && <button type="button" className="drawer-people-return" disabled={action.busy} onClick={onBack} aria-label="Back to People"><ArrowLeft size={20} aria-hidden="true" /><span>People</span></button>}
       <div className="drawer-heading">
         <div className="property-symbol"><MapPin size={19} /></div>
         <div className="drawer-address">
@@ -214,11 +228,11 @@ export function PropertyDrawer({
       {property.parcel && parcelDwellings.length > 0 && (
         <div className="drawer-parcel-row">
           <button onClick={onViewParcel} disabled={!onViewParcel}>
-            <Building2 size={17} />
-            <span><strong>{parcelDwellings.length} {parcelDwellings.length === 1 ? "dwelling" : "dwellings"} on this parcel</strong><small>View every doorstep and its visit status</small></span>
-            <ChevronRight size={16} />
+            <Building2 size={14} />
+            <span>{parcelDwellings.length} {parcelDwellings.length === 1 ? "dwelling" : "dwellings"} on this parcel</span>
+            <ChevronRight size={14} />
           </button>
-          {onAddDwelling && <button className="drawer-add-dwelling" onClick={onAddDwelling} aria-label="Add another dwelling to this parcel"><Plus size={16} /></button>}
+          {onAddDwelling && <button className="drawer-add-dwelling" onClick={onAddDwelling} aria-label="Add another dwelling to this parcel"><Plus size={14} /></button>}
         </div>
       )}
 
@@ -297,10 +311,20 @@ export function PropertyDrawer({
           {outcome !== "no_answer" && outcome !== "follow_up" && <button type="button" className="visit-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>{detailsOpen ? "Hide optional details" : outcome === "conversation" ? "Add a person or note" : "Add a note"}<ChevronDown size={15} /></button>}
 
           {outcome !== "no_answer" && (detailsOpen || outcome === "follow_up") && <div className="visit-optional-details">
-            {["conversation", "follow_up"].includes(outcome) && <label className="form-field">
-              <span>Person <small>Optional</small></span>
-              <div className="select-wrap"><select value={linkedResidentId} onChange={(event) => setLinkedResidentId(event.target.value)}><option value="">No person record</option>{residents.map((resident) => <option value={resident.id} key={resident.id}>{resident.name || "Name not provided"}</option>)}</select><ChevronDown size={15} /></div>
-            </label>}
+            {["conversation", "follow_up"].includes(outcome) && <>
+              <label className="form-field">
+                <span>Person <small>Optional</small></span>
+                <div className="select-wrap"><select value={linkedResidentId} onChange={(event) => {
+                  if (event.target.value === addResidentOptionValue) {
+                    setVisitPersonEntry(true);
+                    setEditingResident("new");
+                    setTab("people");
+                    return;
+                  }
+                  setLinkedResidentId(event.target.value);
+                }}><option value="">No person record</option><option value={addResidentOptionValue}>Add a new person…</option>{residents.map((resident) => <option value={resident.id} key={resident.id}>{resident.name || "Name not provided"}</option>)}</select><ChevronDown size={15} /></div>
+              </label>
+            </>}
 
             <label className="form-field">
               <span>{outcome === "follow_up" ? "Requested next step" : "Visit note"} <small>Optional</small></span>
@@ -363,15 +387,17 @@ export function PropertyDrawer({
               volunteers={data.volunteers.filter((volunteer) => volunteer.active)}
               activeVolunteerId={activeVolunteerId}
               pathwayEnabled={Boolean(data.church.pathwayEnabled)}
-              autoFocusName={guidedPersonEntry}
+              autoFocusName={guidedPersonEntry || visitPersonEntry}
               onCancel={() => {
                 if (guidedPersonEntry) finishGuidedPersonEntry("Name skipped — record what happened at this door.");
+                else if (visitPersonEntry) finishVisitPersonEntry();
                 else setEditingResident(null);
               }}
               onSave={async (input) => {
                 const residentId = await onUpsertResident(property.id, input, editingResident === "new" ? undefined : editingResident.id);
                 if (editingResident === "new") setLinkedResidentId(residentId);
                 if (guidedPersonEntry) finishGuidedPersonEntry("Person saved — now record what happened at this door.");
+                else if (visitPersonEntry) finishVisitPersonEntry("Person saved and selected for this visit.");
                 else setEditingResident(null);
               }}
             />

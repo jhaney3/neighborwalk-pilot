@@ -4,7 +4,7 @@
    these tokens; legacy token names are aliased at the bottom of :root so every
    module inherits the palette and dark mode without knowing about it. */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-rounded: ui-rounded, var(--font-sans);
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -126,8 +126,8 @@
   --danger-border: var(--red-line);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+:root[data-theme="dark"] {
+    color-scheme: dark;
     --label: #fff;
     --label-2: rgba(235, 235, 245, .6);
     --label-3: rgba(235, 235, 245, .3);
@@ -168,7 +168,6 @@
     --shadow-md: 0 6px 20px rgba(0, 0, 0, .35);
     --shadow-lg: 0 18px 48px rgba(0, 0, 0, .55);
     --shadow-float: 0 8px 28px rgba(0, 0, 0, .5), 0 0 0 .5px rgba(255, 255, 255, .08);
-  }
 }
 
 /* ---------- Reset ---------- */
@@ -254,7 +253,7 @@ svg { flex: none; }
 /* Body: sidebar + workspace */
 .app-body { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); height: calc(100vh - var(--header-height)); min-height: 600px; }
 .desktop-sidebar { display: flex; flex-direction: column; gap: 22px; padding: 20px 14px 18px; overflow-y: auto; border-right: 1px solid var(--hairline); background: var(--bg-2); }
-@media (prefers-color-scheme: dark) { .desktop-sidebar { background: #121214; } }
+:root[data-theme="dark"] .desktop-sidebar { background: #121214; }
 .sidebar-context { display: grid; gap: 14px; padding: 0 6px; }
 .sidebar-church { display: grid; margin: 0; }
 .sidebar-church strong { font-size: var(--fs-headline); font-weight: 600; line-height: 1.25; }

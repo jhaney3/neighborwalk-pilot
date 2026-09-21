@@ -8,6 +8,8 @@ import { NeighborWalkRoot } from "../components/SupabaseGate";
 import { NeighborWalkApp } from "../app/NeighborWalkApp";
 import { installNavigation, usePathname } from "./navigation";
 import { receiveAuthLink } from "./auth-links";
+import { installSingleLineKeyboardDismissal } from "./keyboard";
+import { installMobileColorTheme } from "./theme";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "../app/styles/foundation.css";
 import "../app/styles/map.css";
@@ -25,7 +27,9 @@ import "../app/styles/walk-setup.css";
 import "../app/styles/walk-target-planner.css";
 import "./native.css";
 
+installMobileColorTheme();
 installNavigation();
+installSingleLineKeyboardDismissal();
 if (Capacitor.isNativePlatform()) {
   const printer = registerPlugin<{ print(): Promise<{ completed: boolean }> }>("NeighborWalkPrint");
   window.print = () => { void printer.print().catch(() => window.alert("The worksheet could not be printed. Please try again.")); };

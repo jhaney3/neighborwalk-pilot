@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, KeyRound, Mail, MapPinned, Navigation, ShieldCheck } from "lucide-react";
+import { Check, KeyRound, MapPinned, Navigation } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -25,6 +25,7 @@ export function NeighborWalkRoot() {
   const router = useRouter();
   const pathname = usePathname();
   const configured = isSupabaseConfigured();
+  const localAuthPreview = isMobileApp && !isProductionApp && pathname === "/login";
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(configured);
   const [connectionError, setConnectionError] = useState("");
@@ -105,7 +106,7 @@ export function NeighborWalkRoot() {
     if (error) throw new Error(authErrorMessage(error));
   };
 
-  if (!configured) return <main className="app-loading"><h1>Workspace connection unavailable</h1><p>Ask the operator to finish connecting this deployment. Real church records will not be replaced with sample data.</p><Link className="button quiet" href="/demo">Explore the separate sample workspace</Link></main>;
+  if (!configured && !localAuthPreview) return <main className="app-loading"><h1>Workspace connection unavailable</h1><p>Ask the operator to finish connecting this deployment. Real church records will not be replaced with sample data.</p><Link className="button quiet" href="/demo">Explore the separate sample workspace</Link></main>;
   if (!offlineUser && !session && offlineCandidate && !passwordRecovery) return <main className="auth-shell"><section className="auth-card"><h1>Your prepared workspace is available</h1><p>The sign-in service cannot be reached. This device was checked with your church less than 24 hours ago. You can explicitly reopen its saved records; this is not a new sign-in.</p><p>New work stays on this device until your account and church permissions can be checked online. Signing out or a known access removal disables this option.</p><button className="button primary" onClick={() => {
     const candidate = !pendingInvitation(window.sessionStorage) ? preparedOfflineIdentity(window.localStorage, authStorageKey()) : null;
     if (candidate?.id === offlineCandidate.id) { setOfflineUser(candidate); setConnectionError(""); setLoading(false); }
@@ -241,13 +242,12 @@ function SignInScreen() {
   return (
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="signin-title">
-        <div className="auth-route" aria-hidden="true"><span><Navigation size={18} /></span><i /><span><MapPinned size={18} /></span></div>
-        <p className="eyebrow">NeighborWalk church workspace</p>
-        <h1 id="signin-title">Pick up where care left off.</h1>
-        <p className="auth-intro">{isMobileApp ? "Sign in with your church account. Your next walk and the people you care for are right here." : isProductionApp ? "Google is the quickest way in. Password sign-in is also available and does not send an email each time." : "Use your test account here. This workspace has its own data and sign-in."}</p>
+        <div className="auth-brand"><span aria-hidden="true"><Navigation size={18} /></span><strong>NeighborWalk</strong></div>
+        <h1 id="signin-title">{mode === "signin" ? "Sign in" : "Create account"}</h1>
+        <p className="auth-intro">Your church workspace</p>
         <div className="auth-form">
-          {isMobileApp && <><AppleSignInButton busy={busy} onClick={() => void runAuthAction("apple", signInWithApple)} /><GoogleSignInButton disabled={busy} loading={action === "google"} onClick={() => void signInWithGoogle()} /><div className="auth-divider"><span>or use your email</span></div></>}
-          {isProductionApp && !isMobileApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or use your password</span></div></>}
+          {isMobileApp && <><AppleSignInButton busy={busy} onClick={() => void runAuthAction("apple", signInWithApple)} /><GoogleSignInButton disabled={busy} loading={action === "google"} onClick={() => void signInWithGoogle()} /><div className="auth-divider"><span>or</span></div></>}
+          {isProductionApp && !isMobileApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or</span></div></>}
           <form className="auth-credentials" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
             <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" /></label>
             <label className="form-field"><span>Password</span><input type="password" minLength={8} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label>
@@ -259,12 +259,13 @@ function SignInScreen() {
           {mode === "signup" && <p className="auth-hint">Account confirmation uses one email. After that, routine password sign-ins do not.</p>}
           {confirmation && <div className="auth-confirmation" role="status"><Check size={20} /><div><strong>{confirmation.title}</strong><span>{confirmation.detail}</span></div></div>}
           {error && <p className="auth-error" role="alert">{error}</p>}
-          <details className="auth-email-fallback"><summary>Use a one-time email link instead</summary><p>This fallback sends an email and may be unavailable when the project email limit is reached.</p><button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}><Mail size={16} />{action === "link" ? "Sending…" : "Send one-time link"}</button></details>
-          {isMobileApp && process.env.NEXT_PUBLIC_PHONE_AUTH_ENABLED === "true" && <PhoneSignIn />}
-          {isMobileApp && <MobileInvitation />}
+          <details className="auth-email-fallback"><summary>More options</summary><div className="auth-more-options">
+            <button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}>{action === "link" ? "Sending…" : "Email me a sign-in link"}</button>
+            {isMobileApp && process.env.NEXT_PUBLIC_PHONE_AUTH_ENABLED === "true" && <PhoneSignIn />}
+            {isMobileApp && <MobileInvitation />}
+          </div></details>
         </div>
-        <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are visible to their owner, church leaders and explicitly shared teammates. Pending handoff recipients and some historical creators may also have access, as shown on the profile.</span></div>
-        <p><Link href="/help">Sign-in help</Link> · {isMobileApp ? <Link href="/demo">Explore sample workspace</Link> : <Link href="/">About NeighborWalk</Link>} · <Link href="/privacy">Privacy</Link></p>
+        <nav className="auth-links" aria-label="Sign-in support"><Link href="/help">Help</Link>{isMobileApp && <Link href="/demo">Explore demo</Link>}<Link href="/privacy">Privacy</Link></nav>
       </section>
     </main>
   );

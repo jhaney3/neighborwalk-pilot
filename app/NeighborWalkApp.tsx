@@ -82,11 +82,28 @@ import { mergeParcelFeatureCollections, type MapViewport, type ParcelDetails } f
 import { coverageForTerritory, type TerritoryCoverageById } from "../lib/territory-coverage";
 import { useTerritoryParcels } from "../lib/use-territory-parcels";
 import { useVisibleParcels } from "../lib/use-visible-parcels";
+import { compactToastMessage } from "../lib/toasts";
 
 type View = AppView;
 type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[]; parcel?: ParcelDetails; legacyPropertyIds?: string[] };
 type ParcelSelection = { parcel: ParcelReference; situsAddress?: string | null; propertyIds: string[] };
 type SavedAddressResult = { propertyId: string; territoryId?: string; label: string; detail: string; coordinates?: Coordinates; color: string };
+type PeopleWorkspaceSnapshot = {
+  initialPanel: "followups" | "directory";
+  selectedResidentId?: string | null;
+  focusedTaskId?: string;
+  initialPersonId?: string | null;
+  initialScope: FollowUpScope;
+  scrollTop: number;
+};
+type PeopleMapReturn = ({ mode: "history" } | {
+  mode: "demo";
+  route: ReturnType<typeof appRoute>;
+  peopleDirectory: boolean;
+  taskScope: FollowUpScope;
+  followUpPersonId: string | null;
+  selectedPersonId: string | null;
+}) & { workspace: PeopleWorkspaceSnapshot };
 const EMPTY_TERRITORIES: Territory[] = [];
 const EMPTY_PROPERTIES: Property[] = [];
 
@@ -130,6 +147,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [followUpPersonId, setFollowUpPersonId] = useState<string | null>(null);
+  const [peopleMapReturn, setPeopleMapReturn] = useState<PeopleMapReturn | null>(null);
   const [guidedPropertyId, setGuidedPropertyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | Outcome>("all");
   const [query, setQuery] = useState("");
@@ -149,6 +167,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   const [editingTerritoryId, setEditingTerritoryId] = useState<string | null>(null);
   const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const showToast = (message: string) => setToast(compactToastMessage(message));
 
   useEffect(() => {
     if (!toast) return;
@@ -314,9 +333,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     setSelectedPropertyId(null);
     setQuery(result.label);
     focusSearchTarget(result.coordinates, result.zoom);
-    setToast(result.type === "address"
-      ? data.sync.mode === "connected" ? "Address found — loading nearby parcels" : "Address found"
-      : "Map moved to this result");
+    showToast(result.type === "address" ? "Address found" : "Map moved");
   };
 
   const clearAddressSearch = () => {
@@ -344,10 +361,66 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     setSelectedParcel(null);
     setAddMode(false);
     if (next !== "map") {
+      setPeopleMapReturn(null);
       setDrawMode(false);
       setDraftBoundary([]);
     }
     setSelectedPersonId(next === "people" ? id ?? null : null);
+  };
+
+  const openPropertyFromPeople = (propertyId: string) => {
+    const inApp = pathname.startsWith("/app");
+    const workspace: PeopleWorkspaceSnapshot = {
+      initialPanel: view === "people" && personSelection
+        ? "directory"
+        : (inApp ? searchParams.get("view") === "all" : demoPeopleDirectory) ? "directory" : "followups",
+      selectedResidentId: view === "people" ? personSelection : undefined,
+      focusedTaskId: view === "followups" ? route.id : undefined,
+      initialPersonId: view === "followups" ? (inApp ? searchParams.get("person") : followUpPersonId) : undefined,
+      initialScope: inApp ? followUpScope(searchParams.get("scope")) : demoTaskScope,
+      scrollTop: document.querySelector<HTMLElement>(".people-workspace")?.scrollTop ?? 0,
+    };
+    const returnContext: PeopleMapReturn = pathname.startsWith("/app")
+      ? { mode: "history", workspace }
+      : {
+          mode: "demo",
+          workspace,
+          route: demoRoute,
+          peopleDirectory: demoPeopleDirectory,
+          taskScope: demoTaskScope,
+          followUpPersonId,
+          selectedPersonId,
+        };
+    navigate("map", propertyId);
+    setPeopleMapReturn(returnContext);
+    const property = data.properties.find((item) => item.id === propertyId);
+    if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined);
+  };
+
+  const returnFromPeopleMap = () => {
+    if (!peopleMapReturn) return;
+    const returnContext = peopleMapReturn;
+    const restoreScroll = () => window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(".people-workspace")?.scrollTo({ top: returnContext.workspace.scrollTop });
+    });
+    setSelectedPropertyId(null);
+    setGuidedPropertyId(null);
+    setSelectedParcel(null);
+    if (returnContext.mode === "history") {
+      window.addEventListener("popstate", () => {
+        setPeopleMapReturn(null);
+        restoreScroll();
+      }, { once: true });
+      window.history.back();
+      return;
+    }
+    setDemoRoute(returnContext.route);
+    setDemoPeopleDirectory(returnContext.peopleDirectory);
+    setDemoTaskScope(returnContext.taskScope);
+    setFollowUpPersonId(returnContext.followUpPersonId);
+    setSelectedPersonId(returnContext.selectedPersonId);
+    setPeopleMapReturn(null);
+    restoreScroll();
   };
 
   const planWalk = () => {
@@ -413,7 +486,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
       }, fieldAssignment.id);
       if (canManage) await actions.saveOuting({ ...fieldOuting, status: "completed" }, fieldOuting.id);
     }, () => {
-      setToast(canManage ? `${fieldOuting.name} completed` : `${label} finished for tonight`);
+      showToast(canManage ? "Walk completed" : "Walk finished");
       navigate("outreach", fieldOuting.id);
     });
   };
@@ -426,7 +499,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     setAddMode(false);
     setGuidedPropertyId(startGuided ? propertyId : null);
     setSelectedPropertyId(propertyId);
-    setToast(pendingAdd.parcel ? "Dwelling added" : "Location added");
+    showToast(pendingAdd.parcel ? "Dwelling added" : "Location added");
   };
 
   const beginAddingDwelling = () => {
@@ -435,7 +508,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     setGuidedPropertyId(null);
     setPendingAdd(null);
     setAddMode(true);
-    setToast("Tap the next dwelling");
+    showToast("Select dwelling");
   };
 
   const startDrawing = () => {
@@ -521,8 +594,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
         <section className="workspace">
           {view === "data" && (canManage && data.sync.mode === "connected" ? <DataHealthView data={data} online={online} onRun={actions.runAdministration} onExport={actions.exportChurchRecords} onAuthenticate={actions.reauthenticateAdmin} onPending={actions.getAdministrationPending} onReviewPending={actions.reviewAdministrationPending} onPreviewRetention={actions.getRetentionPreview} onPreviewDuplicates={actions.getDuplicatePreview} onRefresh={actions.syncNow} onOpenPerson={(id) => navigate("people", id)} onOpenLocation={(id) => navigate("map", id)} /> : <section className="content-view"><h1>Leader administration</h1><p>A connected church leader account is required. The sample does not import or archive real church records.</p></section>)}
           {view === "recovery" && <RecoveryView data={data} online={online} onPreview={actions.previewRecovery} onResolve={actions.resolveRecovery} onExport={actions.downloadDeviceRecovery} onAuthoredExport={actions.downloadAuthoredDeviceRecovery} onArchives={actions.listDeviceArchives} onDownloadArchive={actions.downloadDeviceArchive} onSync={actions.syncNow} />}
-          {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={openPeopleDirectory} onViewMap={viewMap} onStart={startWalk} onWalkResponse={async (participant, status) => { await actions.saveOutingResponse(participant.id, status); setToast(status === "going" ? "You’re going" : "Response saved"); }} additionalAction={<EncounterComposer data={data} onSave={async (input) => { await actions.recordVisit(input); setToast("Encounter saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} />} />}
-          {view === "outreach" && <OutreachView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onRecordEncounter={async (input) => { await actions.recordVisit(input); setToast("Encounter saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} initialCreate={pathname.startsWith("/app") ? searchParams.get("plan") === "1" : demoPlanWalk} onCreateClosed={() => { setDemoPlanWalk(false); if (pathname.startsWith("/app") && searchParams.has("plan")) window.history.replaceState(null, "", appHref("outreach", route.id)); }} onSelect={(id) => navigate("outreach", id)} onStart={startWalk} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onSaveRoster={actions.saveOutingRoster} onSaveCrews={actions.saveWalkCrews} onAddZone={actions.addTerritory} onSaveTarget={actions.saveTarget} onReplaceTarget={actions.replaceTarget} onOpenGuide={(id) => navigate("guide", id)} />}
+          {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={openPeopleDirectory} onViewMap={viewMap} onStart={startWalk} onWalkResponse={async (participant, status) => { await actions.saveOutingResponse(participant.id, status); showToast(status === "going" ? "You’re going" : "Response saved"); }} additionalAction={<EncounterComposer data={data} onSave={async (input) => { await actions.recordVisit(input); showToast("Encounter saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} />} />}
+          {view === "outreach" && <OutreachView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onRecordEncounter={async (input) => { await actions.recordVisit(input); showToast("Encounter saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} initialCreate={pathname.startsWith("/app") ? searchParams.get("plan") === "1" : demoPlanWalk} onCreateClosed={() => { setDemoPlanWalk(false); if (pathname.startsWith("/app") && searchParams.has("plan")) window.history.replaceState(null, "", appHref("outreach", route.id)); }} onSelect={(id) => navigate("outreach", id)} onStart={startWalk} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onSaveRoster={actions.saveOutingRoster} onSaveCrews={actions.saveWalkCrews} onAddZone={actions.addTerritory} onSaveTarget={actions.saveTarget} onReplaceTarget={actions.replaceTarget} onOpenGuide={(id) => navigate("guide", id)} />}
           {view === "more" && <section className="content-view more-view"><h1>More</h1><p>Resources and tools for your church team.</p>
             <div className="more-grid">
               <MoreRow icon={<BookOpenText />} tile="var(--indigo)" label={<>Conversation guides</>} onClick={() => navigate("guide")} />
@@ -539,6 +612,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
           </section>}
           {view === "map" && (!route.fieldOutingId || fieldArea ? (
             <section className="map-view">
+              {!fieldOuting && peopleMapReturn && !selectedProperty && <div className="map-people-return"><button type="button" onClick={returnFromPeopleMap} aria-label="Back to People"><ArrowLeft size={20} aria-hidden="true" /><span>People</span></button></div>}
               {fieldOuting && <header className="fieldwork-header">
                 <div className="field-context">
                   <button className="field-context-back" onClick={() => navigate("outreach", fieldOuting.id)}><span className="field-context-back-icon" aria-hidden="true"><ArrowLeft size={18} /></span><span className="field-context-back-copy"><strong>{fieldTarget?.name ?? fieldOuting.name}</strong><span>{fieldTarget ? `${fieldOuting.name} · ${coverage.touched} of ${coverage.total} reached · ${coverageValue}` : "Encounters here are linked to this outing."}</span></span></button>
@@ -549,7 +623,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
               {fieldworkAction.error && <p role="alert" className="inline-error fieldwork-error">{fieldworkAction.error}</p>}
               {showAddressList ? <AddressList key={fieldTarget?.id ?? activeTerritory.id} targetName={fieldTarget?.name} targetParcels={fieldTarget ? mapParcels : undefined} printContext={fieldPrintContext} lockedTerritoryId={fieldOuting ? activeTerritory.id : undefined} data={fieldTarget ? { ...data, properties: territoryProperties } : data} onOpen={(id) => { if (fieldOuting) setSelectedPropertyId(id); else navigate("map", id); }} onOpenParcel={(parcel) => {
                 const coordinates = parcelSelectionPoint(parcel);
-                if (!coordinates || !parcel.properties.situsAddress) { setToast("Open Map to identify this target location."); setOutreachDisplay("map"); return; }
+                if (!coordinates || !parcel.properties.situsAddress) { showToast("Map required"); setOutreachDisplay("map"); return; }
                 setSelectedPropertyId(null); setSelectedParcel(null); setGuidedPropertyId(null);
                 setPendingAdd({ coordinates, suggestedAddress: parcel.properties.situsAddress, parcel: parcel.properties });
               }} onAdd={actions.addProperty} onTerritoryChange={actions.selectTerritory} /> : <>
@@ -617,7 +691,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
               </div>
               <div className="map-stage">
                 <MapCanvas territory={canvasTerritory} target={fieldTarget} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchTarget={searchTarget} addMode={addMode} drawMode={drawMode} drawShape={drawShape} drawModeLabel={editingTerritoryId ? "Replacement boundary" : "New zone"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} parcels={mapParcels} onViewportChange={setMapViewport} onSelectProperty={(id) => { if (!fieldOuting) navigate("map", id); setSelectedPropertyId(id); setGuidedPropertyId(null); setSelectedParcel(null); setAddMode(false); }} onAddIntent={async (intent) => {
-                  if (fieldTarget && (!intent.parcel || !fieldTarget.parcels.some((parcel) => parcelKey(parcel) === parcelKey(intent.parcel!)))) { setToast("Choose a highlighted residential property in this target."); return; }
+                  if (fieldTarget && (!intent.parcel || !fieldTarget.parcels.some((parcel) => parcelKey(parcel) === parcelKey(intent.parcel!)))) { showToast("Outside target"); return; }
                   if (intent.parcel) {
                     const linkedDwellings = dwellingsForParcel(territoryProperties, intent.parcel);
                     const legacyPropertyIds = intent.legacyPropertyIds ?? [];
@@ -641,10 +715,10 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                   if (intent.parcel?.situsAddress) {
                     setSelectedParcel(null);
                     setPendingAdd(intent);
-                    setToast("Official parcel selected");
+                    showToast("Parcel selected");
                     return;
                   }
-                  setToast("Checking this map location…");
+                  showToast("Checking location");
                   try {
                     const address = await reverseGeocode(intent.coordinates);
                     setPendingAdd(address ? { ...intent, suggestedAddress: address } : intent);
@@ -660,34 +734,35 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                 {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => undoDrawingPoint(points, drawShape))}><Undo2 size={15} /> {drawShape === "rectangle" ? "Clear rectangle" : "Undo corner"}</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={!drawingBoundaryReady(draftBoundary, drawShape)} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
               </div>
               </>}
-              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={fieldGuideContext} canManage={canManage} activeVolunteerId={activeVolunteer.id} startGuided={guidedPropertyId === selectedProperty.id} onClose={() => { if (route.id && !fieldOuting) navigate("map"); setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={async (input) => { if (fieldOuting && selectedProperty.territoryId !== activeTerritory.id) throw new Error("This address belongs to another area. Open its assigned walk before recording a visit."); await actions.recordVisit({ ...input, eventId: fieldOuting?.id, targetId: fieldTarget?.id }); setToast(`${outcomeMeta[input.outcome].short} saved`); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
+              {selectedProperty && <PropertyDrawer key={selectedProperty.id} property={selectedProperty} parcelDwellings={selectedPropertyDwellings} data={data} visits={selectedVisits} openFollowUp={selectedFollowUp} conversationGuide={favoriteConversationGuide} conversationGuideContext={fieldGuideContext} canManage={canManage} activeVolunteerId={activeVolunteer.id} startGuided={guidedPropertyId === selectedProperty.id} onBack={peopleMapReturn ? returnFromPeopleMap : undefined} onClose={() => { if (route.id && !fieldOuting) navigate("map"); setSelectedPropertyId(null); setGuidedPropertyId(null); }} onViewParcel={selectedProperty.parcel ? () => { setSelectedParcel({ parcel: selectedProperty.parcel!, situsAddress: selectedProperty.address, propertyIds: selectedPropertyDwellings.map((property) => property.id) }); setSelectedPropertyId(null); setGuidedPropertyId(null); } : undefined} onAddDwelling={selectedProperty.parcel ? beginAddingDwelling : undefined} onRecordVisit={async (input) => { if (fieldOuting && selectedProperty.territoryId !== activeTerritory.id) throw new Error("This address belongs to another area. Open its assigned walk before recording a visit."); await actions.recordVisit({ ...input, eventId: fieldOuting?.id, targetId: fieldTarget?.id }); showToast("Visit saved"); }} onUpdateProperty={actions.updateProperty} onDeleteProperty={actions.deleteProperty} onUpsertResident={actions.upsertResident} onDeleteResident={actions.deleteResident} />}
             </section>
           ) : <section className="content-view"><h1>Choose where to begin</h1><p>Open the walk to choose an area and review your assignment.</p><button className="button primary" onClick={() => navigate("outreach", fieldOuting?.id)}>Open walk</button></section>)}
-          {(view === "people" || view === "followups") && <PeopleWorkspace
+          {(view === "people" || view === "followups" || peopleMapReturn) && <PeopleWorkspace
             key={activeVolunteer.id}
-            initialPanel={(pathname.startsWith("/app") ? searchParams.get("view") === "all" : demoPeopleDirectory) ? "directory" : "followups"}
+            hidden={view === "map"}
+            initialPanel={peopleMapReturn?.workspace.initialPanel ?? ((pathname.startsWith("/app") ? searchParams.get("view") === "all" : demoPeopleDirectory) ? "directory" : "followups")}
             onPanelChange={changePeoplePanel}
             followUpProps={{
               data, canManage, activeVolunteerId: activeVolunteer.id,
-              focusedTaskId: view === "followups" ? route.id : undefined,
-              initialPersonId: view === "followups" ? (pathname.startsWith("/app") ? searchParams.get("person") : followUpPersonId) : undefined,
-              initialScope: pathname.startsWith("/app") ? followUpScope(searchParams.get("scope")) : demoTaskScope,
+              focusedTaskId: peopleMapReturn?.workspace.focusedTaskId ?? (view === "followups" ? route.id : undefined),
+              initialPersonId: peopleMapReturn?.workspace.initialPersonId ?? (view === "followups" ? (pathname.startsWith("/app") ? searchParams.get("person") : followUpPersonId) : undefined),
+              initialScope: peopleMapReturn?.workspace.initialScope ?? (pathname.startsWith("/app") ? followUpScope(searchParams.get("scope")) : demoTaskScope),
               onOpenTask: (id) => navigate("followups", id),
               onClearPersonFocus: () => { setFollowUpPersonId(null); navigate("people"); },
-              onOpenProperty: (id) => { navigate("map", id); const property = data.properties.find((item) => item.id === id); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); },
+              onOpenProperty: openPropertyFromPeople,
               onOpenPerson: (id) => navigate("people", id),
               onAddPersonNote: actions.addPersonNote,
-              onComplete: async (id, input) => { await actions.completeFollowUp(id, input); setToast(input.nextFollowUp ? "Completed · next step scheduled" : "Follow-up completed"); },
-              onReschedule: async (id, date, note) => { await actions.rescheduleFollowUp(id, date, note); setToast("Follow-up rescheduled"); },
-              onCancel: async (id, note) => { await actions.cancelFollowUp(id, note); setToast("Follow-up cancelled"); },
+              onComplete: async (id, input) => { await actions.completeFollowUp(id, input); showToast(input.nextFollowUp ? "Next scheduled" : "Follow-up completed"); },
+              onReschedule: async (id, date, note) => { await actions.rescheduleFollowUp(id, date, note); showToast("Follow-up rescheduled"); },
+              onCancel: async (id, note) => { await actions.cancelFollowUp(id, note); showToast("Cancelled"); },
               onAssign: actions.assignFollowUp, onAccept: actions.acceptFollowUp,
             }}
             peopleProps={{
               restrictionActions: { add: actions.addRestriction, lift: actions.liftRestriction },
               data, canManage, activeVolunteerId: activeVolunteer.id,
-              initialSelectedResidentId: view === "people" ? personSelection : undefined,
+              initialSelectedResidentId: peopleMapReturn?.workspace.selectedResidentId ?? (view === "people" ? personSelection : undefined),
               onSelectResident: (id) => navigate("people", id),
-              onOpenProperty: (id) => { navigate("map", id); const property = data.properties.find((item) => item.id === id); if (property?.territoryId) void actions.selectTerritory(property.territoryId).catch(() => undefined); },
+              onOpenProperty: openPropertyFromPeople,
               onUpsertResident: actions.upsertResident, onDeleteResident: actions.deleteResident,
               onAddPersonNote: actions.addPersonNote, onDeletePersonNote: actions.deletePersonNote,
               onAddPersonFollowUp: actions.addPersonFollowUp, onHandoff: actions.handoffPerson,
@@ -695,7 +770,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
             }}
           />}
           {view === "guide" && <GuideView key={route.id ?? "guides"} routeGuideId={route.id} onSelectGuide={(id) => navigate("guide", id)} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} effectiveGuideId={favoriteConversationGuide?.id} activeTeamId={activeGuideTeam?.id} activeTeamName={activeGuideTeam?.name} teams={data.teams} teamGuideDefaults={guideLibrary.teamGuideDefaults} canManage={canManage} allowBuiltInManagement={data.sync.mode === "device_only"} libraryError={guideLibraryError} changesDisabled={Boolean(supabaseUser && (!online || guideChanging || guidePending))} pendingRequest={Boolean(guidePending)} recovery={supabaseUser ? <GuideChangeRecovery pending={guidePending} online={online} busy={guideChanging} onRefresh={actions.refreshGuideLibrary} onRetry={actions.retryGuideChange} onReview={actions.reviewGuidePending} /> : undefined} onSave={actions.saveConversationGuide} onDelete={actions.deleteConversationGuide} onSetFavorite={actions.setFavoriteConversationGuide} onSetTeamDefault={actions.setTeamConversationGuide} />}
-          {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} onSelectTerritory={(id) => { void actions.selectTerritory(id).then(() => navigate("map")).catch((error) => setToast(error.message)); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} onOpenOutreach={() => navigate("outreach")} onOpenToday={() => navigate("today")} onOpenSettings={() => navigate("settings")} onOpenData={() => navigate("data")} onAuthenticate={actions.reauthenticateAdmin} onAccessChanged={actions.syncNow} />}
+          {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} onSelectTerritory={(id) => { void actions.selectTerritory(id).then(() => navigate("map")).catch(() => showToast("Selection failed")); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} onOpenOutreach={() => navigate("outreach")} onOpenToday={() => navigate("today")} onOpenSettings={() => navigate("settings")} onOpenData={() => navigate("data")} onAuthenticate={actions.reauthenticateAdmin} onAccessChanged={actions.syncNow} />}
           {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} accountEmail={supabaseUser?.email} onSignOut={onSignOut ? async () => {
             if (saving || guideChanging) throw new Error("Wait for device saving and guide confirmation to finish before signing out.");
             const pendingAdministration = await actions.getAdministrationPending();
@@ -717,9 +792,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
       {selectedParcel && <ParcelSummaryModal selection={selectedParcel} dwellings={selectedParcelDwellings} onClose={() => setSelectedParcel(null)} onOpenDwelling={(propertyId) => { setSelectedParcel(null); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); }} onAddDwelling={beginAddingDwelling} />}
       {territoryPickerOpen && <TerritoryPickerModal data={data} coverageByTerritory={coverageByTerritory} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onEdit={openTerritoryEditor} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
       {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} territories={territoryEditorTerritories} boundaryChanged={draftBoundary.length >= 3} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onDelete={editingTerritory ? async (destinationTerritoryId) => {
-        const destination = data.territories.find((territory) => territory.id === destinationTerritoryId);
         await actions.deleteTerritory(editingTerritory.id, destinationTerritoryId);
-        setSelectedPropertyId(null); setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false); setToast(destination ? `Territory deleted; records moved to ${destination.name}` : "Territory deleted");
+        setSelectedPropertyId(null); setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false); showToast("Territory deleted");
       } : undefined} onSave={async (name, color) => {
         if (editingTerritory) {
           const replacementBoundary = draftBoundary.length >= 3 ? draftBoundary : undefined;
@@ -729,10 +803,10 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
             boundary: replacementBoundary,
             center: replacementBoundary ? centerForBoundary(replacementBoundary) : undefined,
           });
-          setToast("Territory updated");
+          showToast("Territory updated");
         } else if (draftBoundary.length >= 3) {
           await actions.addTerritory({ name, color, boundary: draftBoundary, center: centerForBoundary(draftBoundary) });
-          setToast("Zone created");
+          showToast("Zone created");
         }
         setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false);
       }} />}

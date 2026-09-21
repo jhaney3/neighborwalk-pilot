@@ -1,13 +1,16 @@
 /* Sign-in, invitation and loading screens. */
-.auth-shell, .workspace-setup-shell { min-height: 100svh; display: grid; place-items: center; padding: calc(var(--top-inset) + 32px) 20px calc(var(--bottom-inset) + 32px); background: var(--bg-grouped); }
-.auth-card, .workspace-setup-card { width: min(440px, 100%); padding: 28px 24px; border: 0; border-radius: var(--radius-xl); background: var(--bg-grouped-2); box-shadow: var(--shadow-md); }
+.auth-shell, .workspace-setup-shell { min-height: 100svh; display: grid; place-items: center; padding: calc(var(--top-inset) + 28px) 18px calc(var(--bottom-inset) + 28px); background: var(--bg-grouped); }
+.auth-card, .workspace-setup-card { width: min(420px, 100%); padding: 32px; border: 1px solid var(--hairline); border-radius: 18px; background: var(--bg-grouped-2); box-shadow: var(--shadow-md); }
+.auth-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; color: var(--label); }
+.auth-brand span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #fff; background: var(--tint); }
+.auth-brand strong { font-size: 17px; letter-spacing: -.02em; }
 .auth-route { display: flex; align-items: center; margin-bottom: 22px; }
 .auth-route span { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 14px; color: #fff; background: var(--tint-gradient); box-shadow: 0 6px 18px rgba(31, 122, 79, .28), inset 0 0 0 .5px rgba(255, 255, 255, .25); }
 .auth-route span svg { width: 26px; height: 26px; }
 .auth-route span:last-child, .auth-route i { display: none; }
 .auth-card .eyebrow, .workspace-setup-card .eyebrow { margin-bottom: 6px; }
-.auth-card h1, .workspace-setup-card h1 { max-width: 360px; margin: 0 0 8px; font-size: var(--fs-title1); line-height: var(--lh-title1); font-weight: 700; letter-spacing: -.02em; }
-.auth-intro, .workspace-setup-card > p { margin: 0 0 22px; color: var(--label-2); font-size: var(--fs-subhead); line-height: var(--lh-subhead); }
+.auth-card h1, .workspace-setup-card h1 { max-width: 360px; margin: 0 0 6px; font-size: 32px; line-height: 1.08; font-weight: 700; letter-spacing: -.04em; }
+.auth-intro, .workspace-setup-card > p { margin: 0 0 24px; color: var(--label-2); font-size: var(--fs-subhead); line-height: 1.5; }
 .auth-form { display: grid; gap: 14px; }
 .auth-credentials { display: grid; gap: 12px; }
 .auth-credentials .form-field input { min-height: 50px; }
@@ -26,11 +29,12 @@
 .auth-confirmation strong, .auth-confirmation span, .workspace-account strong, .workspace-account span { display: block; }
 .auth-confirmation strong, .workspace-account strong { color: var(--label); font-size: var(--fs-subhead); font-weight: 600; }
 .auth-confirmation span, .workspace-account span { margin-top: 2px; overflow-wrap: anywhere; color: var(--label-2); font-size: var(--fs-footnote); line-height: 1.45; }
-.auth-privacy { display: flex; align-items: flex-start; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--hairline); color: var(--label-2); font-size: var(--fs-caption); line-height: 1.5; }
-.auth-privacy svg { color: var(--tint); }
 .auth-email-fallback { margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--hairline); }
 .auth-email-fallback summary { color: var(--tint); cursor: pointer; font-size: var(--fs-subhead); font-weight: 600; }
-.auth-email-fallback p { margin: 8px 0 10px; color: var(--label-2); font-size: var(--fs-footnote); line-height: 1.5; }
+.auth-more-options { display: grid; gap: 12px; padding-top: 12px; }
+.auth-more-options > .auth-email-fallback { margin: 0; }
+.auth-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; margin-top: 22px; color: var(--label-2); font-size: var(--fs-footnote); }
+.auth-links a { color: inherit; font-weight: 600; }
 .auth-recovery { width: min(440px, 100%); }
 .auth-connection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .auth-connection-actions > a:not(.button) { margin-inline-start: 4px; font-weight: 600; }
@@ -47,17 +51,13 @@
 .app-loading .button { max-width: 100%; margin-top: 8px; padding: 10px 20px; white-space: normal; line-height: 1.25; }
 .app-loading a:not(.button) { margin-top: 6px; font-weight: 600; }
 .mobile-nav { display: none; }
-.auth-card > p:last-child { margin: 18px 0 0; color: var(--label-2); font-size: var(--fs-footnote); line-height: 1.8; text-align: center; }
-.auth-card > p:last-child a { font-weight: 600; }
 .auth-email-fallback summary { list-style: none; display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
 .auth-email-fallback summary::-webkit-details-marker { display: none; }
 .auth-email-fallback summary::after { content: ""; width: 8px; height: 8px; margin-right: 6px; border-right: 2px solid var(--label-3); border-bottom: 2px solid var(--label-3); transform: rotate(-45deg); transition: transform .2s ease; }
 .auth-email-fallback[open] summary::after { transform: rotate(45deg); }
 .auth-email-fallback form { display: grid; gap: 12px; }
 @media (max-width: 820px) {
-  .auth-shell, .workspace-setup-shell { display: block; padding: calc(var(--top-inset) + 24px) 20px calc(var(--bottom-inset) + 28px); }
-  .auth-card, .workspace-setup-card { width: 100%; padding: 8px 0 0; border-radius: 0; background: transparent; box-shadow: none; }
-  .auth-route { margin-bottom: 26px; }
-  .auth-card h1, .workspace-setup-card h1 { font-size: var(--fs-large-title); line-height: var(--lh-large-title); }
+  .auth-shell, .workspace-setup-shell { padding: calc(var(--top-inset) + 20px) 16px calc(var(--bottom-inset) + 24px); }
+  .auth-card, .workspace-setup-card { width: 100%; padding: 28px 22px; }
 }
 .auth-shell::after, .workspace-setup-shell::after, .app-loading::after { content: ""; position: fixed; z-index: 5; top: 0; left: 0; right: 0; height: var(--top-inset); background: color-mix(in srgb, var(--bg-grouped) 82%, transparent); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); pointer-events: none; }
