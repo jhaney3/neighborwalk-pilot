@@ -221,10 +221,7 @@
   .person-profile-edit span { display: none; }
   .person-profile-contact > * { flex: 1 1 145px; }
   .person-profile-contact strong { max-width: calc(50vw - 58px); }
-  .person-context-details, .person-safety-notice { margin-inline: 14px; }
-  .person-context-details summary { flex-wrap: wrap; gap: 6px 10px; }
-  .person-context-access { margin-left: 0; }
-  .person-context-more { margin-left: auto; }
+  .person-last-contact, .person-safety-notice { margin-inline: 14px; }
   .person-care-grid { padding-inline: 14px; }
   .person-profile-tabs { margin-inline: 14px; }
   .person-profile-tabs button { min-width: 0; flex: 1; padding-inline: 4px; }

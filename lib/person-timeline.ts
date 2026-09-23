@@ -15,7 +15,7 @@ export function personTimeline(data: NeighborWalkData, personId: string): Person
       title: (current.voided ? "Entered in error · " : "") + outcomeMeta[current.outcome].label + " · " + current.context.replaceAll("_", " "),
       body: [v.objectiveNote, v.corrections?.length ? "Original: " + outcomeMeta[v.outcome].label + " · " + (v.context ?? "door").replaceAll("_", " ") + ". Original links, notes and date retained." : undefined].filter(Boolean).join("\n") || undefined, actorId: v.volunteerId },
       ...(v.corrections ?? []).map((correction) => ({ id: "encounter-correction:" + v.id + ":" + correction.id, at: correction.createdAt,
-        title: "Encounter reviewed · " + (correction.voided ? "entered in error" : outcomeMeta[correction.outcome].label + " · " + correction.context.replaceAll("_", " ")),
+        title: "Conversation corrected · " + (correction.voided ? "entered in error" : outcomeMeta[correction.outcome].label + " · " + correction.context.replaceAll("_", " ")),
         body: correction.reason + " Tasks and restrictions unchanged.", actorId: correction.actorId }))];
   });
   const tasks = data.followUps.filter((t) => Boolean(t.residentId && family.has(t.residentId))).flatMap((t) => t.history.map((h) => ({ id: "task:" + t.id + ":" + h.id, at: h.createdAt,

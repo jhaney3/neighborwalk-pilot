@@ -169,7 +169,6 @@ dialog.property-drawer .contact-restrictions { margin-top: 20px; padding: 16px; 
 .outing-hero-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .outing-hero-main > div { min-width: 0; }
 .outing-hero-kicker { display: flex; align-items: center; gap: 10px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 600; }
-.outing-hero-kicker .status-badge { text-transform: capitalize; }
 .outing-hero h2 { max-width: 720px; margin: 12px 0 6px; font-size: var(--fs-title1); line-height: var(--lh-title1); font-weight: 700; letter-spacing: -.02em; }
 .outing-hero-main p { max-width: 700px; margin: 0; color: var(--label-2); font-size: var(--fs-subhead); line-height: var(--lh-subhead); }
 .outing-fieldwork-button { flex: none; min-width: 150px; }
@@ -190,7 +189,7 @@ dialog.property-drawer .contact-restrictions { margin-top: 20px; padding: 16px; 
 .outing-lifecycle-copy { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 12px; }
 .outing-lifecycle small { display: inline-flex; align-items: center; gap: 7px; color: rgba(255, 255, 255, .75); font-size: var(--fs-footnote); font-weight: 600; }
 .outing-lifecycle small i { width: 8px; height: 8px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255, 255, 255, .2); }
-.outing-lifecycle strong { color: #fff; font-size: var(--fs-title2); font-weight: 700; line-height: 1; text-transform: capitalize; }
+.outing-lifecycle strong { color: var(--on-hero); font-size: var(--fs-title2); font-weight: 600; line-height: 1; }
 .outing-lifecycle-copy > span { grid-column: 1 / -1; color: rgba(255, 255, 255, .8); font-size: var(--fs-subhead); line-height: 1.4; }
 .outing-lifecycle-actions { display: flex; flex: none; align-items: center; gap: 8px; }
 .outing-lifecycle .button.primary { min-width: 132px; color: var(--hero-button-ink); background: var(--hero-button-bg); box-shadow: none; }

@@ -13,7 +13,8 @@ import { targetCrewMemberIds } from "../lib/walk-crews";
 import { EncounterComposer } from "./EncounterComposer";
 import { OutingInvitationRoster } from "./OutingInvitationRoster";
 import type { NewParentZoneInput } from "./ParentZoneCreator";
-import { EmptyState, Modal, ViewHeading, useConfirm, type ConfirmOptions } from "./ui";
+import { Badge, EmptyState, Modal, ViewHeading, useConfirm, type ConfirmOptions } from "./ui";
+import { assignmentStatusLabels, walkStatusLabels } from "../lib/status-labels";
 import { WalkSetupWizard } from "./WalkSetupWizard";
 import { WalkCrewBoard, type WalkCrews } from "./WalkCrewBoard";
 import { WalkTargetPlanner, type WalkTargetDraft } from "./WalkTargetPlanner";
@@ -117,13 +118,13 @@ export function OutreachView(props: Props) {
             : undefined;
           const cardPending = pendingCardId === outing.id;
           return <article className="outing-card" key={outing.id}>
-            <div className="outing-card-status-row"><span className="status-badge">{outing.status}</span>{cardAction && <button type="button" className={`button outing-card-action ${cardAction.primary ? "primary" : "quiet"}`} disabled={listAction.busy} onClick={cardAction.onClick}>{cardPending ? cardAction.pendingLabel ?? cardAction.label : cardAction.label}</button>}</div>
+            <div className="outing-card-status-row"><Badge tone={walkStatusLabels[outing.status].tone}>{walkStatusLabels[outing.status].label}</Badge>{cardAction && <button type="button" className={`button outing-card-action ${cardAction.primary ? "primary" : "quiet"}`} disabled={listAction.busy} onClick={cardAction.onClick}>{cardPending ? cardAction.pendingLabel ?? cardAction.label : cardAction.label}</button>}</div>
             <h2>{outing.name}</h2>
-            <div className="outing-card-meta"><p><CalendarDays size={18} aria-hidden="true" /> <span>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: outing.timezone ?? data.church.timezone }).format(new Date(outing.startsAt))}</span></p>{outing.meetingPoint && <p><MapPin size={18} aria-hidden="true" /> <span>{outing.meetingPoint}</span></p>}<p className="outing-card-areas"><Users size={18} aria-hidden="true" /> <span>{assignmentCount} assigned {assignmentCount === 1 ? "area" : "areas"}</span></p></div>
+            <div className="outing-card-meta"><p><CalendarDays size={18} aria-hidden="true" /> <span>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: outing.timezone ?? data.church.timezone }).format(new Date(outing.startsAt))}</span></p>{outing.meetingPoint && <p><MapPin size={18} aria-hidden="true" /> <span>{outing.meetingPoint}</span></p>}<p className="outing-card-areas"><Users size={18} aria-hidden="true" /> <span>{assignmentCount} {assignmentCount === 1 ? "route" : "routes"}</span></p></div>
             <button type="button" className="outing-card-details" aria-label={`View details for ${outing.name}`} onClick={() => onSelect(outing.id)} />
           </article>;
         })}</div>
-          : <EmptyState icon={<CalendarDays size={26} />} title="Your next walk starts here" copy={canManage ? "Choose a persistent neighborhood zone, then draw or select the smaller targets for that night." : "Your leader’s planned walks and assigned targets will appear here."} />}</>}
+          : <EmptyState icon={<CalendarDays size={26} />} title="No walks yet" copy={canManage ? "Pick a neighborhood and the streets you’ll cover." : "Walks you’re invited to will show up here."} />}</>}
     {wizard && <WalkSetupWizard data={data} guides={props.guides} outing={wizard === "new" ? undefined : wizard} onClose={() => { setWizard(null); props.onCreateClosed?.(); }} onComplete={(id) => { setWizard(null); onSelect(id); }} onSaveOuting={onSave} onSaveTarget={props.onSaveTarget} onSaveAssignment={props.onAssign} onSaveRoster={props.onSaveRoster} onAddZone={props.onAddZone} />}
     {editor && <OutingEditor churchTimezone={data.church.timezone} guides={props.guides} outing={editor} onClose={() => setEditor(null)} onSave={async (input) => { const id = await onSave(input, editor.id); setEditor(null); onSelect(id); }} />}
     {repeat && <RepeatOuting outing={repeat} churchTimezone={data.church.timezone} onClose={() => setRepeat(null)} onSave={async (start, end) => { const id = await onRepeat(repeat.id, start, end); setRepeat(null); onSelect(id); }} />}
@@ -138,8 +139,8 @@ function ParentZoneCoveragePanel({ data, territoryIds, eventId }: { data: Neighb
   }, [data.territories, territoryKey]);
   const parcelResults = usePlanningInventories(territories, data.sync.mode === "connected" && data.coverageVisibility === "complete");
 
-  return <section className="outing-panel outing-zone-coverage" aria-label="Parent zone coverage">
-    <div className="outing-section-heading"><span><MapPin size={20} /></span><div><h3>Zone coverage</h3></div></div>
+  return <section className="outing-panel outing-zone-coverage" aria-label="Neighborhood coverage">
+    <div className="outing-section-heading"><span><MapPin size={20} /></span><div><h3>Coverage</h3></div></div>
     <div className="outing-zone-coverage-grid">{territories.map((territory) => {
       const result = parcelResults[territory.id];
       const completeInventory = Boolean(result?.complete && !result.truncated);
@@ -152,9 +153,9 @@ function ParentZoneCoveragePanel({ data, territoryIds, eventId }: { data: Neighb
       return <article key={territory.id}>
         <div className="outing-zone-coverage-title"><i style={{ background: territory.color }} /><strong>{territory.name}</strong></div>
         {authoritative ? <div className="outing-zone-progress-pair">
-          <div><small>Cumulative</small><strong>{cumulative.percent === null ? "—" : `${cumulative.percent}%`}</strong><span>{cumulative.touched} of {cumulative.total} residential properties</span></div>
-          <div><small>Tonight</small><strong>{tonight.percent === null ? "—" : `${tonight.percent}%`}</strong><span>{tonight.touched} of {tonight.total} residential properties</span></div>
-        </div> : <p className="outing-zone-coverage-unavailable">Complete parent-zone inventory is unavailable or still loading, so no coverage percentage is shown.</p>}
+          <div><small>All walks</small><strong>{cumulative.percent === null ? "—" : `${cumulative.percent}%`}</strong><span>{cumulative.touched} of {cumulative.total} homes</span></div>
+          <div><small>Tonight</small><strong>{tonight.percent === null ? "—" : `${tonight.percent}%`}</strong><span>{tonight.touched} of {tonight.total} homes</span></div>
+        </div> : <p className="outing-zone-coverage-unavailable">Coverage shows once the neighborhood’s homes finish loading.</p>}
       </article>;
     })}</div>
   </section>;
@@ -227,7 +228,7 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
       .map((assignment) => ({ key: assignment.id, target: undefined, assignment })),
   ];
   return <article className="outing-detail">
-    {canManage && <section className="outing-lifecycle" aria-label="Walk status controls"><div className="outing-lifecycle-copy" aria-live="polite"><small><i aria-hidden="true" /> Status</small><strong>{outing.status}</strong><span>{lifecycleMessage}</span></div><div className="outing-lifecycle-actions">{(outing.status === "completed" || !closed) && <div className={`outing-status-options${statusMenuOpen ? " open" : ""}`}><button type="button" ref={statusTrigger} className="outing-status-options-trigger" aria-controls={statusMenuOpen ? statusMenuId : undefined} onKeyDown={(event) => { if (event.key === "Escape") closeStatusMenu(); if (event.key === "ArrowDown") { event.preventDefault(); setStatusMenuOpen(true); } }} aria-haspopup="menu" aria-expanded={statusMenuOpen} onClick={() => setStatusMenuOpen((open) => !open)}>Options</button>{statusMenuOpen && <><button type="button" className="outing-status-options-backdrop" aria-label="Close options" tabIndex={-1} onClick={closeStatusMenu} /><div ref={statusMenu} id={statusMenuId} className="outing-status-options-menu" role="menu" tabIndex={-1} aria-label="Walk options" onKeyDown={(event) => {
+    {canManage && <section className="outing-lifecycle" aria-label="Walk status controls"><div className="outing-lifecycle-copy" aria-live="polite"><small><i aria-hidden="true" /> Status</small><strong>{walkStatusLabels[outing.status].label}</strong><span>{lifecycleMessage}</span></div><div className="outing-lifecycle-actions">{(outing.status === "completed" || !closed) && <div className={`outing-status-options${statusMenuOpen ? " open" : ""}`}><button type="button" ref={statusTrigger} className="outing-status-options-trigger" aria-controls={statusMenuOpen ? statusMenuId : undefined} onKeyDown={(event) => { if (event.key === "Escape") closeStatusMenu(); if (event.key === "ArrowDown") { event.preventDefault(); setStatusMenuOpen(true); } }} aria-haspopup="menu" aria-expanded={statusMenuOpen} onClick={() => setStatusMenuOpen((open) => !open)}>Options</button>{statusMenuOpen && <><button type="button" className="outing-status-options-backdrop" aria-label="Close options" tabIndex={-1} onClick={closeStatusMenu} /><div ref={statusMenu} id={statusMenuId} className="outing-status-options-menu" role="menu" tabIndex={-1} aria-label="Walk options" onKeyDown={(event) => {
       if (event.key === "Escape") { event.preventDefault(); closeStatusMenu(); }
       if (event.key === "Tab") closeStatusMenu();
       if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
@@ -239,25 +240,25 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
       }
     }}>{outing.status === "completed" && <button role="menuitem" className="button quiet small" disabled={action.busy} onClick={() => { closeStatusMenu(); void transition("archived"); }}>Archive walk</button>}{!closed && <button role="menuitem" className="button danger small" disabled={action.busy} onClick={() => { closeStatusMenu(); void confirm({ title: "Cancel this walk?", message: "Conversations and follow-ups stay.", confirmLabel: "Cancel walk", cancelLabel: "Keep walk", destructive: true }).then((confirmed) => { if (confirmed) void transition("cancelled"); }); }}>Cancel walk</button>}</div></>}</div>}{["draft", "scheduled"].includes(outing.status) && <button className="button primary" disabled={action.busy} onClick={() => void transition("ready")}>Mark ready</button>}{outing.status === "ready" && <button className="button primary" disabled={action.busy} onClick={() => void transition("active")}>Start walk</button>}{outing.status === "active" && <button className="button primary" disabled={action.busy} onClick={() => { void confirm(completeWalkConfirmation).then((confirmed) => { if (confirmed) void transition("completed"); }); }}>Complete walk</button>}</div></section>}
     <header className="outing-hero">
-      <div className="outing-hero-main"><div><div className="outing-hero-kicker"><span className="status-badge">{outing.status}</span></div><h2>{outing.name}</h2>{outing.purpose && <p>{outing.purpose}</p>}</div>
+      <div className="outing-hero-main"><div><div className="outing-hero-kicker"><Badge tone={walkStatusLabels[outing.status].tone}>{walkStatusLabels[outing.status].label}</Badge></div><h2>{outing.name}</h2>{outing.purpose && <p>{outing.purpose}</p>}</div>
         {!closed && !communityOuting && <div className="outing-fieldwork-entry">
-          {fieldAssignments.length > 1 && <label><span>Target to open</span><select value={fieldAssignment?.id ?? ""} onChange={(event) => setFieldAssignmentId(event.target.value)}>{!fieldAssignment && <option value="">Select a target</option>}{fieldAssignments.map((assignment) => <option key={assignment.id} value={assignment.id}>{data.walkTargets.find((target) => target.id === assignment.targetId)?.name ?? data.territories.find((territory) => territory.id === assignment.territoryId)?.name ?? "Archived area"}</option>)}</select></label>}
-          {fieldAssignment && personalFieldAssignments.some((assignment) => assignment.id === fieldAssignment.id) && <small>Your assigned target{fieldAssignments.length === 1 ? `: ${data.walkTargets.find((target) => target.id === fieldAssignment.targetId)?.name ?? data.territories.find((territory) => territory.id === fieldAssignment.territoryId)?.name ?? "Archived area"}` : " is selected."}</small>}
+          {fieldAssignments.length > 1 && <label><span>Route</span><select value={fieldAssignment?.id ?? ""} onChange={(event) => setFieldAssignmentId(event.target.value)}>{!fieldAssignment && <option value="">Choose a route</option>}{fieldAssignments.map((assignment) => <option key={assignment.id} value={assignment.id}>{data.walkTargets.find((target) => target.id === assignment.targetId)?.name ?? data.territories.find((territory) => territory.id === assignment.territoryId)?.name ?? "Archived route"}</option>)}</select></label>}
+          {fieldAssignment && personalFieldAssignments.some((assignment) => assignment.id === fieldAssignment.id) && <small>Your route{fieldAssignments.length === 1 ? `: ${data.walkTargets.find((target) => target.id === fieldAssignment.targetId)?.name ?? data.territories.find((territory) => territory.id === fieldAssignment.territoryId)?.name ?? "Archived route"}` : " is selected."}</small>}
           <button className="button primary outing-fieldwork-button" disabled={action.busy || !fieldworkAvailable || !fieldAssignment} onClick={() => { if (fieldAssignment) void action.run(() => onStart(outing.id, fieldAssignment.territoryId, fieldAssignment.targetId)); }}>Open walk</button>
-          {!fieldworkAvailable && <small>Mark this walk ready before opening it.</small>}
-          {fieldworkAvailable && !fieldAssignments.length && <small>{canManage ? "Assign at least one target before opening the walk." : "You can respond on Home now. Your leader will check you in and assign your target when the walk begins."}</small>}
+          {!fieldworkAvailable && <small>Mark the walk ready to open it.</small>}
+          {fieldworkAvailable && !fieldAssignments.length && <small>{canManage ? "Add a route to open the walk." : "Reply on Home. Your leader will check you in and give you a route when the walk starts."}</small>}
         </div>}
       </div>
       <div className="outing-meta-grid">
         <div><span><CalendarDays size={17} /></span><div><small>Date &amp; time</small><strong>{dateLabel}</strong><p>{startTime}–{endTime} · {timezone}</p></div></div>
-        <div><span><MapPin size={17} /></span><div><small>Meeting point</small><strong>{outing.meetingPoint || "Not set yet"}</strong>{!outing.meetingPoint && <p>Add in preparation.</p>}</div></div>
-        <div><span><Users size={17} /></span><div><small>Leader contact</small><strong>{outing.leaderContact || "Not set yet"}</strong>{!outing.leaderContact && <p>Add in preparation.</p>}</div></div>
+        <div><span><MapPin size={17} /></span><div><small>Meeting point</small><strong>{outing.meetingPoint || "Not set yet"}</strong>{!outing.meetingPoint && <p>Add one when you edit the walk.</p>}</div></div>
+        <div><span><Users size={17} /></span><div><small>Leader contact</small><strong>{outing.leaderContact || "Not set yet"}</strong>{!outing.leaderContact && <p>Add one when you edit the walk.</p>}</div></div>
       </div>
-      <div className="outing-summary-row" aria-label="Walk summary"><div><strong>{outingTargets.length ? `${activeAssignments.filter((assignment) => assignment.targetId).length}/${outingTargets.length}` : activeAssignments.length}</strong><span>Targets staffed</span></div><div><strong>{encounters.length}</strong><span>Encounters recorded</span></div><div><strong>{openTasks.length}</strong><span>Open follow-ups</span></div></div>
-      <div className="outing-support-actions">{canManage && <><button className="button quiet" onClick={onEdit}>{outing.status === "draft" ? "Resume setup" : "Edit preparation"}</button><button className="button quiet" onClick={onRepeatRequest}><Repeat2 size={16} /> Repeat walk</button></>}
+      <div className="outing-summary-row" aria-label="Walk summary"><div><strong>{outingTargets.length ? `${activeAssignments.filter((assignment) => assignment.targetId).length}/${outingTargets.length}` : activeAssignments.length}</strong><span>Routes with a team</span></div><div><strong>{encounters.length}</strong><span>Conversations</span></div><div><strong>{openTasks.length}</strong><span>Open follow-ups</span></div></div>
+      <div className="outing-support-actions">{canManage && <><button className="button quiet" onClick={onEdit}>{outing.status === "draft" ? "Resume setup" : "Edit walk"}</button><button className="button quiet" onClick={onRepeatRequest}><Repeat2 size={16} /> Repeat walk</button></>}
         {guide ? <button className="button quiet" onClick={() => onOpenGuide(guide.id)}>Open {guide.title}</button> : <span>Conversation guide is optional.</span>}
       </div>
-      {!closed && communityOuting && <div className="outing-community-entry"><div><strong>Community setting</strong><span>Record what happened without an address or area. Link a person or create one when helpful.</span></div><EncounterComposer data={data} outingId={outing.id} onSave={onRecordEncounter} onCreatePerson={onCreatePerson} /></div>}
+      {!closed && communityOuting && <div className="outing-community-entry"><div><strong>Gathering</strong><span>Log conversations from a meal, service day or other gathering.</span></div><EncounterComposer data={data} outingId={outing.id} onSave={onRecordEncounter} onCreatePerson={onCreatePerson} /></div>}
     </header>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
     {canManage && parentTerritoryIds.length > 0 && <ParentZoneCoveragePanel data={data} territoryIds={parentTerritoryIds} eventId={outing.id} />}
@@ -269,18 +270,18 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
      ].filter(([count, label]) => Number(count) > 0 || label === "here" || label === "going").map(([count, label]) => `${count} ${label}`).join(" · ")}</p>}</div></div>{!closed && <button className="button quiet" onClick={() => setRosterEditorOpen(true)}><PencilLine size={15} /> Manage invitations</button>}</div>
       {participants.length ? <ul className="outing-roster-list">{participants.map((participant) => {
         const name = data.volunteers.find((volunteer) => volunteer.id === participant.volunteerId)?.name ?? "Unavailable member";
-        return <li key={participant.id}><i aria-hidden="true">{name.charAt(0).toUpperCase()}</i><strong>{name}</strong><span className={`outing-participant-status ${participant.status}`}>{participant.status === "not_going" ? "Can’t make it" : participant.status === "checked_in" ? "Here" : participant.status === "going" ? "Going" : "No reply"}</span></li>;
+        return <li key={participant.id}><i aria-hidden="true">{name.charAt(0).toUpperCase()}</i><strong>{name}</strong><span className={`outing-participant-status ${participant.status}`}>{participant.status === "not_going" ? "Can’t go" : participant.status === "checked_in" ? "Here" : participant.status === "going" ? "Going" : "No reply"}</span></li>;
       })}</ul>
         : <p className="outing-roster-empty">No one has been invited yet.</p>}
     </section>}
-    <section className="outing-panel outing-assignments-panel"><div className="outing-section-title-row"><div className="outing-section-heading"><span><Users size={20} /></span><div><h3>Crews</h3></div></div>{canManage && !closed && openTargets.length > 0 && <button className="button primary" onClick={() => setCrewEditorOpen(true)}><PencilLine size={15} /> Manage crews</button>}</div>
+    <section className="outing-panel outing-assignments-panel"><div className="outing-section-title-row"><div className="outing-section-heading"><span><Users size={20} /></span><div><h3>Teams</h3></div></div>{canManage && !closed && openTargets.length > 0 && <button className="button primary" onClick={() => setCrewEditorOpen(true)}><PencilLine size={15} /> Edit teams</button>}</div>
       <ul className="assignment-list">{crewItems.map(({ key, assignment, target }) => {
-        const areaName = target?.name ?? data.territories.find((t) => t.id === assignment?.territoryId)?.name ?? "Archived area";
+        const areaName = target?.name ?? data.territories.find((t) => t.id === assignment?.territoryId)?.name ?? "Archived route";
         const memberIds = assignment?.assignedVolunteerId ? [assignment.assignedVolunteerId] : data.teams.find((team) => team.id === assignment?.assignedTeamId)?.memberIds ?? [];
         const memberNames = memberIds.map((id) => data.volunteers.find((volunteer) => volunteer.id === id)?.name ?? "Unavailable member");
-        const crewLabel = memberNames.length ? memberNames.join(", ") : "No crew yet — staff at check-in";
+        const crewLabel = memberNames.length ? memberNames.join(", ") : "No team yet. Assign one at check-in.";
         const coverage = target ? targetCoverage(data, target) : undefined;
-        const stateLabel = target?.finishedAt ? "finished tonight" : assignment?.status ?? "staff later";
+        const stateLabel = target?.finishedAt ? "Finished tonight" : assignment ? assignmentStatusLabels[assignment.status] : "No team yet";
         const coverageLabel = coverage ? `${coverage.touched} of ${coverage.total} visited${coverage.percent === null ? "" : ` · ${coverage.percent}%`}` : undefined;
         const canReplace = Boolean(assignment && canManage && target?.rosterState === "frozen" && !closed && !["cancelled", "completed", "declined"].includes(assignment.status));
         const canCancel = Boolean(assignment && canManage && !["cancelled", "completed", "declined"].includes(assignment.status));
@@ -293,14 +294,14 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
           <div className="assignment-row"><span>Crew</span><p>{crewLabel}</p></div>
           {coverageLabel && <div className="assignment-row"><span>Coverage</span><p>{coverageLabel}</p></div>}
           {(canReplace || canCancel) && <div className="assignment-actions">
-            {canReplace && <button type="button" disabled={action.busy} onClick={() => setReplacementAssignmentId(assignment!.id)}>Replace target</button>}
+            {canReplace && <button type="button" disabled={action.busy} onClick={() => setReplacementAssignmentId(assignment!.id)}>Replace route</button>}
             {canCancel && <button type="button" className="destructive" disabled={action.busy} onClick={() => void action.run(() => onAssign({ ...assignment!, status: "cancelled" }, assignment!.id))}>Cancel assignment</button>}
           </div>}
         </li>;
       })}</ul>
-      {!crewItems.length && <div className="outing-empty-assignment"><MapPin size={20} /><div><strong>No targets or crews yet</strong><p>Resume setup to choose tonight’s targets, or use the community recorder above.</p></div></div>}
+      {!crewItems.length && <div className="outing-empty-assignment"><MapPin size={20} /><div><strong>No routes yet</strong><p>Finish setup to add routes.</p></div></div>}
     </section>
-    <details className="outing-panel outing-context-details outing-debrief-panel"><summary>Debrief &amp; encounter history</summary><div className="outing-section-heading"><span><MessageCircle size={20} /></span><div><h3>Debrief</h3></div></div><div className="outing-debrief-summary"><span>{encounters.length} recorded encounters</span><span>{openTasks.length} open follow-ups</span><span className={openTasks.some((task) => !task.assignedVolunteerId) ? "needs-attention" : ""}>{openTasks.filter((task) => !task.assignedVolunteerId).length} without an owner</span></div><p className="outing-values-note">Activity counts help the team follow through; they do not measure a neighbor’s faith or value.</p>{canManage ? <form className="form-stack outing-debrief-form" onSubmit={(e) => { e.preventDefault(); void action.run(() => onSave({ ...outing, debrief }, outing.id)); }}><label>What should the next team know?<textarea value={debrief} maxLength={2000} rows={4} onChange={(e) => setDebrief(e.target.value)} placeholder="Share logistics, what worked, and what the next team should prepare." /></label><button className="button quiet" disabled={action.busy}><Check size={16} /> Save debrief</button></form> : <p>{outing.debrief || "The leader’s debrief will appear here."}</p>}</details>
+    <details className="outing-panel outing-context-details outing-debrief-panel"><summary>Debrief</summary><div className="outing-section-heading"><span><MessageCircle size={20} /></span><div><h3>Debrief</h3></div></div><div className="outing-debrief-summary"><span>{encounters.length} conversations</span><span>{openTasks.length} open follow-ups</span><span className={openTasks.some((task) => !task.assignedVolunteerId) ? "needs-attention" : ""}>{openTasks.filter((task) => !task.assignedVolunteerId).length} without an owner</span></div>{canManage ? <form className="form-stack outing-debrief-form" onSubmit={(e) => { e.preventDefault(); void action.run(() => onSave({ ...outing, debrief }, outing.id)); }}><label>What should the next team know?<textarea value={debrief} maxLength={2000} rows={4} onChange={(e) => setDebrief(e.target.value)} placeholder="Logistics, what worked, what to bring next time." /></label><button className="button quiet" disabled={action.busy}><Check size={16} /> Save debrief</button></form> : <p>{outing.debrief || "The leader’s debrief will appear here."}</p>}</details>
     {replacementAssignment && replacementTarget && replacementTerritory && <TargetReplacementModal data={data} outing={outing} assignment={replacementAssignment} target={replacementTarget} territory={replacementTerritory} onClose={() => setReplacementAssignmentId("")} onReplace={props.onReplaceTarget} />}
     {rosterEditorOpen && <OutingRosterModal data={data} outing={outing} onClose={() => setRosterEditorOpen(false)} onSave={props.onSaveRoster} />}
     {crewEditorOpen && <WalkCrewModal data={data} outing={outing} targets={openTargets} onClose={() => setCrewEditorOpen(false)} onSave={props.onSaveCrews} />}
@@ -338,11 +339,11 @@ function WalkCrewModal({ data, outing, targets, onClose, onSave }: {
   ])]);
   const action = useAsyncAction();
   const save = () => void action.run(() => onSave(outing.id, crews, attendingIds), onClose);
-  return <Modal title="Crews" onClose={action.busy ? () => undefined : onClose} wide>
+  return <Modal title="Teams" onClose={action.busy ? () => undefined : onClose} wide>
     <div className="form-stack" aria-busy={action.busy}>
       <WalkCrewBoard data={data} targets={targets.map((target) => ({ id: target.id, name: target.name, color: target.color, propertyCount: target.parcels.length }))} crews={crews} onChange={setCrews} initialAttendingIds={attendingIds} onAttendanceChange={setAttendingIds} />
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-      <div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button type="button" className="button primary" disabled={action.busy} onClick={save}><Check size={16} /> {action.busy ? "Saving crews…" : "Save crew changes"}</button></div>
+      <div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button type="button" className="button primary" disabled={action.busy} onClick={save}><Check size={16} /> {action.busy ? "Saving…" : "Save teams"}</button></div>
     </div>
   </Modal>;
 }
@@ -376,15 +377,15 @@ function TargetReplacementModal({ data, outing, assignment, target, territory, o
     }), onClose);
   };
 
-  return <Modal title="Replace frozen target" description="Draw one replacement inside the same parent zone. The old target remains immutable history." onClose={action.busy ? () => undefined : onClose} wide>
+  return <Modal title="Replace route" description="Draw the new route inside the same neighborhood. The old route stays in the walk’s history." onClose={action.busy ? () => undefined : onClose} wide>
     <div className="form-stack walk-replacement" aria-busy={action.busy}>
-      <div className="walk-replacement-context"><span>Replacing</span><strong>{target.name}</strong><small>{target.parcels.length} residential properties · {assignment.status}</small></div>
+      <div className="walk-replacement-context"><span>Replacing</span><strong>{target.name}</strong><small>{target.parcels.length} homes · {assignmentStatusLabels[assignment.status]}</small></div>
       <WalkTargetPlanner parentTerritory={territory} eventId={outing.id} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} visitedParcelKeys={visitedParcelKeys} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} />
-      <div className="walk-replacement-context"><span>Crew carries over</span><strong>{currentCrew || "Current assigned crew"}</strong><small>You can update the people after replacing the map target.</small></div>
-      {targets.length > 1 && <p className="walk-ready-note">Choose exactly one replacement target. Remove the extras before saving.</p>}
-      {replacement && !replacement.parcels.length && <p className="walk-ready-note">Review at least one residential property in the replacement target.</p>}
+      <div className="walk-replacement-context"><span>Team carries over</span><strong>{currentCrew || "Current team"}</strong><small>You can change the team afterward.</small></div>
+      {targets.length > 1 && <p className="walk-ready-note">Draw just one new route.</p>}
+      {replacement && !replacement.parcels.length && <p className="walk-ready-note">Include at least one home in the new route.</p>}
       {action.error && <p className="inline-error" role="alert">{action.error}</p>}
-      <div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Keep current target</button><button type="button" className="button primary" disabled={action.busy || !canReplace} onClick={save}><Check size={16} /> {action.busy ? "Replacing target…" : "Confirm replacement"}</button></div>
+      <div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Keep current route</button><button type="button" className="button primary" disabled={action.busy || !canReplace} onClick={save}><Check size={16} /> {action.busy ? "Replacing…" : "Confirm replacement"}</button></div>
     </div>
   </Modal>;
 }
@@ -399,11 +400,11 @@ function OutingEditor({ outing, churchTimezone, guides, onClose, onSave }: { out
   const [start, setStart] = useState(outing ? localDateTimeValue(outing.startsAt, timezone) : calendarDaysFromNow(1, timezone) + "T09:00");
   const [end, setEnd] = useState(outing ? localDateTimeValue(outing.endsAt, timezone) : calendarDaysFromNow(1, timezone) + "T11:00");
   const action = useAsyncAction();
-  return <Modal title="Edit walk" description="A simple shared plan helps volunteers arrive prepared." onClose={action.busy ? () => undefined : onClose} wide><form className="form-stack" onSubmit={(e) => { e.preventDefault(); void action.run(async () => onSave({ name, purpose, meetingPoint, leaderContact, timezone, guideId: guideId || undefined,
+  return <Modal title="Edit walk" onClose={action.busy ? () => undefined : onClose} wide><form className="form-stack" onSubmit={(e) => { e.preventDefault(); void action.run(async () => onSave({ name, purpose, meetingPoint, leaderContact, timezone, guideId: guideId || undefined,
     startsAt: churchDateTimeToIso(start, timezone), endsAt: churchDateTimeToIso(end, timezone), status: outing?.status ?? "draft", debrief: outing?.debrief ?? "" })); }}>
-    <label>Outing name<input required maxLength={160} value={name} onChange={(e) => setName(e.target.value)} placeholder="Saturday neighborhood walk" /></label><label>Purpose<textarea maxLength={1000} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Listen to our neighbors and follow through on requested help." /></label>
-    <div className="person-editor-grid"><label>Starts<input required type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></label><label>Ends<input required type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></label><label>Timezone<input required value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/Chicago" /></label><label>Meeting point<input maxLength={300} value={meetingPoint} onChange={(e) => setMeetingPoint(e.target.value)} /></label><label>Leader contact<input maxLength={254} value={leaderContact} onChange={(e) => setLeaderContact(e.target.value)} /></label><label>Optional church guide<select value={guideId} onChange={(e) => setGuideId(e.target.value)}><option value="">No guide assigned</option>{guides.filter((g) => g.scope === "church").map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}</select></label></div>
-    {action.error && <p role="alert" className="inline-error">{action.error}</p>}<div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={action.busy}>{action.busy ? "Saving to device…" : "Save walk"}</button></div>
+    <label>Walk name<input required maxLength={160} value={name} onChange={(e) => setName(e.target.value)} placeholder="Saturday neighborhood walk" /></label><label>Purpose<textarea maxLength={1000} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Listen to our neighbors and follow through on requested help." /></label>
+    <div className="person-editor-grid"><label>Starts<input required type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></label><label>Ends<input required type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></label><label>Timezone<input required value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/Chicago" /></label><label>Meeting point<input maxLength={300} value={meetingPoint} onChange={(e) => setMeetingPoint(e.target.value)} /></label><label>Leader contact<input maxLength={254} value={leaderContact} onChange={(e) => setLeaderContact(e.target.value)} /></label><label>Conversation guide<select value={guideId} onChange={(e) => setGuideId(e.target.value)}><option value="">No guide assigned</option>{guides.filter((g) => g.scope === "church").map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}</select></label></div>
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}<div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={action.busy}>{action.busy ? "Saving…" : "Save walk"}</button></div>
   </form></Modal>;
 }
 
@@ -412,5 +413,5 @@ function RepeatOuting({ outing, churchTimezone, onClose, onSave }: { outing: Out
   const [start, setStart] = useState(calendarDaysFromNow(7, timezone, new Date(outing.startsAt)) + "T09:00");
   const [end, setEnd] = useState(calendarDaysFromNow(7, timezone, new Date(outing.startsAt)) + "T11:00");
   const action = useAsyncAction();
-  return <Modal title="Repeat this walk" description="Creates a draft with the same preparation and parent-zone choice. Tonight’s targets, owners, visits and tasks are not copied." onClose={action.busy ? () => undefined : onClose}><form className="form-stack" onSubmit={(e) => { e.preventDefault(); void action.run(async () => onSave(churchDateTimeToIso(start, timezone), churchDateTimeToIso(end, timezone))); }}><p>Times use {timezone}. Draw fresh targets after creating the draft.</p><label>New start<input required type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></label><label>New end<input required type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></label>{action.error && <p role="alert" className="inline-error">{action.error}</p>}<button className="button primary" disabled={action.busy}>Create repeated draft</button></form></Modal>;
+  return <Modal title="Repeat this walk" description="Makes a new draft with the same details and neighborhood. Routes and teams start fresh." onClose={action.busy ? () => undefined : onClose}><form className="form-stack" onSubmit={(e) => { e.preventDefault(); void action.run(async () => onSave(churchDateTimeToIso(start, timezone), churchDateTimeToIso(end, timezone))); }}><p>Times use {timezone}. Draw fresh targets after creating the draft.</p><label>New start<input required type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></label><label>New end<input required type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></label>{action.error && <p role="alert" className="inline-error">{action.error}</p>}<button className="button primary" disabled={action.busy}>Create draft</button></form></Modal>;
 }

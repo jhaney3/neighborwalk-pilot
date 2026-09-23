@@ -31,12 +31,12 @@ describe("follow-up task ownership", () => {
     const task = { ...data.followUps[0], assignedVolunteerId: undefined, acceptance: "accepted" as const };
     const markup = renderTask(task);
 
-    expect(markup).toContain("Responsible person: Needs an owner");
+    expect(markup).toContain("Owner: Needs an owner");
     expect(markup).toContain("Assign an owner");
-    expect(markup).toContain('aria-label="Responsible person"');
+    expect(markup).toContain('aria-label="Owner"');
     expect(markup).toContain('class="followup-actions needs-owner"');
     expect(markup).not.toContain('class="followup-actions-outcome"');
-    expect(markup).not.toContain("Choose the person responsible for completing this task.");
+    expect(markup).not.toContain("Who will do this?");
     expect(markup).not.toContain(">Accepted<");
     expect(markup).not.toMatch(/\bComplete<\/button>/);
   });
@@ -47,7 +47,7 @@ describe("follow-up task ownership", () => {
     const task = { ...data.followUps[0], assignedVolunteerId: owner.id, acceptance: "accepted" as const };
     const markup = renderTask(task);
 
-    expect(markup).toContain(`Responsible person: ${owner.name}`);
+    expect(markup).toContain(`Owner: ${owner.name}`);
     expect(markup).toContain(">Accepted<");
     expect(markup).toMatch(/\bComplete<\/button>/);
   });
@@ -57,6 +57,6 @@ describe("follow-up task ownership", () => {
     const task = { ...data.followUps.find((followUp) => followUp.residentId)!, assignedVolunteerId: undefined, acceptance: "accepted" as const };
     const markup = renderTask(task);
 
-    expect(markup).toContain("Share the person’s profile or arrange a care handoff before assigning someone new.");
+    expect(markup).toContain("Share their profile or hand them off before assigning someone new.");
   });
 });

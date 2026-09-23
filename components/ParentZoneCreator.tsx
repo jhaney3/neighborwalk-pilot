@@ -90,7 +90,7 @@ export function ParentZoneCreator({ churchId, mapStyleUrl, baseTerritory, demo =
   };
 
   if (!open) {
-    return <button ref={triggerRef} type="button" className="button quiet walk-create-zone-button" onClick={begin}><MapPinned size={16} /> Draw and name a new zone</button>;
+    return <button ref={triggerRef} type="button" className="button quiet walk-create-zone-button" onClick={begin}><MapPinned size={16} /> New neighborhood</button>;
   }
 
   const save = () => {
@@ -104,13 +104,13 @@ export function ParentZoneCreator({ churchId, mapStyleUrl, baseTerritory, demo =
     });
   };
 
-  return <section className={`walk-parent-zone-creator stage-${phase}`} aria-label="Create a lasting neighborhood zone" aria-busy={action.busy}>
+  return <section className={`walk-parent-zone-creator stage-${phase}`} aria-label="New neighborhood" aria-busy={action.busy}>
     <header className="walk-parent-zone-mobile-bar">
-      <h3 id={stageHeadingId} ref={stageHeadingRef} tabIndex={-1}>{phase === "draw" ? "Draw your zone" : "Name your zone"}</h3>
+      <h3 id={stageHeadingId} ref={stageHeadingRef} tabIndex={-1}>{phase === "draw" ? "Draw it" : "Name it"}</h3>
       <button type="button" className="button quiet" disabled={action.busy} onClick={cancel}>Cancel</button>
     </header>
-    <p className="sr-only" role="status" aria-live="polite">{phase === "draw" ? "Drawing stage. Draw a rectangle or polygon on the map." : "Details stage. Name the completed zone and choose its color."}</p>
-    <div className="walk-parent-zone-heading"><div><strong>Draw a lasting neighborhood zone</strong><small>Use a rectangle for a simple block, or a polygon for a custom boundary. This zone is reusable for later walks.</small></div><button type="button" className="button quiet small" disabled={action.busy} onClick={cancel}>Close</button></div>
+    <p className="sr-only" role="status" aria-live="polite">{phase === "draw" ? "Drawing stage. Draw a rectangle or polygon on the map." : "Name the neighborhood and choose its color."}</p>
+    <div className="walk-parent-zone-heading"><div><strong>Draw a neighborhood</strong><small>Use a rectangle for a simple block, or a polygon for any shape. You can reuse it for later walks.</small></div><button type="button" className="button quiet small" disabled={action.busy} onClick={cancel}>Close</button></div>
     <div className="walk-parent-zone-map">
       <MapCanvas
         territory={mapTerritory}
@@ -121,7 +121,7 @@ export function ParentZoneCreator({ churchId, mapStyleUrl, baseTerritory, demo =
         addMode={false}
         drawMode={phase === "draw"}
         drawShape={drawShape}
-        drawModeLabel="New zone"
+        drawModeLabel="New neighborhood"
         draftBoundary={boundary}
         compactMarkers
         mapStyleUrl={mapStyleUrl}
@@ -142,18 +142,18 @@ export function ParentZoneCreator({ churchId, mapStyleUrl, baseTerritory, demo =
         <button type="button" className="button quiet small" disabled={action.busy || boundary.length === 0} onClick={() => setBoundary([])}><RotateCcw size={15} /> Start over</button>
         <span>{boundaryStatus}</span>
       </div>
-      {boundaryCrossesItself && <p className="walk-ready-note" role="alert">Undo the crossing corner so the zone has one clear boundary.</p>}
-      <button type="button" className="button primary walk-parent-zone-review" disabled={action.busy || !boundaryReady} onClick={() => setPhase("details")}><Check size={16} /> Review zone</button>
+      {boundaryCrossesItself && <p className="walk-ready-note" role="alert">Undo the last corner so the lines don’t cross.</p>}
+      <button type="button" className="button primary walk-parent-zone-review" disabled={action.busy || !boundaryReady} onClick={() => setPhase("details")}><Check size={16} /> Next</button>
     </div>
     <div className="walk-parent-zone-details-panel">
       <div className="walk-parent-zone-fields">
-        <label>Zone name<input value={name} required minLength={3} maxLength={120} onChange={(event) => setName(event.target.value)} placeholder="Example: Oakwood North" /></label>
+        <label>Neighborhood name<input value={name} required minLength={3} maxLength={120} onChange={(event) => setName(event.target.value)} placeholder="Example: Oakwood North" /></label>
         <label>Map color<input className="territory-color-input" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
       </div>
       {action.error && <p className="inline-error" role="alert">{action.error}</p>}
       <div className="walk-parent-zone-details-actions">
         <button type="button" className="button quiet walk-parent-zone-back" disabled={action.busy} onClick={() => setPhase("draw")}><ChevronLeft size={16} /> Back</button>
-        <button type="button" className="button primary" disabled={action.busy || name.trim().length < 3 || !boundaryReady} onClick={save}><Check size={16} /> {action.busy ? "Creating zone…" : "Create and use this zone"}</button>
+        <button type="button" className="button primary" disabled={action.busy || name.trim().length < 3 || !boundaryReady} onClick={save}><Check size={16} /> {action.busy ? "Creating…" : "Create neighborhood"}</button>
       </div>
     </div>
   </section>;

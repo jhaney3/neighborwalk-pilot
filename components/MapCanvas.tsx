@@ -979,7 +979,7 @@ export function MapCanvas({
         ? "Location access is off. Search and saved addresses still work. To change it, open iOS Settings → NeighborWalk → Location."
         : "Your location is unavailable right now. Search and saved addresses still work."}</span></div>}
       {addMode && (
-        <div className="map-mode-banner"><MapPin size={15} /><span>Tap the next dwelling or entrance</span></div>
+        <div className="map-mode-banner"><MapPin size={15} /><span>Tap the next door</span></div>
       )}
       {drawMode && (
         <div className="map-drawing-panel">

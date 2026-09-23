@@ -201,9 +201,8 @@ export function PropertyDrawer({
   };
 
   return (
-    <dialog ref={drawer} className="property-drawer" aria-label={`Location details for ${property.address}`} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
+    <dialog ref={drawer} className="property-drawer" aria-label={`Home details for ${property.address}`} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-      {property.currentOutcome === "do_not_visit" && <p className="inline-notice">Do not visit this location. A church leader must review any restriction correction.</p>}
       <div className="drawer-handle" aria-hidden="true" />
       {onBack && <button type="button" className="drawer-people-return" disabled={action.busy} onClick={onBack} aria-label="Back to People"><ArrowLeft size={20} aria-hidden="true" /><span>People</span></button>}
       <div className="drawer-heading">
@@ -213,7 +212,7 @@ export function PropertyDrawer({
           {editingAddress ? (
             <div className="address-edit-row">
               <input value={address} onChange={(event) => setAddress(event.target.value)} aria-label="Street address" />
-              <input value={unit} onChange={(event) => setUnit(event.target.value)} aria-label="Dwelling label or unit" placeholder="Unit or label" />
+              <input value={unit} onChange={(event) => setUnit(event.target.value)} aria-label="Unit or label" placeholder="Apt 2, rear house" />
               <button className="small-icon-button" onClick={() => setEditingAddress(false)} aria-label="Finish editing address"><Check size={16} /></button>
             </div>
           ) : (
@@ -223,29 +222,29 @@ export function PropertyDrawer({
           )}
           <small>{property.visitCount ? `${property.visitCount} visit${property.visitCount === 1 ? "" : "s"} recorded` : "No visits recorded"}</small>
         </div>
-        <button className="close-button" disabled={action.busy} onClick={requestClose} aria-label="Close location details"><X size={19} /></button>
+        <button className="close-button" disabled={action.busy} onClick={requestClose} aria-label="Close"><X size={19} /></button>
       </div>
 
       {property.parcel && parcelDwellings.length > 0 && (
         <div className="drawer-parcel-row">
           <button onClick={onViewParcel} disabled={!onViewParcel}>
             <Building2 size={14} />
-            <span>{parcelDwellings.length} {parcelDwellings.length === 1 ? "dwelling" : "dwellings"} on this parcel</span>
+            <span>{parcelDwellings.length} {parcelDwellings.length === 1 ? "home" : "homes"} at this address</span>
             <ChevronRight size={14} />
           </button>
-          {onAddDwelling && <button className="drawer-add-dwelling" onClick={onAddDwelling} aria-label="Add another dwelling to this parcel"><Plus size={14} /></button>}
+          {onAddDwelling && <button className="drawer-add-dwelling" onClick={onAddDwelling} aria-label="Add another home at this address"><Plus size={14} /></button>}
         </div>
       )}
 
       {property.currentOutcome === "do_not_visit" && (
-        <div className="do-not-visit-banner"><AlertOctagon size={17} /><span><strong>Do not approach this location</strong>The resident’s preference should be honored.</span></div>
+        <div className="do-not-visit-banner"><AlertOctagon size={17} /><span><strong>Don’t knock here</strong>They asked us not to come back. Only a leader can change this.</span></div>
       )}
 
       {openFollowUp && (
-        <div className="drawer-followup-banner"><CalendarClock size={16} /><span><strong>Return visit scheduled</strong>{formatDateTime(openFollowUp.dueAt, { weekday: "short", month: "short", day: "numeric" })}</span></div>
+        <div className="drawer-followup-banner"><CalendarClock size={16} /><span><strong>Follow-up planned</strong>{formatDateTime(openFollowUp.dueAt, { weekday: "short", month: "short", day: "numeric" })}</span></div>
       )}
 
-      <div className="drawer-tabs" role="tablist" tabIndex={-1} aria-label="Location record sections" onKeyDown={(event) => navigateTabs(event, (index) => setTab(sections[index]))}>
+      <div className="drawer-tabs" role="tablist" tabIndex={-1} aria-label="Home sections" onKeyDown={(event) => navigateTabs(event, (index) => setTab(sections[index]))}>
         <button role="tab" id={`${tabsId}-record`} aria-controls={`${tabsId}-panel`} tabIndex={tab === "record" ? 0 : -1} aria-selected={tab === "record"} className={tab === "record" ? "active" : ""} onClick={() => setTab("record")} onFocus={() => setTab("record")}><ClipboardList size={15} /> Record visit</button>
         <button role="tab" id={`${tabsId}-people`} aria-controls={`${tabsId}-panel`} tabIndex={tab === "people" ? 0 : -1} aria-selected={tab === "people"} className={tab === "people" ? "active" : ""} onClick={() => setTab("people")} onFocus={() => setTab("people")}><Users size={15} /> People <span>{residents.length}</span></button>
         <button role="tab" id={`${tabsId}-history`} aria-controls={`${tabsId}-panel`} tabIndex={tab === "history" ? 0 : -1} aria-selected={tab === "history"} className={tab === "history" ? "active" : ""} onClick={() => setTab("history")} onFocus={() => setTab("history")}><History size={15} /> History <span>{visits.length}</span></button>
@@ -269,7 +268,7 @@ export function PropertyDrawer({
               onAddPerson={continueToPerson}
               onSkip={() => {
                 setWorkflowStage("record");
-                setWorkflowNotice("Name skipped — record what happened at this door.");
+                setWorkflowNotice("No name, that’s fine. What happened?");
               }}
             />
           ) : (
@@ -310,7 +309,7 @@ export function PropertyDrawer({
             </button>
           )}
 
-          {outcome !== "no_answer" && outcome !== "follow_up" && <button type="button" className="visit-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>{detailsOpen ? "Hide optional details" : outcome === "conversation" ? "Add a person or note" : "Add a note"}<ChevronDown size={15} /></button>}
+          {outcome !== "no_answer" && outcome !== "follow_up" && <button type="button" className="visit-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>{detailsOpen ? "Hide details" : outcome === "conversation" ? "Add a person or note" : "Add a note"}<ChevronDown size={15} /></button>}
 
           {outcome !== "no_answer" && (detailsOpen || outcome === "follow_up") && <div className="visit-optional-details">
             {["conversation", "follow_up"].includes(outcome) && <>
@@ -324,18 +323,18 @@ export function PropertyDrawer({
                     return;
                   }
                   setLinkedResidentId(event.target.value);
-                }}><option value="">No person record</option><option value={addResidentOptionValue}>Add a new person…</option>{residents.map((resident) => <option value={resident.id} key={resident.id}>{resident.name || "Name not provided"}</option>)}</select><ChevronDown size={15} /></div>
+                }}><option value="">No one in particular</option><option value={addResidentOptionValue}>Add a new person…</option>{residents.map((resident) => <option value={resident.id} key={resident.id}>{resident.name || "Name not provided"}</option>)}</select><ChevronDown size={15} /></div>
               </label>
             </>}
 
             <label className="form-field">
-              <span>{outcome === "follow_up" ? "Requested next step" : "Visit note"} <small>Optional</small></span>
+              <span>{outcome === "follow_up" ? "What should happen next?" : "Note"} <small>Optional</small></span>
               <textarea
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 rows={3}
                 maxLength={data.church.noteCharacterLimit + 1}
-                placeholder={linkedResidentId ? "Keep person-specific context concise and respectful." : "A brief fact about this visit—not a private care note."}
+                placeholder={linkedResidentId ? "Keep it short and kind." : "A short, factual note. Your team can see it."}
               />
               <em className={noteRemaining < 0 ? "over" : ""}>{noteRemaining} characters remaining</em>
             </label>
@@ -344,7 +343,7 @@ export function PropertyDrawer({
             <div className="followup-form">
               <div className="form-row">
                 <label className="form-field">
-                  <span>Return date</span>
+                  <span>When</span>
                   <input type="date" min={calendarDaysFromNow(0, data.church.timezone)} value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} />
                 </label>
                 {!linkedResidentId && <label className="form-field">
@@ -352,8 +351,8 @@ export function PropertyDrawer({
                   <div className="select-wrap"><select value={assignedTeamId} onChange={(event) => setAssignedTeamId(event.target.value)}><option value="">Unassigned</option>{data.teams.map((team) => <option value={team.id} key={team.id}>{team.name}</option>)}</select><ChevronDown size={15} /></div>
                 </label>}
               </div>
-              <small className="followup-link-help">{linkedResidentId ? "This task will stay private with the person and follow their discipleship owner." : "Location follow-ups remain visible to the assigned outreach team."}</small>
-              {followUpRestricted && <p className="inline-notice" role="status">This person has an active no-contact or no-visit instruction. Record the encounter as a conversation if needed, but do not create this return task.</p>}
+              <small className="followup-link-help">{linkedResidentId ? "This follow-up goes to the person’s owner and stays private." : "The team you pick can see this follow-up."}</small>
+              {followUpRestricted && <p className="inline-notice" role="status">This person asked not to be contacted. You can log the conversation, but not a follow-up.</p>}
             </div>
           )}
           </div>}
@@ -378,7 +377,7 @@ export function PropertyDrawer({
           {visits.length ? visits.map((visit) => (
             <VisitHistoryItem visit={visit} volunteerName={volunteerNames.get(visit.volunteerId) ?? "Volunteer"} key={visit.id} />
           )) : (
-            <div className="empty-mini"><History size={21} /><strong>No visit history</strong><span>The first saved visit will appear here.</span></div>
+            <div className="empty-mini"><History size={21} /><strong>No visits yet</strong><span>Visits show up here after you save one.</span></div>
           )}
         </div>
       ) : (
@@ -391,15 +390,15 @@ export function PropertyDrawer({
               pathwayEnabled={Boolean(data.church.pathwayEnabled)}
               autoFocusName={guidedPersonEntry || visitPersonEntry}
               onCancel={() => {
-                if (guidedPersonEntry) finishGuidedPersonEntry("Name skipped — record what happened at this door.");
+                if (guidedPersonEntry) finishGuidedPersonEntry("No name, that’s fine. What happened?");
                 else if (visitPersonEntry) finishVisitPersonEntry();
                 else setEditingResident(null);
               }}
               onSave={async (input) => {
                 const residentId = await onUpsertResident(property.id, input, editingResident === "new" ? undefined : editingResident.id);
                 if (editingResident === "new") setLinkedResidentId(residentId);
-                if (guidedPersonEntry) finishGuidedPersonEntry("Person saved — now record what happened at this door.");
-                else if (visitPersonEntry) finishVisitPersonEntry("Person saved and selected for this visit.");
+                if (guidedPersonEntry) finishGuidedPersonEntry("Saved. Now, what happened?");
+                else if (visitPersonEntry) finishVisitPersonEntry("Saved and added to this visit.");
                 else setEditingResident(null);
               }}
             />
@@ -421,7 +420,7 @@ export function PropertyDrawer({
                     }}><Trash2 size={14} /></button>}
                   </article>
                 ))}
-                {!residents.length && <div className="empty-mini"><Users size={21} /><strong>No people added</strong></div>}
+                {!residents.length && <div className="empty-mini"><Users size={21} /><strong>No one added yet</strong></div>}
               </div>
             </>
           )}
@@ -449,7 +448,7 @@ function GuidedConversation({ guideTitle, guideContext, steps, index: requestedI
     <section className="doorstep-guide" aria-labelledby="doorstep-guide-title">
       <div className="doorstep-guide-heading">
         <div><p className="visually-hidden">{guideContext ? ` · ` : ""}{guideTitle}</p><h2 id="doorstep-guide-title">{step.title}</h2></div>
-        <button className="button quiet small doorstep-without-guide" type="button" onClick={onRecordWithoutGuide}>Proceed without guide</button>
+        <button className="button quiet small doorstep-without-guide" type="button" onClick={onRecordWithoutGuide}>Skip the guide</button>
       </div>
       <div className="doorstep-progress" role="group" aria-label={`Step ${index + 1} of ${steps.length}`}>
         {steps.map((item, itemIndex) => (
@@ -468,11 +467,11 @@ function GuidedConversation({ guideTitle, guideContext, steps, index: requestedI
         <blockquote>“{step.sampleWords}”</blockquote>
       </div>}
       <ScriptureReader references={step.scriptureReferences} theme="light" />
-      <button className="skip-to-wrap" type="button" onClick={onFinish}>Conversation is wrapping up</button>
+      <button className="skip-to-wrap" type="button" onClick={onFinish}>Wrapping up</button>
       <div className="doorstep-guide-actions">
         <button className="button quiet" type="button" disabled={index === 0} onClick={() => onChangeIndex(Math.max(0, index - 1))}>Previous</button>
         <button className="button primary" type="button" onClick={() => finalStep ? onFinish() : onChangeIndex(index + 1)}>
-          {finalStep ? "Wrap up" : "Next prompt"} <ArrowRight size={15} />
+          {finalStep ? "Wrap up" : "Next"} <ArrowRight size={15} />
         </button>
       </div>
     </section>
@@ -486,7 +485,7 @@ function NamePrompt({ onBack, onAddPerson, onSkip }: { onBack: () => void; onAdd
       <p>Before you leave</p>
       <h2 id="name-prompt-title">Ask their name, if it feels natural.</h2>
       <blockquote>“Before I go, may I ask your first name?”</blockquote>
-      <span>Only save what they choose to share. You can skip this and record the visit immediately.</span>
+      <span>Only save what they’re happy to share.</span>
       <div className="name-prompt-actions">
         <button className="button primary" type="button" onClick={onAddPerson}><UserRound size={15} /> Add person details</button>
         <button className="button quiet" type="button" onClick={onSkip}>Skip for now</button>
@@ -527,7 +526,7 @@ function ResidentForm({ resident, volunteers, activeVolunteerId, pathwayEnabled,
   return (
     <div className="resident-form" aria-busy={action.busy}>
       <div className="form-stack">
-        <label className="form-field"><span>Name or useful description</span><input ref={nameInputRef} required={!resident} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="A shared name or respectful identifying description" /></label>
+        <label className="form-field"><span>Name</span><input ref={nameInputRef} required={!resident} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="First name, or a kind description" /></label>
         {pathwayEnabled && <label className="form-field"><span>Faith status <small>Self-described only</small></span><select value={faithStatus} onChange={(event) => setFaithStatus(event.target.value as Resident["faithStatus"])}>{faithStatusValues.map((value) => <option value={value} key={value}>{faithStatusLabels[value]}</option>)}</select></label>}
         <p>Responsible person: {volunteers.find((v) => v.id === assignedVolunteerId)?.name ?? activeOwner?.name ?? "You"}. Arrange ownership changes through a care handoff in People.</p>
         {pathwayEnabled && <label className="form-field"><span>Relationship stage</span><select value={discipleshipStage} onChange={(event) => setDiscipleshipStage(event.target.value as Resident["discipleshipStage"])}>{discipleshipStageValues.map((value) => <option value={value} key={value}>{discipleshipStageLabels[value]}</option>)}</select></label>}
@@ -537,9 +536,9 @@ function ResidentForm({ resident, volunteers, activeVolunteerId, pathwayEnabled,
         <label className="form-field"><span>Email <small>Optional</small></span><input type="email" inputMode="email" autoComplete="off" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         <label className="form-field"><span>Preferred contact</span><select value={preferredContact} onChange={(event) => setPreferredContact(event.target.value as Resident["preferredContact"])}><option value="none">No preference</option><option value="text">Text message</option><option value="call">Phone call</option><option value="email">Email</option></select></label>
       </div>
-      <label className="form-field"><span>Tracking status</span><select value={status} onChange={(event) => setStatus(event.target.value as Resident["status"])}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
+      <label className="form-field"><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value as Resident["status"])}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-      {!contactMethodValid && <p className="form-warning">Enter the phone number or email needed for the selected contact method.</p>}
+      {!contactMethodValid && <p className="form-warning">Add a phone number or email for that contact method.</p>}
       <div className="modal-actions"><button className="button quiet" onClick={onCancel}>Cancel</button><button className="button primary" disabled={!canSave || action.busy} onClick={() => void action.run(() => onSave({
         name: name.trim() || undefined,
         faithStatus,
@@ -566,7 +565,7 @@ function VisitHistoryItem({ visit, volunteerName }: { visit: Visit; volunteerNam
         <div><strong>{current.voided ? "Entered in error · " : ""}{outcomeMeta[current.outcome].label}</strong><span><Clock3 size={12} /> {formatDateTime(visit.recordedAt)}</span></div>
         {visit.objectiveNote && <p>{visit.objectiveNote}</p>}
         <small>Recorded by {volunteerName}</small>
-        {Boolean(visit.corrections?.length) && <details><summary>Original and reviewed corrections</summary><p>Original: {outcomeMeta[visit.outcome].label} · {(visit.context ?? "door").replaceAll("_", " ")}. Original links, note and date retained.</p>{visit.corrections?.map((correction) => <p key={correction.id}><time>{formatDateTime(correction.createdAt)}</time> · {correction.voided ? "Entered in error" : outcomeMeta[correction.outcome].label} · {correction.context.replaceAll("_", " ")} — {correction.reason}</p>)}<p>Tasks and contact restrictions unchanged.</p></details>}
+        {Boolean(visit.corrections?.length) && <details><summary>Correction history</summary><p>Original: {outcomeMeta[visit.outcome].label} · {(visit.context ?? "door").replaceAll("_", " ")}. Original links, note and date retained.</p>{visit.corrections?.map((correction) => <p key={correction.id}><time>{formatDateTime(correction.createdAt)}</time> · {correction.voided ? "Entered in error" : outcomeMeta[correction.outcome].label} · {correction.context.replaceAll("_", " ")} — {correction.reason}</p>)}<p>Tasks and contact restrictions unchanged.</p></details>}
       </div>
     </article>
   );

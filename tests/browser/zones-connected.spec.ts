@@ -156,7 +156,7 @@ async function signIn(page: Page) {
   await page.getByRole("textbox", { name: "Email address" }).fill("leader@neighborwalk.test");
   await page.getByRole("textbox", { name: "Password", exact: true }).fill("NeighborWalk-test-123!");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /Hello,/ })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible({ timeout: 60_000 });
 }
 
 async function queued(page: Page) {
@@ -243,10 +243,10 @@ test("a connected leader draws a Giles parent, readies one whole-zone target, an
     await dialog.getByRole("textbox", { name: "Walk name", exact: true }).fill(walkName);
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
 
-    await dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true }).selectOption("");
-    await dialog.getByRole("button", { name: "Draw and name a new zone", exact: true }).click();
+    await dialog.getByRole("combobox", { name: "Neighborhood", exact: true }).selectOption("");
+    await dialog.getByRole("button", { name: "New neighborhood", exact: true }).click();
     const creator = dialog.locator(".walk-parent-zone-creator");
-    await creator.getByRole("textbox", { name: "Zone name", exact: true }).fill(zoneName);
+    await creator.getByRole("textbox", { name: "Neighborhood name", exact: true }).fill(zoneName);
     const map = creator.getByRole("region", { name: /Interactive map of/ });
     await expect(map).toBeVisible();
     await expect(creator.locator(".map-state")).toHaveCount(0);
@@ -266,7 +266,7 @@ test("a connected leader draws a Giles parent, readies one whole-zone target, an
 
     const parcelRpcPromise = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/rpc/planning_parcels_for_boundary_v1"));
     const streetRpcPromise = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/rpc/street_segments_for_boundary_v1"));
-    await creator.getByRole("button", { name: "Create and use this zone", exact: true }).click();
+    await creator.getByRole("button", { name: "Create neighborhood", exact: true }).click();
     const [parcelRpc, streetRpc] = await Promise.all([parcelRpcPromise, streetRpcPromise]);
     expect(parcelRpc.status()).toBe(200); expect(streetRpc.status()).toBe(200);
     const planning = await parcelRpc.json() as PlanningResponse;
@@ -276,14 +276,14 @@ test("a connected leader draws a Giles parent, readies one whole-zone target, an
     expect(streets.release).toBe(streetRelease);
     expect(streets.complete).toBe(true); expect(streets.truncated).toBe(false); expect(streets.features).toHaveLength(1);
 
-    const planner = dialog.getByRole("region", { name: `Plan targets inside ${zoneName}`, exact: true });
+    const planner = dialog.getByRole("region", { name: `Routes in ${zoneName}`, exact: true });
     const wholeZone = planner.getByRole("button", { name: "Whole zone", exact: true });
     await expect(wholeZone).toBeEnabled();
     await wholeZone.click();
     await expect(planner.locator(".walk-target-list li")).toHaveCount(1);
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
 
-    await expect(dialog.getByRole("heading", { name: "Invite people to the outing", exact: true })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Who’s coming?", exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "Invite Test Volunteer", exact: true }).click();
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
     await dialog.getByRole("textbox", { name: "Purpose", exact: true }).fill("Fictional connected map-first verification.");

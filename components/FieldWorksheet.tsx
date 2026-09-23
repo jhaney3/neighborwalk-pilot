@@ -1,6 +1,6 @@
 import type { AddressWorksheetPage, AddressWorksheetRow } from "../lib/target-address-list";
 
-const WORKSHEET_OUTCOMES = ["No answer", "Talked", "Follow-up", "Declined", "Inaccessible", "Do not revisit"];
+const WORKSHEET_OUTCOMES = ["No answer", "Talked", "Follow-up", "Declined", "Inaccessible", "Don’t knock"];
 
 export type FieldWorksheetContext = {
   outingName: string;

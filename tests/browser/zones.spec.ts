@@ -89,8 +89,8 @@ async function openDemo(page: Page, options: { realPlanningGis?: boolean } = {})
     body: JSON.stringify({ version: 8, sources: {}, layers: [] }),
   }));
   await page.goto("/demo");
-  await expect(page.getByText(/Sample workspace · fictional data only/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  await expect(page.getByText(/Practice with a sample church/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   return planningRequests;
 }
 
@@ -146,7 +146,7 @@ async function installLawrenceDemoZone(page: Page) {
     throw new Error("The fictional demo workspace was not found in IndexedDB.");
   }, LAWRENCE_ZONE);
   await page.reload();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
 }
 
 function requestUsesLawrenceBoundary(request: import("@playwright/test").Request) {
@@ -414,7 +414,7 @@ async function installTargetFixture(page: Page): Promise<TargetFixture> {
   }, suffix);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   return fixture;
 }
 
@@ -476,10 +476,10 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   await expect(dialog.getByText("Parcels: 6 residential parcels", { exact: true })).toBeVisible();
   const parcelRequestsBeforeCreator = planningRequests.filter(({ pathname }) => pathname === "public_map_parcels_for_boundary_v1").length;
 
-  await dialog.getByRole("button", { name: "Draw and name a new zone", exact: true }).click();
+  await dialog.getByRole("button", { name: "New neighborhood", exact: true }).click();
   const creator = dialog.locator(".walk-parent-zone-creator");
-  const createZone = creator.getByRole("button", { name: "Create and use this zone", exact: true });
-  await creator.getByRole("textbox", { name: "Zone name", exact: true }).fill(zoneName);
+  const createZone = creator.getByRole("button", { name: "Create neighborhood", exact: true });
+  await creator.getByRole("textbox", { name: "Neighborhood name", exact: true }).fill(zoneName);
   await expect(createZone).toBeDisabled();
   const map = creator.getByRole("region", { name: /Interactive map of/ });
   await expect(map).toBeVisible();
@@ -492,7 +492,7 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   expect(creatorRing).toHaveLength(5);
   expect(creatorRing?.[0]).toEqual(creatorRing?.at(-1));
   expect(new Set(creatorRing?.slice(0, -1).map((point) => point.join(":"))).size).toBe(4);
-  await expect(creator.getByText("6 residential parcels loaded. Draw your zone around the neighborhood.", { exact: true })).toBeVisible();
+  await expect(creator.getByText("6 homes loaded. Draw around the neighborhood.", { exact: true })).toBeVisible();
   const bounds = await map.boundingBox();
   expect(bounds).not.toBeNull();
   await dragAcrossMap(page, map, [.15, .2], [.85, .8]);
@@ -500,9 +500,9 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   await expect(createZone).toBeEnabled();
   await createZone.click();
 
-  const parentZone = dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true });
+  const parentZone = dialog.getByRole("combobox", { name: "Neighborhood", exact: true });
   await expect(parentZone.locator("option:checked")).toHaveText(zoneName);
-  const planner = dialog.getByRole("region", { name: `Plan targets inside ${zoneName}`, exact: true });
+  const planner = dialog.getByRole("region", { name: `Routes in ${zoneName}`, exact: true });
   await expect(planner.getByRole("button", { name: "Streets", exact: true })).toBeEnabled();
   await planner.getByRole("button", { name: "Whole zone", exact: true }).click();
   await expect(planner.locator(".walk-target-list li")).toHaveCount(1);
@@ -510,7 +510,7 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   const continueToWho = dialog.getByRole("button", { name: "Continue", exact: true });
   await expect(continueToWho).toBeEnabled();
   await continueToWho.click();
-  await expect(dialog.getByRole("heading", { name: "Invite people to the outing", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Who’s coming?", exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Invite Maya", exact: true }).click();
   await expect(dialog.getByRole("button", { name: "Remove Maya", exact: true })).toHaveAttribute("aria-pressed", "true");
   await captureDesktopAndMobile(page, `zones-${suffix}-who`);
@@ -546,7 +546,7 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   expect(firstState.participants[0]).toMatchObject({ eventId: firstState.events[0].id, status: "invited" });
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   expect(await plannedWalkState(page, walkName, zoneName)).toEqual(firstState);
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
   const readyCard = page.locator(".outing-card").filter({ hasText: walkName });
@@ -572,7 +572,7 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   const completedState = await plannedWalkState(page, walkName, zoneName);
   expect(completedState.events[0].status).toBe("completed");
   await page.reload();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   expect(await plannedWalkState(page, walkName, zoneName)).toEqual(completedState);
   expect(runtimeErrors.errors).toEqual([]);
 });
@@ -584,10 +584,10 @@ test("the planner starts from a persistent zone and offers area and street targe
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
 
-  const parentZone = dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true });
+  const parentZone = dialog.getByRole("combobox", { name: "Neighborhood", exact: true });
   await expect(parentZone).toBeVisible();
   await parentZone.selectOption({ label: "Crockett Heights" });
-  const planner = dialog.getByRole("region", { name: "Plan targets inside Crockett Heights", exact: true });
+  const planner = dialog.getByRole("region", { name: "Routes in Crockett Heights", exact: true });
   await expect(planner).toBeVisible();
   await expect(planner.getByRole("button", { name: "Whole zone", exact: true })).toBeEnabled();
   const map = planner.getByRole("application", { name: "Interactive target map", exact: true });
@@ -682,13 +682,13 @@ test("real Lawrence parcels support a new zone and ready whole-zone walk without
     && requestUsesLawrenceBoundary(response.request()));
   const baseParcelsPromise = page.waitForResponse((response) => response.url().includes("/rest/v1/rpc/public_map_parcels_for_boundary_v1")
     && requestUsesLawrenceBoundary(response.request()));
-  await dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true }).selectOption(LAWRENCE_ZONE.id);
+  await dialog.getByRole("combobox", { name: "Neighborhood", exact: true }).selectOption(LAWRENCE_ZONE.id);
   const [baseStreetsResponse, baseParcelsResponse] = await Promise.all([baseStreetsPromise, baseParcelsPromise]);
   expect(baseStreetsResponse.status()).toBe(200);
   expect(baseParcelsResponse.status()).toBe(200);
 
   const viewportParcelsPromise = page.waitForResponse((response) => response.url().includes("/rest/v1/rpc/public_map_parcels_for_boundary_v1"));
-  await dialog.getByRole("button", { name: "Draw and name a new zone", exact: true }).click();
+  await dialog.getByRole("button", { name: "New neighborhood", exact: true }).click();
   const creator = dialog.locator(".walk-parent-zone-creator");
   const viewportParcelsResponse = await viewportParcelsPromise;
   expect(viewportParcelsResponse.status()).toBe(200);
@@ -707,9 +707,9 @@ test("real Lawrence parcels support a new zone and ready whole-zone walk without
     && (feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon")
     && Array.isArray(feature.geometry.coordinates)
     && hasGeoJsonPoint(feature.representative_point))).toBe(true);
-  await expect(creator.getByText(`${viewportPayload.features?.length} residential parcels loaded. Draw your zone around the neighborhood.`, { exact: true })).toBeVisible();
+  await expect(creator.getByText(`${viewportPayload.features?.length} homes loaded. Draw around the neighborhood.`, { exact: true })).toBeVisible();
 
-  await creator.getByRole("textbox", { name: "Zone name", exact: true }).fill(zoneName);
+  await creator.getByRole("textbox", { name: "Neighborhood name", exact: true }).fill(zoneName);
   const creatorMap = creator.getByRole("region", { name: /Interactive map of/ });
   const creatorBounds = await creatorMap.boundingBox();
   expect(creatorBounds).not.toBeNull();
@@ -720,7 +720,7 @@ test("real Lawrence parcels support a new zone and ready whole-zone walk without
 
   const createdStreetsPromise = page.waitForResponse((response) => response.url().includes("/rest/v1/rpc/public_map_streets_for_boundary_v1"));
   const createdParcelsPromise = page.waitForResponse((response) => response.url().includes("/rest/v1/rpc/public_map_parcels_for_boundary_v1"));
-  await creator.getByRole("button", { name: "Create and use this zone", exact: true }).click();
+  await creator.getByRole("button", { name: "Create neighborhood", exact: true }).click();
   const [createdStreetsResponse, createdParcelsResponse] = await Promise.all([createdStreetsPromise, createdParcelsPromise]);
   const streetPayload = await createdStreetsResponse.json() as {
     release?: string;
@@ -744,9 +744,9 @@ test("real Lawrence parcels support a new zone and ready whole-zone walk without
     && Array.isArray(feature.geometry.coordinates)
     && hasGeoJsonPoint(feature.representative_point))).toBe(true);
 
-  const parentZone = dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true });
+  const parentZone = dialog.getByRole("combobox", { name: "Neighborhood", exact: true });
   await expect(parentZone.locator("option:checked")).toHaveText(zoneName);
-  const planner = dialog.getByRole("region", { name: `Plan targets inside ${zoneName}`, exact: true });
+  const planner = dialog.getByRole("region", { name: `Routes in ${zoneName}`, exact: true });
   await expect(planner.getByText(`Streets: ${streetPayload.features?.length} sections`, { exact: true })).toBeVisible();
   await expect(planner.getByText(`Parcels: ${parcelPayload.features?.length} residential parcels`, { exact: true })).toBeVisible();
   await expect(planner.getByRole("button", { name: "Streets", exact: true })).toBeEnabled();
@@ -812,10 +812,10 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   await expect(page.getByText("target covered tonight", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Loading the neighborhood map", { exact: true })).toBeHidden();
   await captureDesktopAndMobile(page, `zones-${fixture.secondTargetId}-accepted-field`);
-  const display = page.getByRole("group", { name: "Outreach display", exact: true });
+  const display = page.getByRole("group", { name: "View as", exact: true });
   await display.getByRole("button", { name: "Address list", exact: true }).click();
   const roster = page.getByRole("region", { name: "Outreach address list", exact: true });
-  await expect(roster.getByRole("combobox", { name: "Territory", exact: true })).toHaveCount(0);
+  await expect(roster.getByRole("combobox", { name: "Neighborhood", exact: true })).toHaveCount(0);
   await expect(roster.getByRole("button", { name: "Print field worksheet", exact: true })).toBeVisible();
   await expect(roster.getByRole("button", { name: new RegExp(fixture.apartmentAddress) })).toHaveCount(2);
   await expect(roster.getByText(fixture.outsideAddress, { exact: false })).toHaveCount(0);
@@ -836,7 +836,7 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   await listSearch.fill("");
 
   await roster.getByRole("button", { name: new RegExp(`${fixture.apartmentAddress}.*Apartment A`) }).click();
-  const drawer = page.getByRole("dialog", { name: new RegExp(`Location details for ${fixture.apartmentAddress}`) });
+  const drawer = page.getByRole("dialog", { name: new RegExp(`Home details for ${fixture.apartmentAddress}`) });
   await drawer.locator(".outcome-options").getByRole("button", { name: "No answer", exact: true }).click();
   await drawer.getByRole("button", { name: "Save visit", exact: true }).click();
   await expect(drawer).toBeHidden();
@@ -851,21 +851,21 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   await expect(finishConfirmation).toContainText("Other routes stay open");
   await finishConfirmation.getByRole("button", { name: "Finish route", exact: true }).click();
   const statusControls = page.getByRole("region", { name: "Walk status controls", exact: true });
-  await expect(statusControls).toContainText("active");
+  await expect(statusControls).toContainText("Live");
   await statusControls.getByRole("button", { name: "Complete walk", exact: true }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Complete walk", exact: true }).click();
-  await expect(statusControls).toContainText("completed");
+  await expect(statusControls).toContainText("Done");
   const assignment = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });
-  await expect(assignment).toContainText("finished tonight");
+  await expect(assignment).toContainText("Finished tonight");
   await expect(assignment).toContainText("1 of 2 residential properties visited tonight — 50%");
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.getByRole("checkbox", { name: "Show past walks", exact: true }).check();
   await page.locator(".outing-card").filter({ hasText: fixture.eventName }).click();
   const reloaded = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });
-  await expect(reloaded).toContainText("finished tonight");
+  await expect(reloaded).toContainText("Finished tonight");
   await expect(reloaded).toContainText("1 of 2 residential properties visited tonight — 50%");
   const saved = await targetFixtureState(page, fixture);
   expect(saved.event?.status).toBe("completed");
@@ -884,7 +884,7 @@ test("repeating a walk keeps preparation but requires fresh targets and acceptan
 
   const dialog = page.getByRole("dialog", { name: "Repeat this walk", exact: true });
   await expect(dialog).toContainText("Tonight’s targets, owners, visits and tasks are not copied.");
-  await dialog.getByRole("button", { name: "Create repeated draft", exact: true }).click();
+  await dialog.getByRole("button", { name: "Create draft", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("heading", { name: fixture.eventName, exact: true })).toBeVisible();
   await expect(page.getByText("draft", { exact: true }).first()).toBeVisible();
@@ -897,7 +897,7 @@ test("repeating a walk keeps preparation but requires fresh targets and acceptan
   expect(firstState.repeatedTargetCount).toBe(0);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   const reloaded = await targetFixtureState(page, fixture);
   expect(reloaded.repeatedEvents).toEqual(firstState.repeatedEvents);
   expect(reloaded.repeatedAssignmentCount).toBe(0);
@@ -912,13 +912,13 @@ test("replacing a frozen target preserves history and requires fresh acceptance"
 
   const firstAssignment = page.locator(".assignment-list li").filter({ hasText: fixture.firstTargetName });
   await firstAssignment.getByRole("button", { name: "Cancel assignment", exact: true }).click();
-  await expect(firstAssignment).toContainText("No crew yet");
+  await expect(firstAssignment).toContainText("No team yet");
 
   const previousAssignment = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });
-  await previousAssignment.getByRole("button", { name: "Replace target", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Replace frozen target", exact: true });
+  await previousAssignment.getByRole("button", { name: "Replace route", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Replace route", exact: true });
   await expect(dialog).toContainText(fixture.secondTargetName);
-  const planner = dialog.getByRole("region", { name: `Plan targets inside ${fixture.parentName}`, exact: true });
+  const planner = dialog.getByRole("region", { name: `Routes in ${fixture.parentName}`, exact: true });
   await planner.getByRole("button", { name: "Whole zone", exact: true }).click();
   await expect(planner.locator(".walk-target-list li")).toHaveCount(1);
   await expect(planner.getByRole("button", { name: /^Remove / })).toBeEnabled();
@@ -930,11 +930,11 @@ test("replacing a frozen target preserves history and requires fresh acceptance"
   await page.getByRole("alertdialog").getByRole("button", { name: "Replace", exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  await expect(previousAssignment).toContainText("No crew yet");
+  await expect(previousAssignment).toContainText("No team yet");
   const replacementAssignment = page.locator(".assignment-list li").filter({ hasText: fixture.parentName });
-  await expect(replacementAssignment).toContainText("assigned");
-  await expect(replacementAssignment.getByRole("button", { name: "I can join", exact: true })).toHaveCount(0);
-  await expect(replacementAssignment.getByRole("button", { name: "I can’t make it", exact: true })).toHaveCount(0);
+  await expect(replacementAssignment).toContainText("Assigned");
+  await expect(replacementAssignment.getByRole("button", { name: "Going", exact: true })).toHaveCount(0);
+  await expect(replacementAssignment.getByRole("button", { name: "Can’t go", exact: true })).toHaveCount(0);
 
   const replaced = await targetFixtureState(page, fixture);
   expect(replaced.eventAssignments).toHaveLength(3);
@@ -951,7 +951,7 @@ test("replacing a frozen target preserves history and requires fresh acceptance"
   });
 
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Home", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Can you join?", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Walk invitations", exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: `Your response for ${fixture.parentName} on ${fixture.eventName}`, exact: true })).toHaveCount(0);
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.locator(".outing-card").filter({ hasText: fixture.eventName }).click();
@@ -963,7 +963,7 @@ test("replacing a frozen target preserves history and requires fresh acceptance"
   expect(opened.eventAssignments.find(({ id }) => id === freshAssignment?.id)?.status).toBe("assigned");
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   const reloaded = await targetFixtureState(page, fixture);
   expect(reloaded.eventAssignments).toEqual(opened.eventAssignments);
   expect(reloaded.eventTargets).toEqual(opened.eventTargets);

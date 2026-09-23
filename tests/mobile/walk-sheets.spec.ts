@@ -28,8 +28,8 @@ for (const width of [320, 393]) test(`walk options release taps and sheets fit a
     await page.screenshot({ path: `outputs/ios/invitations-${test.info().project.name}-${width}.png` });
     await sheet.getByRole("button", { name: "Close dialog" }).click();
     await expect(sheet).toHaveCount(0);
-    await page.getByRole("button", { name: "Manage crews", exact: true }).click();
-    const crews = page.getByRole("dialog", { name: "Crews", exact: true });
+    await page.getByRole("button", { name: "Edit teams", exact: true }).click();
+    const crews = page.getByRole("dialog", { name: "Teams", exact: true });
     await expect(crews).toBeVisible();
     expect(await crews.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     await crews.getByRole("button", { name: "Close dialog" }).click();
@@ -45,12 +45,12 @@ test("opening a walk defaults to your crew assignment and allows a leader overri
   await page.goto("/demo");
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.getByRole("button", { name: /^View details for / }).first().click();
-  const target = page.getByRole("combobox", { name: "Target to open" });
+  const target = page.getByRole("combobox", { name: "Route" });
   await expect(target.locator("option:checked")).toHaveText("Crockett north");
-  await expect(page.getByText("Your assigned target is selected.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your route is selected.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Open walk", exact: true })).toBeEnabled();
   await target.selectOption({ label: "Crockett south" });
   await expect(target.locator("option:checked")).toHaveText("Crockett south");
-  await expect(page.getByText("Your assigned target is selected.", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Your route is selected.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Open walk", exact: true })).toBeEnabled();
 });

@@ -25,46 +25,46 @@ export const outcomeMeta: Record<
   { label: string; short: string; color: string; description: string }
 > = {
   unvisited: {
-    label: "Not visited",
-    short: "Open",
+    label: "Not knocked yet",
+    short: "Not yet",
     color: "#ffffff",
-    description: "This location has not been visited during the selected event.",
+    description: "No one has knocked here yet.",
   },
   no_answer: {
     label: "No answer",
     short: "No answer",
     color: "#6b91ad",
-    description: "The team attempted a visit but no one answered.",
+    description: "No one came to the door.",
   },
   conversation: {
-    label: "Conversation",
+    label: "Talked",
     short: "Talked",
     color: "#4d977e",
-    description: "A conversation took place. No return visit was requested.",
+    description: "You had a conversation. No one needs to come back.",
   },
   follow_up: {
-    label: "Follow-up requested",
+    label: "Follow-up",
     short: "Follow-up",
     color: "#e9a84a",
-    description: "A return visit was requested.",
+    description: "They’d like someone to come back or be in touch.",
   },
   declined: {
-    label: "Politely declined",
-    short: "Declined",
+    label: "Not interested",
+    short: "Not interested",
     color: "#d2aaa6",
-    description: "The resident declined the conversation.",
+    description: "They didn’t want to talk.",
   },
   do_not_visit: {
-    label: "Do not revisit",
-    short: "Do not visit",
+    label: "Don’t knock",
+    short: "Don’t knock",
     color: "#666f6b",
-    description: "Future canvassers should skip this location.",
+    description: "They asked us not to come back.",
   },
   inaccessible: {
-    label: "Inaccessible",
-    short: "Inaccessible",
+    label: "Couldn’t reach",
+    short: "Couldn’t reach",
     color: "#9b8c7d",
-    description: "The location could not be safely or lawfully approached.",
+    description: "The door couldn’t be reached safely.",
   },
 };
 

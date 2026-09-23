@@ -31,7 +31,6 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
-  UserCheck,
   UserRound,
   Users,
 } from "lucide-react";
@@ -52,7 +51,7 @@ import {
   type ResidentInput,
 } from "../lib/domain";
 import { MapCanvas } from "./MapCanvas";
-import { Modal, ViewHeading, useConfirm } from "./ui";
+import { Modal, useConfirm } from "./ui";
 
 export type PeopleViewProps = {
   data: NeighborWalkData;
@@ -187,8 +186,6 @@ export function PeopleView({
 
   const selected = people.get(selectedId ?? "");
   const filterCount = Number(owner !== "all") + Number(stage !== "all") + Number(status !== "active") + Number(sort !== "next_step");
-  const mine = data.residents.filter((resident) => resident.assignedVolunteerId === activeVolunteerId && resident.status === "active").length;
-  const due = data.residents.filter((resident) => !resident.mergedIntoId && ["overdue", "soon"].includes(dueState(followUpsByResident.get(resident.id)?.find((followUp) => followUp.status === "scheduled"), data.church.timezone))).length;
 
   const saveResident = async (propertyId: string | undefined, input: ResidentInput) => {
     const editing = editor && editor !== "new" ? editor : undefined;
@@ -199,12 +196,6 @@ export function PeopleView({
 
   return (
     <section className={`${embedded ? "people-view people-view-embedded" : "content-view people-view"}${selectedId ? " has-selected-person" : ""}`}>
-      {!embedded && <ViewHeading
-        eyebrow="Discipleship, person by person"
-        title="People"
-        description="Keep ownership clear, remember the whole story, and make the next faithful step visible."
-        aside={<div className="people-heading-stats" role="group" aria-label="Discipleship overview"><div><UserCheck size={16} /><strong>{mine}</strong><span>mine</span></div><div><CalendarClock size={16} /><strong>{due}</strong><span>need care</span></div></div>}
-      />}
 
       <div className="people-toolbar">
         <div className="people-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search people" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people" /></div>
@@ -264,10 +255,10 @@ export function PeopleView({
             restrictionActions={restrictionActions}
             followUps={renderPersonFollowUps?.(selected.id)}
           />
-        ) : <div className="people-profile-empty" role={selectedId ? "status" : undefined}><CircleUserRound size={32} /><strong>{selectedId ? "This person is unavailable" : "Select a person"}</strong><span>{selectedId ? "This record may be archived, outside your current access, or not prepared on this device. Connect and refresh, or ask your leader for help." : "Their follow-up plan and complete note history will appear here."}</span>{selectedId && <button className="button quiet" onClick={() => setSelectedId(null)}>Back to people</button>}</div>}
+        ) : <div className="people-profile-empty" role={selectedId ? "status" : undefined}><CircleUserRound size={32} /><strong>{selectedId ? "This person is unavailable" : "Select a person"}</strong><span>{selectedId ? "They may be archived or shared with someone else. Reconnect, or ask your leader." : "Their follow-ups and notes will show here."}</span>{selectedId && <button className="button quiet" onClick={() => setSelectedId(null)}>Back to people</button>}</div>}
       </div>
 
-      {editor && <Modal title={editor === "new" ? "Add a person" : `Edit ${editor.name || "person"}`} description="Keep only details that help you care for this person well." wide onClose={closeEditor}><PersonEditor resident={editor === "new" ? undefined : editor} data={data} activeVolunteerId={activeVolunteerId} onCancel={closeEditor} onSave={saveResident} onDelete={editor !== "new" && (canManage || editor.assignedVolunteerId === activeVolunteerId) ? async () => { await onDeleteResident(editor.id); setSelectedId(null); closeEditor(); } : undefined} /></Modal>}
+      {editor && <Modal title={editor === "new" ? "Add a person" : `Edit ${editor.name || "person"}`} description="Only what helps you care for them well." wide onClose={closeEditor}><PersonEditor resident={editor === "new" ? undefined : editor} data={data} activeVolunteerId={activeVolunteerId} onCancel={closeEditor} onSave={saveResident} onDelete={editor !== "new" && (canManage || editor.assignedVolunteerId === activeVolunteerId) ? async () => { await onDeleteResident(editor.id); setSelectedId(null); closeEditor(); } : undefined} /></Modal>}
     </section>
   );
 }
@@ -319,8 +310,8 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
   const canEdit = canManage || resident.assignedVolunteerId === activeVolunteerId;
   const sharedCount = resident.sharedWithTeamIds.length + resident.sharedWithVolunteerIds.length;
   const accessSummary = sharedCount
-    ? `Shared with ${sharedCount} additional ${sharedCount === 1 ? "group or person" : "groups or people"}`
-    : "Visible to the responsible owner and church leaders";
+    ? `Shared with ${sharedCount} more ${sharedCount === 1 ? "person or team" : "people or teams"}`
+    : "Visible to their owner and church leaders";
   const lastContactDate = lastContact
     ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: data.church.timezone }).format(new Date(lastContact.at))
     : null;
@@ -354,11 +345,8 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
         </div>
       </header>
 
-      {followUpRestricted && <p role="status" className="inline-notice person-safety-notice">{noContact ? "Do not contact. No new follow-ups should be scheduled." : `Do not schedule a ${followUpChannel} follow-up while that contact method is restricted.`} Only a leader can lift the recorded restriction with a reason.</p>}
-      <details className="person-context-details">
-        <summary><span className="person-context-main"><Info size={15} aria-hidden="true" /><strong>{lastContactDate ? `${lastContact?.source === "encounter" ? "Last contact" : "Historical contact date"} ${lastContactDate}` : "No recorded contact yet"}</strong></span>{resident.legacyCreatorAccess && <span className="person-context-access"><LockKeyhole size={13} aria-hidden="true" /> Historical access retained</span>}<span className="person-context-more">Details <ChevronRight size={14} aria-hidden="true" /></span></summary>
-        <div><p>No-answer visits, entered-in-error encounters, notes and task completion alone do not establish contact.</p>{resident.legacyCreatorAccess && <p>Historical creator access is preserved until an accepted care handoff. Explicit sharing is listed in Edit profile.</p>}</div>
-      </details>
+      {followUpRestricted && <p role="status" className="inline-notice person-safety-notice">{noContact ? "Don’t contact. No new follow-ups." : `They asked not to be contacted by ${followUpChannel}.`} Only a leader can change this.</p>}
+      <p className="person-last-contact"><Info size={15} aria-hidden="true" /><span>{lastContactDate ? `Last contact ${lastContactDate}` : "No contact yet"}</span>{resident.legacyCreatorAccess && <small><LockKeyhole size={13} aria-hidden="true" /> Whoever added them can still see this profile</small>}</p>
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
 
       <div className="person-care-grid">
@@ -368,20 +356,20 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
             <span className="care-next-copy">{nextFollowUp.note || "Follow up with this person."}</span>
             {openFollowUps.length > 1 && <span className="care-next-count">{openFollowUps.length - 1} more open {openFollowUps.length === 2 ? "task" : "tasks"}</span>}
             <span className="care-next-disclosure">View follow-ups <ChevronRight size={14} aria-hidden="true" /></span>
-          </button> : <><div><span className="profile-section-label">Next step</span></div><p className="care-next-empty">No open follow-up is planned.</p></>}
+          </button> : <><div><span className="profile-section-label">Next step</span></div><p className="care-next-empty">Nothing planned.</p></>}
           <div className="care-next-actions">{canEdit && !followUpRestricted && <FollowUpPlanner timezone={data.church.timezone} defaultDays={data.church.defaultFollowUpDays} noteLimit={data.church.noteCharacterLimit} onSave={onAddFollowUp} />}{!followUps && <button onClick={onOpenFollowUps}>Open follow-ups <ChevronRight size={13} /></button>}</div>
         </section>
         <section className="care-owner-card">
           <span className="profile-section-label">Owner</span>
           <div className="care-owner-identity"><span className="care-owner-avatar" aria-hidden="true">{personInitials(owner?.name)}</span><div><strong>{owner?.name ?? "Choose an owner"}</strong></div></div>
           {resident.pendingOwnerId ? <div className="handoff-panel">
-            <div className="handoff-panel-heading"><span><Clock3 size={15} /></span><div><strong>{isHandoffRecipient ? "Care handoff requested" : `Waiting on ${pendingOwner?.name ?? "recipient"}`}</strong><small>{isHandoffRecipient ? "You’ve been invited to take responsibility." : "A new responsible person has been invited."}</small></div></div>
-            <p>{owner?.name ?? "The current owner"} remains responsible until {isHandoffRecipient ? "you accept" : "the handoff is accepted"}.</p>
+            <div className="handoff-panel-heading"><span><Clock3 size={15} /></span><div><strong>{isHandoffRecipient ? "Handoff requested" : `Waiting on ${pendingOwner?.name ?? "recipient"}`}</strong><small>{isHandoffRecipient ? "You’ve been asked to take over." : "Waiting for them to accept."}</small></div></div>
+            <p>{owner?.name ?? "Current owner"} remains responsible until {isHandoffRecipient ? "you accept" : "the handoff is accepted"}.</p>
             {onHandoffResponse && (isHandoffRecipient
-              ? <div className="handoff-panel-actions"><button disabled={action.busy || handoffQueued} className="button primary small" onClick={() => void action.run(() => onHandoffResponse("accept"))}>Accept care &amp; open tasks</button><button disabled={action.busy || handoffQueued} className="button quiet small" onClick={() => void action.run(() => onHandoffResponse("decline"))}>Decline</button></div>
+              ? <div className="handoff-panel-actions"><button disabled={action.busy || handoffQueued} className="button primary small" onClick={() => void action.run(() => onHandoffResponse("accept"))}>Accept</button><button disabled={action.busy || handoffQueued} className="button quiet small" onClick={() => void action.run(() => onHandoffResponse("decline"))}>Decline</button></div>
               : canEdit && <div className="handoff-panel-actions"><button className="button quiet small" disabled={action.busy || handoffQueued} onClick={() => void action.run(() => onHandoffResponse("cancel"))}>Cancel request</button></div>)}</div>
-            : canEdit && <details className="care-owner-handoff"><summary>Change owner</summary><label><span>Hand off care to</span><select value="" disabled={action.busy || handoffQueued} onChange={(event) => { const id = event.target.value; if (id) void confirm({ title: "Ask them to take over?", message: "You stay responsible until they accept. Then your open follow-ups move to them.", confirmLabel: "Send request" }).then((confirmed) => { if (confirmed) void action.run(() => onChangeOwner(id)); }); }}><option value="">Choose a recipient</option>{data.volunteers.filter((v) => v.active && v.id !== resident.assignedVolunteerId).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label></details>}
-          {handoffQueued && <p role="status">Handoff change saved on this device; waiting for the church to confirm.</p>}
+            : canEdit && <details className="care-owner-handoff"><summary>Change owner</summary><label><span>Hand off to</span><select value="" disabled={action.busy || handoffQueued} onChange={(event) => { const id = event.target.value; if (id) void confirm({ title: "Ask them to take over?", message: "You stay responsible until they accept. Then your open follow-ups move to them.", confirmLabel: "Send request" }).then((confirmed) => { if (confirmed) void action.run(() => onChangeOwner(id)); }); }}><option value="">Choose a recipient</option>{data.volunteers.filter((v) => v.active && v.id !== resident.assignedVolunteerId).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label></details>}
+          {handoffQueued && <p role="status">Handoff saved. It will send when you’re back online.</p>}
         </section>
       </div>
 
@@ -393,13 +381,13 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
 
       <section id={`${tabsId}-followups-panel`} role="tabpanel" aria-labelledby={`${tabsId}-followups-tab`} className="person-profile-panel person-profile-followups" hidden={panel !== "followups"}>
         <div className="person-profile-followups-heading"><div><h3>Follow-ups</h3></div></div>
-        {followUps ?? <div className="person-tab-empty"><CalendarClock size={22} /><p>Open the follow-up workspace to review this person’s tasks and outcomes.</p><button className="button quiet small" onClick={onOpenFollowUps}>Open follow-ups</button></div>}
+        {followUps ?? <div className="person-tab-empty"><CalendarClock size={22} /><p>See every follow-up for this person.</p><button className="button quiet small" onClick={onOpenFollowUps}>Open follow-ups</button></div>}
       </section>
 
       <section id={`${tabsId}-activity-panel`} role="tabpanel" aria-labelledby={`${tabsId}-activity-tab`} className="person-profile-panel person-notes-section" hidden={panel !== "activity"}>
         <div className="person-notes-heading"><div><h3>Activity</h3></div><span>{timeline.length}</span></div>
         <div className="person-note-composer">
-          <div><MessageCircle size={17} /><strong>Add a note</strong><small>Every person note goes here.</small></div>
+          <div><MessageCircle size={17} /><strong>Add a note</strong><small>Notes stay with this person.</small></div>
           <label>Note kind<select disabled={action.busy} value={noteKind} onChange={(event) => setNoteKind(event.target.value as PersonNoteKind)}>{Object.entries(personNoteKindLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
           <div className="person-note-fields"><textarea aria-label="Care note" disabled={action.busy} rows={3} maxLength={data.church.noteCharacterLimit + 1} value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder="What should you remember for next time?" /></div>
           <div><span className={noteBody.length > data.church.noteCharacterLimit ? "over" : ""}>{data.church.noteCharacterLimit - noteBody.length} characters remaining</span><button className="button primary small" disabled={!noteValid || action.busy} onClick={() => void action.run(() => onAddNote(noteKind, noteBody), () => setNoteBody(""))}><NotebookPen size={14} /> Save note</button></div>
@@ -410,22 +398,22 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
             const canDelete = Boolean(note.noteId) && (canManage || note.actorId === activeVolunteerId);
             return <article className="person-timeline-entry general" key={note.id}><span className="person-timeline-mark"><MessageCircle size={14} /></span><div><div><span>{note.title}</span><time>{new Intl.DateTimeFormat("en-US", { timeZone: data.church.timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(note.at))}</time></div>{note.body && <p>{note.body}</p>}<footer><span>{author?.name ?? "Church record"}</span>{canDelete && <button onClick={() => { void confirm({ title: "Archive this note?", message: "It leaves the profile but stays in the church record.", confirmLabel: "Archive", destructive: true }).then((confirmed) => { if (confirmed) void action.run(() => onDeleteNote(note.noteId!)); }); }} aria-label="Archive note"><Trash2 size={12} /></button>}</footer></div></article>;
           })}
-          {!timeline.length && <div className="person-timeline-empty"><NotebookPen size={22} /><strong>No activity yet</strong><span>Add the first note above. Notes follow your church’s retention and archival policy.</span></div>}
+          {!timeline.length && <div className="person-timeline-empty"><NotebookPen size={22} /><strong>No activity yet</strong><span>Add the first note above.</span></div>}
         </div>
       </section>
 
       <section id={`${tabsId}-details-panel`} role="tabpanel" aria-labelledby={`${tabsId}-details-tab`} className="person-profile-panel person-profile-details" hidden={panel !== "details"}>
         {data.church.pathwayEnabled && <section className="discipleship-path" aria-label="Discipleship relationship stage">
-          <div><span className="profile-section-label">Relationship path</span><small>Use stages as shared context, never as a score.</small></div>
+          <div><span className="profile-section-label">Relationship path</span><small>Shared context, never a score.</small></div>
           <div className="discipleship-path-rail">
             {discipleshipStageValues.map((stage, index) => <button key={stage} disabled={!canEdit} className={`${index < stageIndex ? "passed" : ""}${stage === resident.discipleshipStage ? " current" : ""}`} onClick={() => void action.run(() => onChangeStage(stage))} aria-current={stage === resident.discipleshipStage ? "step" : undefined}><span>{index < stageIndex ? <CheckCircle2 size={13} /> : index + 1}</span><small>{discipleshipStageLabels[stage]}</small></button>)}
           </div>
         </section>}
         <section className="person-access-card"><span className="profile-section-label">Profile access</span><div><LockKeyhole size={16} aria-hidden="true" /><strong>{accessSummary}</strong></div><p>{resident.legacyCreatorAccess ? "Historical creator access remains until an accepted care handoff." : "Explicit sharing can be reviewed and changed in Edit profile."}</p></section>
-        {originalProfiles.length > 0 && <details className="today-card person-original-profiles"><summary>Preserved original profiles ({originalProfiles.length})</summary><p>These are historical details from reviewed duplicate records, not current contact instructions. Notes, conversations, and completed tasks retain their original links and appear in the history below.</p>{originalProfiles.map((original) => <section key={original.id}><h3>{original.name || "Historical unnamed person"}</h3><dl><div><dt>Original record</dt><dd>{original.id}</dd></div><div><dt>Historical phone</dt><dd>{original.phone || "Not recorded"}</dd></div><div><dt>Historical email</dt><dd>{original.email || "Not recorded"}</dd></div><div><dt>Combined after review</dt><dd>{original.mergedAt ? new Date(original.mergedAt).toLocaleDateString() : "See audit history"}</dd></div>{data.church.pathwayEnabled && <><div><dt>Historical faith context</dt><dd>{faithStatusLabels[original.faithStatus]}</dd></div><div><dt>Historical pathway</dt><dd>{discipleshipStageLabels[original.discipleshipStage]}</dd></div></>}</dl></section>)}</details>}
+        {originalProfiles.length > 0 && <details className="today-card person-original-profiles"><summary>Preserved original profiles ({originalProfiles.length})</summary><p>Details from records that were combined into this one. Their history appears below.</p>{originalProfiles.map((original) => <section key={original.id}><h3>{original.name || "Historical unnamed person"}</h3><dl><div><dt>Original record</dt><dd>{original.id}</dd></div><div><dt>Historical phone</dt><dd>{original.phone || "Not recorded"}</dd></div><div><dt>Historical email</dt><dd>{original.email || "Not recorded"}</dd></div><div><dt>Combined after review</dt><dd>{original.mergedAt ? new Date(original.mergedAt).toLocaleDateString() : "See audit history"}</dd></div>{data.church.pathwayEnabled && <><div><dt>Historical faith context</dt><dd>{faithStatusLabels[original.faithStatus]}</dd></div><div><dt>Historical pathway</dt><dd>{discipleshipStageLabels[original.discipleshipStage]}</dd></div></>}</dl></section>)}</details>}
         <footer className="person-profile-footer">
-          <div><PauseCircle size={14} /><span><strong>Tracking status</strong><small>Paused people remain searchable; archived people leave the active list.</small></span></div>
-          <div className="person-profile-footer-actions"><select aria-label="Tracking status" value={resident.status} disabled={!canEdit} onChange={(event) => { const status = event.target.value as Resident["status"]; void action.run(() => onChangeStatus(status)); }}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select><ContactRestrictions data={data} residentId={resident.id} canManage={canManage} actions={restrictionActions} /></div>
+          <div><PauseCircle size={14} /><span><strong>Status</strong><small>Paused people still show in search. Archived people don’t.</small></span></div>
+          <div className="person-profile-footer-actions"><select aria-label="Status" value={resident.status} disabled={!canEdit} onChange={(event) => { const status = event.target.value as Resident["status"]; void action.run(() => onChangeStatus(status)); }}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select><ContactRestrictions data={data} residentId={resident.id} canManage={canManage} actions={restrictionActions} /></div>
         </footer>
       </section>
     </article>
@@ -481,25 +469,25 @@ function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onD
       email: email.trim() || undefined, preferredContact, contactPermission, lastContactAt: resident?.lastContactAt, changeReason: moving ? moveReason.trim() : undefined }));
   }}>
     <div className="person-editor-grid">
-      <label>Name or useful identifying description<input value={name} required={!resident} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="First name or a respectful description" /></label>
-      <div className="person-location-field"><label htmlFor={propertySelectId}>Home or meeting location (optional)</label><div className="person-location-control"><select id={propertySelectId} value={propertyId} onChange={(e) => { setPropertyId(e.target.value); setReviewedMove(false); }}><option value="">No address provided</option>{data.properties.filter((p) => !p.mergedIntoId).map((p) => <option key={p.id} value={p.id}>{p.address}{p.unit ? " · " + p.unit : ""}</option>)}</select><button type="button" className="person-location-map-button" aria-label="Choose a location on the map" title="Choose a location on the map" onClick={() => setLocationPickerOpen(true)}><MapIcon size={19} aria-hidden="true" /></button></div></div>
+      <label>Name<input value={name} required={!resident} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="First name, or a kind description" /></label>
+      <div className="person-location-field"><label htmlFor={propertySelectId}>Home or place to meet (optional)</label><div className="person-location-control"><select id={propertySelectId} value={propertyId} onChange={(e) => { setPropertyId(e.target.value); setReviewedMove(false); }}><option value="">No address provided</option>{data.properties.filter((p) => !p.mergedIntoId).map((p) => <option key={p.id} value={p.id}>{p.address}{p.unit ? " · " + p.unit : ""}</option>)}</select><button type="button" className="person-location-map-button" aria-label="Choose a location on the map" title="Choose a location on the map" onClick={() => setLocationPickerOpen(true)}><MapIcon size={19} aria-hidden="true" /></button></div></div>
       <label>Phone (optional)<input type="tel" autoComplete="off" value={phone} maxLength={40} minLength={3} onChange={(e) => setPhone(e.target.value)} /></label>
       <label>Email (optional)<input type="email" autoComplete="off" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} /></label>
       <label>Preferred contact<select value={preferredContact} onChange={(e) => setPreferredContact(e.target.value as Resident["preferredContact"])}><option value="none">Not discussed</option><option value="call">Phone call</option><option value="text">Text message</option><option value="email">Email</option></select></label>
-      <label>Contact request<select value={contactPermission} disabled={resident?.contactPermission === "do_not_contact"} onChange={(e) => setContactPermission(e.target.value as NonNullable<Resident["contactPermission"]>)}><option value="not_recorded">Not recorded — ask before contacting</option><option value="requested">The neighbor requested contact</option><option value="do_not_contact">Do not contact</option></select></label>
-      <label>Tracking status<select value={status} onChange={(e) => setStatus(e.target.value as Resident["status"])}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
-      {data.church.pathwayEnabled && <><label>Self-described faith (optional)<select value={faithStatus} onChange={(e) => setFaithStatus(e.target.value as Resident["faithStatus"])}>{faithStatusValues.map((v) => <option key={v} value={v}>{faithStatusLabels[v]}</option>)}</select></label><label>Relationship stage<select value={discipleshipStage} onChange={(e) => setDiscipleshipStage(e.target.value as DiscipleshipStage)}>{discipleshipStageValues.map((v) => <option key={v} value={v}>{discipleshipStageLabels[v]}</option>)}</select></label></>}
+      <label>Contact request<select value={contactPermission} disabled={resident?.contactPermission === "do_not_contact"} onChange={(e) => setContactPermission(e.target.value as NonNullable<Resident["contactPermission"]>)}><option value="not_recorded">Not asked yet</option><option value="requested">They asked us to reach out</option><option value="do_not_contact">Do not contact</option></select></label>
+      <label>Status<select value={status} onChange={(e) => setStatus(e.target.value as Resident["status"])}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
+      {data.church.pathwayEnabled && <><label>Faith, in their words (optional)<select value={faithStatus} onChange={(e) => setFaithStatus(e.target.value as Resident["faithStatus"])}>{faithStatusValues.map((v) => <option key={v} value={v}>{faithStatusLabels[v]}</option>)}</select></label><label>Relationship stage<select value={discipleshipStage} onChange={(e) => setDiscipleshipStage(e.target.value as DiscipleshipStage)}>{discipleshipStageValues.map((v) => <option key={v} value={v}>{discipleshipStageLabels[v]}</option>)}</select></label></>}
     </div>
-    {moving && <section className="inline-notice"><h3>Review this person’s location change</h3><p>{movingTasks} open next {movingTasks === 1 ? "step follows" : "steps follow"} the person to the selected location. Historical encounters and completed or cancelled tasks keep their original location. Location-specific restrictions stay with the original location; person-specific restrictions stay with the person.</p><label>Reason for the location change<textarea required minLength={3} maxLength={500} value={moveReason} onChange={(event) => setMoveReason(event.target.value)} placeholder="For example: the neighbor corrected their meeting address." /></label><label><input type="checkbox" required checked={reviewedMove} onChange={(event) => setReviewedMove(event.target.checked)} /> I have reviewed this location change and its open next steps.</label></section>}
-    <p><strong>Responsible person:</strong> {data.volunteers.find((v) => v.id === assignedVolunteerId)?.name ?? "You"}. Ownership changes through an accepted care handoff.</p>
+    {moving && <section className="inline-notice"><h3>Confirm the new location</h3><p>{movingTasks} open next {movingTasks === 1 ? "step follows" : "steps follow"} the person to the selected location. Historical encounters and completed or cancelled tasks keep their original location. Location-specific restrictions stay with the original location; person-specific restrictions stay with the person.</p><label>Why is it changing?<textarea required minLength={3} maxLength={500} value={moveReason} onChange={(event) => setMoveReason(event.target.value)} placeholder="For example: they gave us a new address." /></label><label><input type="checkbox" required checked={reviewedMove} onChange={(event) => setReviewedMove(event.target.checked)} /> I have reviewed this location change and its open next steps.</label></section>}
+    <p><strong>Owner:</strong> {data.volunteers.find((v) => v.id === assignedVolunteerId)?.name ?? "You"}. Ownership changes through an accepted care handoff.</p>
     <details className="person-sharing-section"><summary>Who can see this profile?</summary>
-      <p>The responsible person and church leaders can see it. Share only with people helping with care. Historical creator access, if present, is shown on the profile and ends at an accepted handoff.</p>
+      <p>Their owner and church leaders can see it. Share only with people helping care for them.</p>
       <fieldset><legend>Specific people</legend>{data.volunteers.filter((v) => v.active && v.id !== assignedVolunteerId).map((v) => <label key={v.id}><input type="checkbox" checked={sharedWithVolunteerIds.includes(v.id)} onChange={() => setSharedWithVolunteerIds((ids) => toggle(ids, v.id))} /> {v.name}</label>)}</fieldset>
       {!!data.teams.length && <fieldset><legend>Groups</legend>{data.teams.map((t) => <label key={t.id}><input type="checkbox" checked={sharedWithTeamIds.includes(t.id)} onChange={() => setSharedWithTeamIds((ids) => toggle(ids, t.id))} /> {t.name}</label>)}</fieldset>}
     </details>
-    {!contactValid && <p className="inline-error">Enter the phone number or email for the selected contact method.</p>}
+    {!contactValid && <p className="inline-error">Add a phone number or email for that contact method.</p>}
     {action.error && <p className="inline-error" role="alert">{action.error}</p>}
-    <div className="modal-actions split"><div>{onDelete && <button type="button" className="button danger" disabled={action.busy} onClick={() => { void confirm({ title: "Archive this person?", message: "Their open follow-ups are cancelled. Their history stays in the church record.", confirmLabel: "Archive", destructive: true }).then((confirmed) => { if (confirmed) void action.run(onDelete); }); }}>Archive person &amp; care records</button>}</div><div><button type="button" className="button quiet" disabled={action.busy} onClick={onCancel}>Cancel</button><button className="button primary" disabled={action.busy || !contactValid || (moving && (!reviewedMove || moveReason.trim().length < 3))}>{action.busy ? "Saving to device…" : "Save person"}</button></div></div>
+    <div className="modal-actions split"><div>{onDelete && <button type="button" className="button danger" disabled={action.busy} onClick={() => { void confirm({ title: "Archive this person?", message: "Their open follow-ups are cancelled. Their history stays in the church record.", confirmLabel: "Archive", destructive: true }).then((confirmed) => { if (confirmed) void action.run(onDelete); }); }}>Archive person</button>}</div><div><button type="button" className="button quiet" disabled={action.busy} onClick={onCancel}>Cancel</button><button className="button primary" disabled={action.busy || !contactValid || (moving && (!reviewedMove || moveReason.trim().length < 3))}>{action.busy ? "Saving…" : "Save person"}</button></div></div>
   </form>{locationPickerOpen && <PersonLocationPicker data={data} propertyId={propertyId} onClose={() => setLocationPickerOpen(false)} onSelect={(id) => { setPropertyId(id); setReviewedMove(false); setLocationPickerOpen(false); }} />}</>;
 }
 
@@ -523,12 +511,12 @@ function PersonLocationPicker({ data, propertyId, onClose, onSelect }: {
   const territoryProperties = mappedProperties.filter((property) => property.territoryId === territoryId);
   const selectedProperty = mappedProperties.find((property) => property.id === selectedPropertyId);
 
-  return <Modal title="Choose a location" description="Select a saved home or meeting location from the map." wide onClose={onClose}>
+  return <Modal title="Choose a location" description="Pick a saved home or place on the map." wide onClose={onClose}>
     <div className="person-location-picker">
       {territories.length > 1 && <label>Map area<select value={territoryId} onChange={(event) => { setTerritoryId(event.target.value); setSelectedPropertyId(""); }}>{territories.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></label>}
-      {territory ? <div className="person-location-map"><MapCanvas territory={territory} properties={territoryProperties} selectedPropertyId={selectedPropertyId || null} visibleOutcomes={new Set(outcomeValues)} searchTarget={null} addMode={false} drawMode={false} drawShape="polygon" draftBoundary={[]} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={setSelectedPropertyId} onAddIntent={() => undefined} onAssociatePropertiesWithParcel={() => undefined} onDrawShapeChange={() => undefined} onDraftBoundaryChange={() => undefined} onViewportChange={() => undefined} /></div> : <div className="person-location-map-empty"><MapIcon size={28} aria-hidden="true" /><strong>No mapped locations yet</strong><span>Add a mapped location before choosing it here. Addresses without map coordinates are still available in the dropdown.</span></div>}
-      <div className="person-location-selection" aria-live="polite"><MapPin size={18} aria-hidden="true" /><span>{selectedProperty ? <><strong>{selectedProperty.address}</strong>{selectedProperty.unit && <small>{selectedProperty.unit}</small>}</> : <><strong>Select a marker</strong><small>Choose the saved location that belongs with this person.</small></>}</span></div>
-      <div className="modal-actions"><button type="button" className="button quiet" onClick={onClose}>Cancel</button><button type="button" className="button primary" disabled={!selectedProperty} onClick={() => selectedProperty && onSelect(selectedProperty.id)}>Use this location</button></div>
+      {territory ? <div className="person-location-map"><MapCanvas territory={territory} properties={territoryProperties} selectedPropertyId={selectedPropertyId || null} visibleOutcomes={new Set(outcomeValues)} searchTarget={null} addMode={false} drawMode={false} drawShape="polygon" draftBoundary={[]} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={setSelectedPropertyId} onAddIntent={() => undefined} onAssociatePropertiesWithParcel={() => undefined} onDrawShapeChange={() => undefined} onDraftBoundaryChange={() => undefined} onViewportChange={() => undefined} /></div> : <div className="person-location-map-empty"><MapIcon size={28} aria-hidden="true" /><strong>No places on the map yet</strong><span>Add one on the map first, or choose an address from the list.</span></div>}
+      <div className="person-location-selection" aria-live="polite"><MapPin size={18} aria-hidden="true" /><span>{selectedProperty ? <><strong>{selectedProperty.address}</strong>{selectedProperty.unit && <small>{selectedProperty.unit}</small>}</> : <><strong>Select a marker</strong><small>Tap the place that belongs with this person.</small></>}</span></div>
+      <div className="modal-actions"><button type="button" className="button quiet" onClick={onClose}>Cancel</button><button type="button" className="button primary" disabled={!selectedProperty} onClick={() => selectedProperty && onSelect(selectedProperty.id)}>Use this place</button></div>
     </div>
   </Modal>;
 }

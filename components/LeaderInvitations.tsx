@@ -33,7 +33,7 @@ export function LeaderInvitations({ onChanged }: { onChanged: () => Promise<unkn
     try { await operation(); } catch (failure) { setError(errorMessage(failure)); } finally { setBusy(false); }
   };
   const create = async () => {
-    if (!origin || new URL(origin).protocol !== "https:") throw new Error("The operator needs to connect the invitation website before links can be shared.");
+    if (!origin || new URL(origin).protocol !== "https:") throw new Error("Invitations aren’t set up yet.");
     const client = getSupabaseBrowserClient();
     if (!client) throw new Error("Reconnect to invite someone.");
     const normalized = kind === "email" ? contact.trim().toLowerCase() : contact.replace(/[\s().-]/g, "");
@@ -54,12 +54,12 @@ export function LeaderInvitations({ onChanged }: { onChanged: () => Promise<unkn
     else { await navigator.clipboard.writeText(text); setMessage("Invitation copied. Paste it into a message."); }
   };
   return <div className={`member-invite-card ${styles.card}`}>
-    <div className="member-card-heading"><span><UserPlus size={18} /></span><div><strong>Bring someone along</strong><small>A personal invitation to your church workspace.</small></div></div>
+    <div className="member-card-heading"><span><UserPlus size={18} /></span><div><strong>Bring someone along</strong><small>Send a personal invite to your church.</small></div></div>
     <form className={styles.card} onSubmit={(event) => { event.preventDefault(); void run(create); }}>
       <div className={styles.segment} aria-label="Invite by"><button type="button" aria-pressed={kind === "phone"} onClick={() => { setKind("phone"); setContact(""); }}>Phone</button><button type="button" aria-pressed={kind === "email"} onClick={() => { setKind("email"); setContact(""); }}>Email</button></div>
       <label className="form-field"><span>Name <small>(optional)</small></span><input autoComplete="off" maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Who’s joining you?" /></label>
       <label className="form-field"><span>{kind === "phone" ? "Phone number with country code" : "Email address"}</span><input required type={kind === "phone" ? "tel" : "email"} inputMode={kind === "phone" ? "tel" : "email"} autoComplete="off" maxLength={320} value={contact} onChange={(event) => setContact(event.target.value)} placeholder={kind === "phone" ? "+1 615 555 0123" : "friend@example.com"} /></label>
-      <label className="form-field"><span>Access level</span><select value={role} onChange={(event) => setRole(event.target.value)}><option value="volunteer">Volunteer — field tools</option><option value="leader">Leader — church administration</option></select></label>
+      <label className="form-field"><span>Access level</span><select value={role} onChange={(event) => setRole(event.target.value)}><option value="volunteer">Volunteer — field tools</option><option value="leader">Leader — church settings</option></select></label>
       <p className={styles.note}>Anyone signed in with this link can join as a {role}, even with a different email. Share it privately with one person. Creating another invitation for this contact replaces their previous link.</p>
       <button className="button primary" disabled={busy || !contact.trim()}>Create invitation</button>
     </form>
@@ -67,7 +67,7 @@ export function LeaderInvitations({ onChanged }: { onChanged: () => Promise<unkn
       <button className="button primary" disabled={busy} onClick={() => void run(share)}><Share2 size={17} /> Share</button>
       <a className="button quiet" href={ready.kind === "phone" ? `sms:${ready.contact}&body=${encodeURIComponent(text)}` : `mailto:${encodeURIComponent(ready.contact)}?subject=Join%20us%20on%20NeighborWalk&body=${encodeURIComponent(text)}`}>{ready.kind === "phone" ? <MessageCircle size={17} /> : <Mail size={17} />}{ready.kind === "phone" ? "Messages" : "Mail"}</a>
       <button className="button quiet" onClick={() => void run(async () => { await navigator.clipboard.writeText(text); setMessage("Invitation copied."); })}><Copy size={16} /> Copy</button>
-    </div><input aria-label="Invitation link" readOnly value={ready.link} onFocus={(event) => event.currentTarget.select()} /><p className={styles.note}>Your message app handles sending. This screen cannot confirm delivery. Copy the link now; it is only shown here once.</p></div>}
+    </div><input aria-label="Invitation link" readOnly value={ready.link} onFocus={(event) => event.currentTarget.select()} /><p className={styles.note}>Copy the link now. It’s only shown once.</p></div>}
     {message && <p role="status">{message}</p>}{error && <p role="alert" className="inline-error">{error}</p>}
     <div className={styles.pending}><strong>Pending invitations</strong>{pending.map((invite) => <div className={styles.row} key={invite.id}><p><strong>{invite.name || invite.contact}</strong><small>{invite.name && `${invite.contact} · `}{invite.role} · expires {new Date(invite.expiresAt).toLocaleDateString()}</small></p><button className="button quiet" disabled={busy} onClick={() => void run(async () => {
       const client = getSupabaseBrowserClient(); if (!client) throw new Error("Reconnect to revoke this invitation.");

@@ -61,7 +61,7 @@ export function DuplicateReview({ data, blocked, error, onPreview, onRun, onActi
       <fieldset className="form-stack" disabled={blocked || stale || Boolean(plan.blockers.length)}>
         <legend>Confirm the reviewed combination</legend>
         <label>Why are these the same person or location?<textarea minLength={3} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-        <label className="checkbox-label"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> I verified the same identity or dwelling, the current details to keep, sharing, and every affected responsibility and restriction.</label>
+        <label className="checkbox-label"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> I checked these are the same person or home, the details to keep, sharing, and every affected responsibility and restriction.</label>
         <label>Type {phrase}<input autoComplete="off" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} /></label>
         <button className="button primary" disabled={!confirmed || reason.trim().length < 3 || confirmation !== phrase} onClick={() => void onAction(() => onRun({ action: "duplicate_merge", expectedRevision: plan.revision, kind, sourceId: source, targetId: target, reviewToken: plan.token, reason: reason.trim(), confirmation }), () => { resetReview(); setSource(""); setTarget(""); setMessage("Reviewed duplicates combined. Original history and restrictions were preserved. Review the remaining open tasks separately."); })}>Combine exactly the reviewed records</button>
       </fieldset>

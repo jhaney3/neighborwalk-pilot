@@ -42,7 +42,7 @@ async function signIn(page: Page, account = "leader") {
   await page.getByRole("textbox", { name: "Email address" }).fill(account + "@neighborwalk.test");
   await page.getByRole("textbox", { name: "Password", exact: true }).fill("NeighborWalk-test-123!");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /Hello,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
 }
 async function encounter(page: Page, note: string) {
   await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
@@ -106,7 +106,7 @@ test("a reviewed person move follows open tasks and records its reason in histor
   await page.getByRole("button", { name: "Add person", exact: true }).click();
   let dialog = page.getByRole("dialog");
   const label = prefix + " moving person";
-  await dialog.getByRole("textbox", { name: "Name or useful identifying description", exact: true }).fill(label);
+  await dialog.getByRole("textbox", { name: "Name", exact: true }).fill(label);
   const place = dialog.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true });
   const options = await place.locator("option").evaluateAll((items) => items.map((item) => (item as HTMLOptionElement).value).filter(Boolean));
   expect(options.length).toBeGreaterThan(1);
@@ -146,7 +146,7 @@ test("a reviewed encounter correction survives a lost response and preserves the
   await page.goto(origin + "/app/people");
   await page.getByRole("button", { name: "Add person", exact: true }).click();
   let dialog = page.getByRole("dialog");
-  await dialog.getByRole("textbox", { name: "Name or useful identifying description", exact: true }).fill(label);
+  await dialog.getByRole("textbox", { name: "Name", exact: true }).fill(label);
   await dialog.getByRole("button", { name: "Save person", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
@@ -224,7 +224,7 @@ test("reviewed duplicate people and locations retain history and resolve origina
     await page.goto(origin + "/app/people");
     await page.getByRole("button", { name: "Add person", exact: true }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByRole("textbox", { name: "Name or useful identifying description", exact: true }).fill(label);
+    await dialog.getByRole("textbox", { name: "Name", exact: true }).fill(label);
     await dialog.getByRole("textbox", { name: "Phone (optional)", exact: true }).fill(phone);
     await dialog.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true }).selectOption(firstLocation);
     await dialog.getByRole("button", { name: "Save person", exact: true }).click();
@@ -431,7 +431,7 @@ test("cold offline guide, 100 durable encounters, close/reopen and exactly-once 
   const preparedGuideText = await page.getByRole("tabpanel").innerText();
   const preparedGuidePath = new URL(page.url()).pathname;
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });
-  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await expect(page.getByText(/Ready to reopen offline/)).toBeVisible();
   const cdp = await context.newCDPSession(page);
   // HTTP memory/disk cache must not disguise missing service-worker preparation.
   await cdp.send("Network.clearBrowserCache");
@@ -452,7 +452,7 @@ test("cold offline guide, 100 durable encounters, close/reopen and exactly-once 
   await offline.close();
   const reopened = await context.newPage();
   await reopened.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
-  await expect(reopened.getByRole("heading", { name: /Hello,/ })).toBeVisible();
+  await expect(reopened.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   expect(await queued(reopened)).toBe(100);
   await setDisconnected(context, false);
   await expect.poll(() => queued(reopened), { timeout: 120_000 }).toBe(0);
@@ -535,7 +535,7 @@ test("quota failure retains the form and never claims a persisted encounter", as
 
 test("expired access token can explicitly reopen a recently prepared offline workspace", async ({ context, page }) => {
   await isolate(context); await signIn(page);
-  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await expect(page.getByText(/Ready to reopen offline/)).toBeVisible();
   await setDisconnected(context, true);
   // Exercise the SDK's expired-session path without emitting the fictional
   // account's credentials into test output or replacing its refresh token.
@@ -550,7 +550,7 @@ test("expired access token can explicitly reopen a recently prepared offline wor
   await reopened.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
   await expect(reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toBeVisible();
   await reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true }).click();
-  await expect(reopened.getByRole("heading", { name: /Hello,/ })).toBeVisible();
+  await expect(reopened.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   await setDisconnected(context, true);
   await encounter(reopened, prefix + " expired /one");
   expect(await queued(reopened)).toBe(1);
@@ -562,7 +562,7 @@ test("expired access token can explicitly reopen a recently prepared offline wor
 
 test("actual session revocation and account switching preserve authored work without giving another account its queue", async ({ browser, context, page }) => {
   await isolate(context); await signIn(page, "volunteer");
-  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await expect(page.getByText(/Ready to reopen offline/)).toBeVisible();
   // Return identifiers only, never the access/refresh tokens. Delete exactly
   // this local fictional session, the same state change made by Auth sign-out.
   const session = await page.evaluate(() => {
@@ -585,12 +585,12 @@ test("actual session revocation and account switching preserve authored work wit
     await expect.poll(() => queued(otherPage), { timeout: 60_000 }).toBe(0);
     expect(recorded(prefix + " surviving")).toBe(1);
     await setDisconnected(context, false);
-    await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("heading", { name: "We couldn’t open your church" })).toBeVisible({ timeout: 60_000 });
     expect(await queued(page)).toBe(1); expect(recorded(prefix + " revoked")).toBe(0);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-supabase-workspace:sandbox:http://127.0.0.1:54321")!).verifiedAt)).toBe("");
     await setDisconnected(context, true); await page.reload();
-    await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Hello,/ })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "We couldn’t open your church" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
     expect(await queued(page)).toBe(1);
     await setDisconnected(context, false);
@@ -604,7 +604,7 @@ test("actual session revocation and account switching preserve authored work wit
     expect(await queued(page, session.user)).toBe(1);
     expect(recorded(prefix + " revoked")).toBe(0);
     await page.goto(origin + "/app/recovery");
-    await expect(page.getByRole("heading", { name: "Everything is shared", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Everything’s sent", exact: true })).toBeVisible();
     await expect(page.getByText(prefix + " revoked /one", { exact: false })).toHaveCount(0);
     await page.goto(origin + "/app/settings");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -618,7 +618,7 @@ test("actual session revocation and account switching preserve authored work wit
 
 test("an already open offline workspace locks after its authorization window without clearing queued work", async ({ context, page }) => {
   await isolate(context); await signIn(page);
-  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await expect(page.getByText(/Ready to reopen offline/)).toBeVisible();
   await setDisconnected(context, true);
   await encounter(page, prefix + " window /one");
   expect(await queued(page)).toBe(1); expect(recorded(prefix + " window")).toBe(0);
@@ -626,13 +626,13 @@ test("an already open offline workspace locks after its authorization window wit
   // in-memory authorization, without replacing the cache or a server response.
   await page.clock.setFixedTime(new Date(Date.now() + 25 * 60 * 60 * 1000));
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "We couldn’t open your church" })).toBeVisible();
   await expect(page.getByText(/This device needs an online membership check/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Hello,/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toHaveCount(0);
   expect(await queued(page)).toBe(1); expect(recorded(prefix + " window")).toBe(0);
   await page.clock.setFixedTime(new Date());
   await setDisconnected(context, false); await page.reload();
-  await expect(page.getByRole("heading", { name: /Hello,/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
   expect(recorded(prefix + " window")).toBe(1);
 });
@@ -640,7 +640,7 @@ test("an already open offline workspace locks after its authorization window wit
 for (const endpoint of ["outreach_workspace_info", "outreach_guide_state"]) {
 test(`known ${endpoint} access denial locks the cache and prevents a later offline reopen`, async ({ context, page }) => {
   await isolate(context); await signIn(page);
-  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await expect(page.getByText(/Ready to reopen offline/)).toBeVisible();
   if (endpoint === "outreach_guide_state") {
     await page.getByRole("button", { name: "More", exact: true }).click();
     await page.getByRole("button", { name: "Conversation guides", exact: true }).click();
@@ -653,7 +653,7 @@ test(`known ${endpoint} access denial locks the cache and prevents a later offli
   if (endpoint === "outreach_guide_state") {
     await page.getByRole("button", { name: "Refresh guides", exact: true }).click();
   } else await page.reload();
-  await expect(page.getByRole("heading", { name: "Workspace access needs attention" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "We couldn’t open your church" })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-supabase-workspace:sandbox:http://127.0.0.1:54321")!).verifiedAt)).toBe("");
   await setDisconnected(context, true);
   await page.evaluate(() => {
@@ -666,13 +666,13 @@ test(`known ${endpoint} access denial locks the cache and prevents a later offli
   const reopened = await context.newPage(); await reopened.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
   await expect(reopened.getByRole("heading", { name: "Check your connection or invitation" })).toBeVisible({ timeout: 45_000 });
   await expect(reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
-  await expect(reopened.getByRole("heading", { name: /Hello,/ })).toHaveCount(0);
+  await expect(reopened.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toHaveCount(0);
 });
 }
 
 test("cross-tab session removal hides offline records without clearing authored work", async ({ context, page }) => {
   await isolate(context); await signIn(page);
-  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await expect(page.getByText(/Ready to reopen offline/)).toBeVisible();
   const second = await context.newPage(); await second.goto(origin + "/app/today");
   await expect(second.getByText(/already open in another tab or window/)).toBeVisible();
   await setDisconnected(context, true);
@@ -689,7 +689,7 @@ test("cross-tab session removal hides offline records without clearing authored 
 
 test("a second tab cannot overwrite unsent work and can reopen after the first closes", async ({ context, page }) => {
   await isolate(context); await signIn(page);
-  await expect(page.getByText(/App shell prepared on this device/)).toBeVisible();
+  await expect(page.getByText(/Ready to reopen offline/)).toBeVisible();
   await setDisconnected(context, true);
   await encounter(page, prefix + " tabs /one");
   expect(recorded(prefix + " tabs")).toBe(0);
@@ -699,7 +699,7 @@ test("a second tab cannot overwrite unsent work and can reopen after the first c
   expect(await queued(second)).toBe(1);
   expect(recorded(prefix + " tabs")).toBe(0);
   await page.close(); await second.reload();
-  await expect(second.getByRole("heading", { name: /Hello,/ })).toBeVisible();
+  await expect(second.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   expect(await queued(second)).toBe(1);
   expect(recorded(prefix + " tabs")).toBe(0);
   await setDisconnected(context, true);
@@ -732,23 +732,23 @@ test("a reassigned next step requires the responsible volunteer to accept before
   await page.goBack();
   await expect(page).toHaveURL(origin + "/app/followups/" + id);
   await page.getByText("More actions", { exact: true }).click();
-  await page.getByRole("combobox", { name: "Responsible person" }).selectOption({ label: "Test Volunteer" });
+  await page.getByRole("combobox", { name: "Owner" }).selectOption({ label: "Test Volunteer" });
   await expect.poll(() => taskState().acceptance).toBe("pending");
   const other = await browser.newContext();
   try {
     await isolate(other);
     const volunteer = await other.newPage(); await signIn(volunteer, "volunteer");
     await volunteer.goto(origin + "/app/followups/" + id);
-    await expect(volunteer.getByRole("button", { name: "Accept responsibility", exact: true })).toBeVisible();
+    await expect(volunteer.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
     await expect(volunteer.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
     await volunteer.getByRole("button", { name: "Decline", exact: true }).click();
     await expect.poll(() => taskState().acceptance).toBe("declined");
     await expect(volunteer.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
-    await volunteer.getByRole("button", { name: "Accept responsibility", exact: true }).click();
+    await volunteer.getByRole("button", { name: "Accept", exact: true }).click();
     await expect.poll(() => taskState().acceptance).toBe("accepted");
     await volunteer.getByRole("button", { name: "Complete", exact: true }).click();
     await volunteer.getByRole("dialog").getByRole("textbox", { name: "What happened? (optional)" }).fill("Fictional follow-through completed.");
-    await volunteer.getByRole("dialog").getByRole("button", { name: "Complete follow-up", exact: true }).click();
+    await volunteer.getByRole("dialog").getByRole("button", { name: "Mark done", exact: true }).click();
     await expect.poll(() => taskState().status).toBe("completed");
     await expect(volunteer.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
   } finally { await other.close(); }

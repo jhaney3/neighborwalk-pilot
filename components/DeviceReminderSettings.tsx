@@ -40,14 +40,14 @@ export function DeviceReminderSettings({
       const nextPermission = await requestDeviceReminderPermission();
       setPermission(nextPermission);
       if (nextPermission !== "granted") {
-        setMessage("Notifications are off in iOS Settings. NeighborWalk did not schedule any reminders.");
+        setMessage("Notifications are off in iOS Settings.");
         return;
       }
       await onSetEnabled(true);
       const result = await reconcileDeviceReminders(data);
       let nextMessage = result.scheduled
         ? `${result.scheduled} device reminder${result.scheduled === 1 ? "" : "s"} scheduled.`
-        : "Device reminders are on. There is no accepted upcoming work to schedule yet.";
+        : "Reminders are on. Nothing is due yet.";
       if (remotePushConfigured) {
         try {
           const remote = await registerRemotePush();
@@ -58,7 +58,7 @@ export function DeviceReminderSettings({
       }
       setMessage(nextMessage);
     } catch {
-      setMessage("Device reminders could not be enabled. Try again.");
+      setMessage("Couldn’t turn on reminders. Try again.");
     } finally {
       setBusy(false);
     }
@@ -71,9 +71,9 @@ export function DeviceReminderSettings({
       const [cancelled] = await Promise.all([cancelDeviceReminders(), unregisterRemotePush()]);
       setMessage(cancelled
         ? `${cancelled} pending device reminder${cancelled === 1 ? " was" : "s were"} removed.`
-        : "Device reminders are off.");
+        : "Reminders are off.");
     } catch {
-      setMessage("Device reminders could not be turned off. Try again.");
+      setMessage("Couldn’t turn off reminders. Try again.");
     } finally {
       setBusy(false);
     }
@@ -83,15 +83,15 @@ export function DeviceReminderSettings({
   const blocked = enabled && permission === "denied";
   const needsPermission = enabled && permission !== "checking" && permission !== "granted";
   return <section className="settings-section">
-    <div className="settings-section-heading"><span><Bell size={18} /></span><div><h2>iPhone &amp; iPad notifications</h2><p>Private alerts for invitations, assignments, and accepted work.</p></div></div>
+    <div className="settings-section-heading"><span><Bell size={18} /></span><div><h2>iPhone &amp; iPad notifications</h2><p>Alerts for walk invitations and your follow-ups.</p></div></div>
     <div className="settings-section-body">
       <div className={`connection-card ${active ? "connected" : "device_only"}`}>
         {active ? <Bell size={18} /> : <BellOff size={18} />}
         <span><strong>{blocked ? "Blocked in iOS Settings" : needsPermission ? "Permission required" : active ? "Notifications on" : "Notifications off"}</strong>{enabled
           ? `${eligible} accepted upcoming item${eligible === 1 ? " is" : "s are"} currently eligible for an on-device reminder.`
-          : "NeighborWalk will not ask for notification permission until you choose Enable."}</span>
+          : "iOS will ask for permission when you turn these on."}</span>
       </div>
-      <p className="settings-help">Alerts say only that a walk invitation, assignment, or next step needs attention. Neighbor names, addresses, and notes never appear on the lock screen. Accepted-work reminders are prepared from the latest data on this device; delivery is not guaranteed.</p>
+      <p className="settings-help">Names, addresses and notes never show on your lock screen.</p>
       <button className="button quiet" type="button" disabled={busy || permission === "checking"} onClick={() => void (active ? disable() : enable())}>
         {active ? <BellOff size={15} /> : <Bell size={15} />}{busy ? "Updating…" : active ? "Turn off notifications" : needsPermission ? "Check notification access" : "Enable notifications"}
       </button>

@@ -27,7 +27,7 @@ describe("reviewed encounter history without rewriting original facts", () => {
     const data = createSeedData(); const person = data.residents[0];
     data.visits = [{ ...data.visits[0], residentId: person.id, outcome: "conversation", corrections: [correction] }, { ...data.visits[1], residentId: "other-person", propertyId: person.propertyId, corrections: [{ ...correction, reason: "Fictional PRIVATE OTHER history" }] }];
     const timeline = personTimeline(data, person.id);
-    expect(timeline).toContainEqual(expect.objectContaining({ title: "Encounter reviewed · No answer · door", body: correction.reason + " Tasks and restrictions unchanged." }));
+    expect(timeline).toContainEqual(expect.objectContaining({ title: "Conversation corrected · No answer · door", body: correction.reason + " Tasks and restrictions unchanged." }));
     expect(JSON.stringify(timeline)).toContain("Original:"); expect(JSON.stringify(timeline)).not.toContain("PRIVATE OTHER");
     expect(personTimeline(data, "unavailable")).toEqual([]);
   });

@@ -15,10 +15,10 @@ export function ContactRestrictions({ data, residentId, propertyId, canManage, a
   const title = residentId ? "Contact preferences & restrictions" : "Visit restrictions";
   return <div className="contact-restrictions">
     <button className={`button quiet small${activeCount ? " has-active-restriction" : ""}`} onClick={() => setEditing("manage")}><ShieldCheck size={15} /> {residentId ? "Contact restrictions" : "Visit restrictions"}{activeCount ? ` · ${activeCount} active` : ""}</button>
-    {editing === "manage" && <Modal title={title} description={residentId ? "Pausing care tracking does not mean do not contact. Record the neighbor’s request here; restrictions take priority over scheduled tasks." : "Respect a no-visit request even when a phone has older task data. Restrictions remain separate from visit history."} onClose={() => setEditing(null)}>
+    {editing === "manage" && <Modal title={title} description={residentId ? "If they asked not to be contacted, record it here. It overrides any follow-ups." : "If they asked us not to come back, record it here."} onClose={() => setEditing(null)}>
       <div className="contact-restrictions-dialog">
-        {!activeCount && <p>No active restriction is recorded here. That is not permission to contact someone.</p>}
-        {restrictions.some((r) => r.originResidentId || r.originPropertyId) && <p>Requests preserved from combined records remain independent. Lifting one does not lift any other active restriction.</p>}
+        {!activeCount && <p>Nothing recorded.</p>}
+        {restrictions.some((r) => r.originResidentId || r.originPropertyId) && <p>Each request stands on its own.</p>}
         <ul>{restrictions.map((r) => <li key={r.id}><strong>{r.channel === "all" ? "All contact" : r.channel} · {r.active ? "Restricted" : "Lifted after review"}</strong><p>{r.reason}</p>{r.correctionReason && <p>Review: {r.correctionReason}</p>}{r.active && canManage && <button className="button quiet small" onClick={() => setEditing(r.id)}>Review correction</button>}</li>)}</ul>
         <button className="button quiet" onClick={() => setEditing("new")}>Record a contact restriction</button>
       </div>
@@ -31,12 +31,12 @@ function RestrictionForm({ data, residentId, propertyId, correctionId, actions, 
   const [reason, setReason] = useState("");
   const [reviewed, setReviewed] = useState(false);
   const action = useAsyncAction();
-  return <Modal title={correctionId ? "Review a restriction correction" : "Respect a contact request"} description={correctionId ? "Only a leader can lift a restriction. A recorded reason is required; previously cancelled tasks will not reopen." : "Keep the reason minimal and factual. This is an instruction to stop the selected contact, not a judgment about a person."} onClose={action.busy ? () => undefined : onClose}>
+  return <Modal title={correctionId ? "Review a restriction correction" : "Respect a contact request"} description={correctionId ? "Only a leader can lift this, with a reason." : "Keep it short and factual."} onClose={action.busy ? () => undefined : onClose}>
     <form className="form-stack" onSubmit={(e) => { e.preventDefault(); void action.run(() => correctionId ? actions.lift(correctionId, reason) : actions.add({ residentId, propertyId, channel, reason }), onClose); }}>
       {!correctionId && !propertyId && <label>Stop which contact?<select value={channel} onChange={(e) => setChannel(e.target.value as RestrictionInput["channel"])}><option value="all">All contact</option><option value="visit">Visits</option><option value="call">Phone calls</option><option value="text">Text messages</option><option value="email">Email</option></select></label>}
-      <label>{correctionId ? "Reason this may be lifted" : "Neighbor’s request or factual reason"}<textarea required minLength={3} maxLength={data.church.noteCharacterLimit} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
+      <label>{correctionId ? "Reason this may be lifted" : "Their request, in a few words"}<textarea required minLength={3} maxLength={data.church.noteCharacterLimit} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
       {correctionId && <label className="checkbox-label"><input type="checkbox" required checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} /> I have reviewed the request and authority for this correction.</label>}
-      {action.error && <p role="alert" className="inline-error">{action.error}</p>}<div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={action.busy || Boolean(correctionId && !reviewed)}>{action.busy ? "Saving to device…" : correctionId ? "Record reviewed correction" : "Record restriction"}</button></div>
+      {action.error && <p role="alert" className="inline-error">{action.error}</p>}<div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={action.busy || Boolean(correctionId && !reviewed)}>{action.busy ? "Saving…" : correctionId ? "Record reviewed correction" : "Record restriction"}</button></div>
     </form>
   </Modal>;
 }

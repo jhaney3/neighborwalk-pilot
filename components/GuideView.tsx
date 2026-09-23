@@ -1,5 +1,6 @@
 "use client";
 
+import { teamStatusLabels } from "../lib/status-labels";
 import { AlertTriangle, ArrowRight, BookOpenText, Check, ChevronDown, ChevronRight, ChevronUp, Church, Copy, Edit3, LockKeyhole, MessageCircle, Plus, Save, Star, Trash2, UserRound, Users } from "lucide-react";
 import { useId, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createId, type ConversationGuide, type ConversationGuideInput, type GuideStep, type NeighborWalkData } from "../lib/domain";
@@ -90,7 +91,7 @@ export function GuideView({
       await onSetFavorite(guideId);
       if (guideId) setSelectedGuideId(guideId);
       setIndex(0);
-      setMessage(guideId ? "Favorite guide saved. Outing and assigned-group guides still take priority." : "Personal favorite cleared. Outing, assigned-group and church guide choices still apply.");
+      setMessage(guideId ? "Favorite saved." : "Favorite cleared.");
       setMessageError(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The favorite guide could not be saved.");
@@ -112,7 +113,7 @@ export function GuideView({
       setMessage(guideId ? `${team?.name ?? "Group"} will open with this church guide.` : `${team?.name ?? "Group"} will use each volunteer’s favorite guide.`);
       setMessageError(false);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The group default could not be saved.");
+      setMessage(error instanceof Error ? error.message : "The team default couldn’t be saved.");
       setMessageError(true);
     } finally {
       setSavingTeamId(undefined);
@@ -122,13 +123,12 @@ export function GuideView({
   return (
     <div className="content-view guide-view">
       <ViewHeading
-        eyebrow="A steadying hand in the moment"
         title="Conversation guides"
-        description="Choose a church method or shape a private guide around your own testimony and scripture."
+        description="Use a church guide, or write your own."
         aside={<div className="guide-create-actions"><button className="button quiet" disabled={changesDisabled} onClick={() => setEditor({ scope: "personal" })}><UserRound size={15} /> New personal guide</button>{canManage && <button className="button primary" disabled={changesDisabled} onClick={() => setEditor({ scope: "church" })}><Plus size={15} /> New church guide</button>}</div>}
       />
       {recovery}
-      {routeGuideId && !guides.some((guide) => guide.id === routeGuideId) && <p className="inline-notice" role="status">The requested guide is not available in your active library. It may be archived or outside your access. You can choose another available guide below.</p>}
+      {routeGuideId && !guides.some((guide) => guide.id === routeGuideId) && <p className="inline-notice" role="status">That guide isn’t available anymore. Pick another below.</p>}
 
       <section className="guide-library" aria-labelledby="guide-library-title">
         <div className="guide-library-heading"><div><p className="eyebrow">Guide shelf</p><h2 id="guide-library-title">Pick the method that fits this conversation.</h2></div><span>{guides.filter((guide) => guide.scope === "church").length} church · {guides.filter((guide) => guide.scope === "personal").length} personal</span></div>
@@ -148,17 +148,17 @@ export function GuideView({
       </section>
 
       {canManage && <section className="guide-group-defaults" aria-labelledby="guide-group-defaults-title">
-        <div className="guide-library-heading"><div><p className="eyebrow">Leader controls</p><h2 id="guide-group-defaults-title">Group defaults</h2></div><span>Optional</span></div>
-        <div className="guide-group-warning"><AlertTriangle size={17} /><span><strong>A group default overrides personal favorites.</strong> Members of that group will open the selected church guide at the doorstep, even if they chose another favorite. Choose “Use each volunteer’s favorite” to remove the override.</span></div>
+        <div className="guide-library-heading"><div><p className="eyebrow">Leader controls</p><h2 id="guide-group-defaults-title">Team defaults</h2></div><span>Optional</span></div>
+        <div className="guide-group-warning"><AlertTriangle size={17} /><span><strong>A team default overrides personal favorites.</strong> Members of that group will open the selected church guide at the doorstep, even if they chose another favorite. Choose “Use each volunteer’s favorite” to remove the override.</span></div>
         {teams.length ? <div className="guide-group-default-list">
           {teams.map((team) => <label className="guide-group-default-row" key={team.id}>
-            <span><strong>{team.name}</strong><small>{team.memberIds.length} {team.memberIds.length === 1 ? "volunteer" : "volunteers"} · {team.status}</small></span>
+            <span><strong>{team.name}</strong><small>{team.memberIds.length} {team.memberIds.length === 1 ? "person" : "people"} · {teamStatusLabels[team.status]}</small></span>
             <select value={teamGuideDefaults[team.id] ?? ""} disabled={changesDisabled || savingTeamId === team.id || (churchGuides.length === 0 && !teamGuideDefaults[team.id])} onChange={(event) => void setTeamDefault(team.id, event.target.value || undefined)} aria-label={`Default conversation guide for ${team.name}`}>
               <option value="">Use each volunteer’s favorite</option>
               {churchGuides.map((guide) => <option value={guide.id} key={guide.id}>{guide.title}</option>)}
             </select>
           </label>)}
-        </div> : <div className="guide-library-empty"><Users size={22} /><div><strong>No groups yet</strong><span>Create a group in Leader view before assigning a default guide.</span></div></div>}
+        </div> : <div className="guide-library-empty"><Users size={22} /><div><strong>No teams yet</strong><span>Create a team in Team & invitations first.</span></div></div>}
       </section>}
 
       {activeTeamName && effectiveGuideId && teamGuideDefaults[activeTeamId ?? ""] === effectiveGuideId && <div className="guide-library-message group-default" role="status"><Users size={15} /><span><strong>{activeTeamName} default:</strong> {guides.find((guide) => guide.id === effectiveGuideId)?.title}. This takes priority over your personal favorite while you work with this group.</span></div>}
@@ -215,7 +215,7 @@ export function GuideView({
           onSelectGuide?.(guides.find((guide) => guide.id !== editor.guide!.id)?.id ?? "");
           setEditor(null);
           setIndex(0);
-          setMessage(allowBuiltInManagement ? "Sample guide removed." : "Guide archived; historical links retained.");
+          setMessage(allowBuiltInManagement ? "Sample guide removed." : "Guide archived.");
           setMessageError(false);
         } : undefined}
       />}
@@ -299,7 +299,7 @@ function GuideComposer({ guide, scope, copy = false, pendingRequest = false, dem
     <fieldset className="guide-form-controls" disabled={saving || deleting || pendingRequest}><legend className="sr-only">Guide contents</legend>
     <div className={`guide-composer-privacy ${scope}`}>
       {scope === "church" ? <Church size={17} /> : <LockKeyhole size={17} />}
-      <span><strong>{scope === "church" ? "Church-wide" : "Only me"}</strong>{scope === "church" ? "Published to every volunteer in this church workspace." : "Private to your signed-in account, including across your devices."}</span>
+      <span><strong>{scope === "church" ? "Church-wide" : "Only me"}</strong>{scope === "church" ? "Everyone in your church can use it." : "Only you can see it."}</span>
     </div>
     <div className="form-stack guide-composer-meta">
       <label className="form-field"><span>Guide name</span><input maxLength={120} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder={scope === "church" ? "Romans Road" : "My testimony and key scriptures"} /></label>
@@ -315,15 +315,15 @@ function GuideComposer({ guide, scope, copy = false, pendingRequest = false, dem
           <label className="form-field full"><span>Coaching before speaking <small>Optional</small></span><textarea maxLength={800} rows={3} value={step.coaching} onChange={(event) => updateStep(stepIndex, { coaching: event.target.value })} placeholder="A practical cue for listening respectfully." /></label>
           <label className="form-field full"><span>Words or testimony notes <small>Optional when scripture is added</small></span><textarea maxLength={1600} rows={4} value={step.sampleWords} onChange={(event) => updateStep(stepIndex, { sampleWords: event.target.value })} placeholder="Write the words you want available at the door. This can be a prompt, your testimony, or a transition." /></label>
           <label className="form-field full"><span>Scripture references <small>Separate with commas</small></span><input maxLength={1200} value={step.scriptureReferences.join(", ")} onChange={(event) => updateStep(stepIndex, { scriptureReferences: parseScriptureReferenceInput(event.target.value) })} placeholder="Romans 3:23, Romans 6:23" /></label>
-          <label className="form-field full"><span>Closing reminder <small>Optional</small></span><textarea maxLength={800} rows={3} value={step.reminder} onChange={(event) => updateStep(stepIndex, { reminder: event.target.value })} placeholder="Respect their answer and agree an owned next step only if requested." /></label>
+          <label className="form-field full"><span>Closing reminder <small>Optional</small></span><textarea maxLength={800} rows={3} value={step.reminder} onChange={(event) => updateStep(stepIndex, { reminder: event.target.value })} placeholder="Respect their answer. Plan a follow-up only if they ask." /></label>
         </div>
       </section>)}
     </div>
     <button className="guide-add-step" type="button" disabled={draft.steps.length >= 24} onClick={() => setDraft((current) => ({ ...current, steps: [...current.steps, makeBlankGuideStep(current.steps.length + 1)] }))}><Plus size={15} /> Add another step</button>
     </fieldset>
     {error && <div className="guide-library-message error" role="alert"><AlertTriangle size={15} /><span>{error}</span></div>}
-    {pendingRequest && !saving && !deleting && <p role="status">This submission is preserved exactly. Close this editor and use guide recovery to retry it or preserve it as reviewed before making another change.</p>}
-    {confirmDelete && <div className="guide-delete-confirm"><AlertTriangle size={16} /><span><strong>{demo ? "Remove" : "Archive"} “{guide?.title}”?</strong>{demo ? "This removes the guide from this sample device." : "The guide will leave the active library, but its record and historical links remain. Change current outing and group choices first. This is not permanent erasure."}</span></div>}
+    {pendingRequest && !saving && !deleting && <p role="status">This change hasn’t finished sending. Close the editor to retry it.</p>}
+    {confirmDelete && <div className="guide-delete-confirm"><AlertTriangle size={16} /><span><strong>{demo ? "Remove" : "Archive"} “{guide?.title}”?</strong>{demo ? "This removes the guide from this sample device." : "It leaves the library. Past walks keep their link to it."}</span></div>}
     <div className="modal-actions split">
       {onDelete ? <button className="button danger" disabled={saving || deleting || pendingRequest} onClick={() => confirmDelete ? void remove() : setConfirmDelete(true)}>{demo ? "Remove sample guide" : confirmDelete ? "Archive guide" : "Archive"}</button> : <span />}
       <div><button className="button quiet" disabled={saving || deleting} onClick={onClose}>Cancel</button><button className="button primary" disabled={!valid || saving || deleting || pendingRequest} onClick={() => void save()}><Save size={15} /> {saving ? "Saving…" : saveLabel}</button></div>

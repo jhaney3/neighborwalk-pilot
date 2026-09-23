@@ -27,6 +27,7 @@ import "../app/styles/auth.css";
 import "../app/styles/responsive.css";
 import "../app/styles/controls.css";
 import "../app/styles/readiness.css";
+import "../app/styles/home.css";
 import "../app/styles/walk-setup.css";
 import "../app/styles/walk-target-planner.css";
 import "./native.css";

@@ -113,7 +113,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
   const layersSettled = currentStreetLayer.status !== "loading" && currentParcelLayer.status !== "loading";
   const retryAvailable = [currentStreetLayer.status, currentParcelLayer.status].some((layerStatus) => ["empty", "incomplete", "cached", "unavailable"].includes(layerStatus));
   const inventoryMessage = !readOnly && layersSettled && !planningComplete
-    ? "New targets require complete live street data and at least one residential parcel. Available map data remains visible; retry to refresh unavailable or incomplete layers."
+    ? "Some map data didn’t load. Try again to add routes."
     : "";
   const chosenStreetLines = useMemo(() => streets.features.filter((feature) => streetIds.has(feature.properties.id)).flatMap(streetSegmentLines), [streetIds, streets.features]);
   const claimedParcelIds = useMemo(() => new Set(targets.flatMap((target) => target.parcels.map((parcel) => `${parcel.countyFips}:${parcel.gislink}`))), [targets]);
@@ -317,12 +317,12 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
 
   const duplicateStreet = useMemo(() => targets.some((target) => target.streetSelection?.segmentIds.some((id) => streetIds.has(id))), [streetIds, targets]);
   const overlapsArea = useMemo(() => points.length >= 3 && targets.some((target) => target.geometry.type === "Polygon" && polygonsOverlap(points, target.geometry.coordinates[0])), [points, targets]);
-  const error = useMemo(() => draftKind === "streets" && duplicateStreet ? "A selected street section is already in another target."
+  const error = useMemo(() => draftKind === "streets" && duplicateStreet ? "That street is already on another route."
     : points.length > 0 && draftKind === "rectangle" && !rectangleHasArea(points) ? "Clear the rectangle and press-drag diagonally to draw it again."
       : points.length > 0 && draftKind === "polygon" && points.length < 3 ? "Add at least three corners."
         : points.length >= 3 && polygonSelfIntersects(points) ? "This boundary crosses itself."
-          : points.length >= 3 && !polygonInsideBoundary(points, parentTerritory.boundary) ? "Keep every corner inside the parent zone."
-            : overlapsArea ? "This target overlaps another nightly target." : "", [draftKind, duplicateStreet, overlapsArea, parentTerritory.boundary, points]);
+          : points.length >= 3 && !polygonInsideBoundary(points, parentTerritory.boundary) ? "Keep every corner inside the neighborhood."
+            : overlapsArea ? "This overlaps another route." : "", [draftKind, duplicateStreet, overlapsArea, parentTerritory.boundary, points]);
   const suggestions = useMemo(() => streetIds.size ? streetsWithinMeters([...streetIds][0], streets.features.flatMap((feature) => streetSegmentLines(feature).map((geometry) => ({ id: feature.properties.id, name: feature.properties.name, geometry }))), 100).filter((id) => !streetIds.has(id)).slice(0, 8) : [], [streetIds, streets.features]);
   const hasCurrentSelection = points.length > 0 || streetIds.size > 0 || parcelOverrides.size > 0;
   const clearSelection = () => {
@@ -338,20 +338,20 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
     if (!parcelIds.size) return;
     const clientId = `draft-${randomUuid()}`; const color = TARGET_COLORS[targets.length % TARGET_COLORS.length];
     const chosenStreets = streets.features.filter((feature) => streetIds.has(feature.properties.id));
-    const target: WalkTargetDraft = { clientId, eventId, territoryId: parentTerritory.id, name: selectionKind === "streets" ? chosenStreets[0]?.properties.name ?? `Street target ${targets.length + 1}` : `Area ${targets.length + 1}`, color, selectionKind, geometry,
+    const target: WalkTargetDraft = { clientId, eventId, territoryId: parentTerritory.id, name: selectionKind === "streets" ? chosenStreets[0]?.properties.name ?? `Route ${targets.length + 1}` : `Route ${targets.length + 1}`, color, selectionKind, geometry,
       streetSelection: selectionKind === "streets" ? { side: "both", corridorMeters: STREET_PARCEL_CORRIDOR_METERS, source: OVERTURE_TRANSPORTATION_SOURCE, sourceRevision: streets.metadata?.release ?? "unknown", segmentIds: [...streetIds], streetNames: [...new Set(chosenStreets.flatMap((feature) => feature.properties.name ? [feature.properties.name] : []))] } : undefined,
       parcels: planningParcelRoster(parcelIds, automaticParcelIds, eligibleParcels, parcelRevision, selectionKind === "streets" ? "street_auto" : "polygon_auto") };
     onChange([...targets, target]); onSelectedTargetChange(clientId); setPoints([]); setStreetIds(new Set()); setParcelOverrides(new Map()); setOverlapNotice(undefined); setDraftKind(undefined); setMode("select");
   };
   const addWhole = () => { if (!planningComplete) return; const ids = new Set(eligibleParcels.features.map((feature) => `${feature.properties.countyFips}:${feature.properties.gislink}`)); if (!ids.size) return; const clientId = `draft-${randomUuid()}`; onChange([...targets, { clientId, eventId, territoryId: parentTerritory.id, name: parentTerritory.name, color: TARGET_COLORS[targets.length % TARGET_COLORS.length], selectionKind: "whole_zone", geometry: polygon(parentTerritory.boundary), parcels: planningParcelRoster(ids, ids, eligibleParcels, parcelRevision, "polygon_auto") }]); onSelectedTargetChange(clientId); };
 
-  return <section className="walk-target-planner" aria-label={`Plan targets inside ${parentTerritory.name}`}>
-    <div className="walk-target-tools" role="toolbar" aria-label="Target drawing tools">
+  return <section className="walk-target-planner" aria-label={`Routes in ${parentTerritory.name}`}>
+    <div className="walk-target-tools" role="toolbar" aria-label="Route drawing tools">
       <MapDrawingModeControl value={draftKind === "rectangle" || draftKind === "polygon" ? draftKind : undefined} disabled={readOnly || !planningComplete || targets.some((target) => target.selectionKind === "whole_zone")} onChange={(drawingMode) => { if (drawingMode === draftKind) return; suppressMapClick.current = false; setDraftKind(drawingMode); setMode(drawingMode); setPoints([]); setStreetIds(new Set()); setParcelOverrides(new Map()); setOverlapNotice(undefined); }} />
       <button type="button" className={draftKind === "streets" ? "active" : ""} disabled={readOnly || !streetInspectable || targets.some((target) => target.selectionKind === "whole_zone")} onClick={() => { if (draftKind === "streets") return; suppressMapClick.current = false; setDraftKind("streets"); setMode("streets"); setPoints([]); setParcelOverrides(new Map()); setOverlapNotice(undefined); }}><Waypoints size={16}/> Streets</button>
       <button type="button" disabled={readOnly || !planningComplete || targets.length > 0} onClick={addWhole}>Whole zone</button>
     </div>
-    <div className={`walk-target-map-wrap${mode === "polygon" || mode === "rectangle" ? " map-drawing-active" : ""}`}><div ref={container} className="walk-target-map" role="application" aria-label="Interactive target map"/>{status !== "ready" && <div className={`walk-target-state ${status}`}>{status === "loading" ? <LoaderCircle className="spin"/> : <AlertTriangle/>}<span>{status === "loading" ? "Loading planning map…" : "Map unavailable. Try again or draw the parent zone later."}</span></div>}{overlapNotice && <div key={overlapNotice.id} className="walk-target-map-toast" role="status"><AlertTriangle size={16} aria-hidden="true"/>{compactToastMessage(overlapNotice.message)}</div>}</div>
+    <div className={`walk-target-map-wrap${mode === "polygon" || mode === "rectangle" ? " map-drawing-active" : ""}`}><div ref={container} className="walk-target-map" role="application" aria-label="Route map"/>{status !== "ready" && <div className={`walk-target-state ${status}`}>{status === "loading" ? <LoaderCircle className="spin"/> : <AlertTriangle/>}<span>{status === "loading" ? "Loading planning map…" : "The map didn’t load. Try again."}</span></div>}{overlapNotice && <div key={overlapNotice.id} className="walk-target-map-toast" role="status"><AlertTriangle size={16} aria-hidden="true"/>{compactToastMessage(overlapNotice.message)}</div>}</div>
     {!readOnly && <div className="walk-target-options" aria-live="polite">
       <span>{planningLayerSummary("Streets", currentStreetLayer, streets.features.length, "section")}</span>
       <span>{planningLayerSummary("Parcels", currentParcelLayer, eligibleParcels.features.length, "residential parcel")}</span>
@@ -370,9 +370,9 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
     {mode !== "select" && <div className="walk-target-edit-actions">{draftKind === "polygon" && <button type="button" disabled={!points.length} onClick={() => setPoints((current) => undoDrawingPoint(current, "polygon"))}><Undo2 size={15}/> Undo</button>}<button type="button" disabled={!hasCurrentSelection} onClick={clearSelection}><X size={15}/> Clear selection</button><button type="button" disabled={!suggestions.length} onClick={() => suggestions.forEach((id) => setStreetIds((current) => new Set([...current, id])))}><Redo2 size={15}/> Add suggestions</button><button type="button" className="button primary" disabled={Boolean(error) || !planningComplete || !parcelIds.size || (draftKind === "streets" ? !streetIds.size : !draftKind || !drawingBoundaryReady(points, draftKind))} onClick={addTarget}><Check size={15}/> Add target</button></div>}
     <ul className="walk-target-list">{targets.map((target) => {
       const persisted = Boolean(target.id);
-      return <li key={target.clientId} className={target.clientId === selectedTargetId ? "selected" : ""}><button type="button" onClick={() => onSelectedTargetChange(target.clientId)}><i style={{ background: target.color }}/><span><strong>{target.name}</strong><small>{target.selectionKind.replace("_", " ")} · {target.parcels.length} parcels</small></span></button>{!readOnly && <button type="button" aria-label={`Remove ${target.name}`} disabled={persisted} title={persisted ? "Saved targets cannot be removed here." : undefined} onClick={() => { onChange(targets.filter((item) => item.clientId !== target.clientId)); if (selectedTargetId === target.clientId) onSelectedTargetChange(undefined); }}><Trash2 size={17} aria-hidden="true" /></button>}</li>;
+      return <li key={target.clientId} className={target.clientId === selectedTargetId ? "selected" : ""}><button type="button" onClick={() => onSelectedTargetChange(target.clientId)}><i style={{ background: target.color }}/><span><strong>{target.name}</strong><small>{target.selectionKind.replace("_", " ")} · {target.parcels.length} parcels</small></span></button>{!readOnly && <button type="button" aria-label={`Remove ${target.name}`} disabled={persisted} title={persisted ? "Saved routes can’t be removed here." : undefined} onClick={() => { onChange(targets.filter((item) => item.clientId !== target.clientId)); if (selectedTargetId === target.clientId) onSelectedTargetChange(undefined); }}><Trash2 size={17} aria-hidden="true" /></button>}</li>;
     })}</ul>
-    {!readOnly && targets.some((target) => target.id) && <p className="walk-target-feedback">Saved targets cannot be removed here. Cancel or replace them from the walk detail.</p>}
+    {!readOnly && targets.some((target) => target.id) && <p className="walk-target-feedback">Saved routes can’t be removed here. Change them from the walk page.</p>}
     {streets.metadata && <small className="walk-target-attribution">{streets.metadata.attribution} · source {streets.metadata.release}{streets.metadata.truncated ? " · incomplete result" : ""}</small>}
   </section>;
 }

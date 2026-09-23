@@ -14,7 +14,7 @@ type Props = {
 const statusLabel = {
   invited: "Invited",
   going: "Going",
-  not_going: "Can’t make it",
+  not_going: "Can’t go",
   checked_in: "Here",
 } as const;
 
@@ -51,7 +51,7 @@ export function OutingInvitationRoster({ data, eventId, selectedIds, onChange }:
       <button type="button" onClick={() => onChange(activeVolunteers.map((volunteer) => volunteer.id))}>Invite everyone</button>
       <button type="button" disabled={!removableInvitationCount} onClick={() => onChange([...checkedInIds])}>{checkedInIds.size ? "Clear other invitations" : "Clear invitations"}</button>
     </div>
-    <p className="walk-crew-help">Invited people see the walk on Home and can respond. Crews are built from whoever arrives.</p>
-    {savedGroups.length > 0 && <div className="walk-saved-groups"><span>Saved groups</span><div>{savedGroups.map((team) => <button type="button" key={team.id} onClick={() => addGroup(team.memberIds)}>{team.name}<small>{team.memberIds.filter((id) => activeVolunteers.some((volunteer) => volunteer.id === id)).length} active</small></button>)}</div></div>}
+    <p className="walk-crew-help">Invited people see the walk on Home and can reply. Teams form from whoever shows up.</p>
+    {savedGroups.length > 0 && <div className="walk-saved-groups"><span>Saved teams</span><div>{savedGroups.map((team) => <button type="button" key={team.id} onClick={() => addGroup(team.memberIds)}>{team.name}<small>{team.memberIds.filter((id) => activeVolunteers.some((volunteer) => volunteer.id === id)).length} active</small></button>)}</div></div>}
   </section>;
 }

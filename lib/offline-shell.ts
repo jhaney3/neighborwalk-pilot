@@ -38,9 +38,9 @@ export function observeOfflineShell(script: string, publish: (state: OfflineShel
 }
 
 export const offlineShellCopy: Record<OfflineShellState, string> = {
-  preparing: "Preparing this app for offline reopening. Keep it open and connected.",
-  ready: "App shell prepared on this device. Open your assignment and guide online; map imagery is not prepared offline.",
-  update_waiting: "An app update is downloaded. Share or preserve pending work, close all NeighborWalk tabs, then reopen to use it.",
-  unavailable: "Offline reopening is not confirmed. Reconnect and check preparation; do not clear browser storage.",
-  development: "Development server: offline reopening is tested in the optimized build, not here.",
+  preparing: "Getting ready to work offline. Keep this page open.",
+  ready: "Ready to reopen offline. Maps still need a connection.",
+  update_waiting: "An update is ready. Close all NeighborWalk tabs and reopen to use it.",
+  unavailable: "Offline use isn’t ready yet. Reconnect and check again.",
+  development: "Offline use is only available in the production build.",
 };

@@ -167,7 +167,7 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
     });
   };
 
-  return <Modal title={outing ? "Resume walk setup" : "Plan a walk"} description="Choose the lasting zone, then divide tonight’s work visually." onClose={action.busy ? () => undefined : zoneCreatorOpen ? () => setZoneCreatorOpen(false) : onClose} mobileImmersive={zoneCreatorOpen} wide>
+  return <Modal title={outing ? "Resume walk setup" : "Plan a walk"} description="Pick up where you left off." onClose={action.busy ? () => undefined : zoneCreatorOpen ? () => setZoneCreatorOpen(false) : onClose} mobileImmersive={zoneCreatorOpen} wide>
     <div className="walk-setup form-stack" aria-busy={action.busy}>
       <ol className="walk-steps" aria-label="Walk setup progress">{steps.map((label, index) => <li key={label} className={index === step ? "active" : index < step ? "complete" : ""} aria-current={index === step ? "step" : undefined}><span>{index < step ? <Check size={14} /> : index + 1}</span>{label}</li>)}</ol>
 
@@ -177,36 +177,36 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
         <div className="walk-field-grid"><label>Starts<input type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} /></label><label>Ends<input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} /></label></div>
         <p className="walk-timezone-note">Times use <strong>{selectedTimezone}</strong>.</p>
         {parsedTimes.error && <p className="inline-error" role="alert">{parsedTimes.error}</p>}
-        <details className="walk-extra-preparation"><summary>Optional time &amp; guide settings</summary><div className="walk-field-grid"><label>Timezone<input value={selectedTimezone} onChange={(event) => setSelectedTimezone(event.target.value)} /></label><label>Conversation guide<select value={guideId} onChange={(event) => setGuideId(event.target.value)}><option value="">No guide assigned</option>{guides.filter((item) => item.scope === "church").map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div></details>
+        <details className="walk-extra-preparation"><summary>More options</summary><div className="walk-field-grid"><label>Timezone<input value={selectedTimezone} onChange={(event) => setSelectedTimezone(event.target.value)} /></label><label>Conversation guide<select value={guideId} onChange={(event) => setGuideId(event.target.value)}><option value="">No guide assigned</option>{guides.filter((item) => item.scope === "church").map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label></div></details>
       </section>}
 
       {step === 1 && <section className="walk-step-panel walk-map-step">
-        <div className="walk-step-heading"><MapPin /><div><p>Step 2</p><h3>Choose the zone, then tonight’s targets</h3></div></div>
-        {locked ? <div className="walk-locked-assignments"><strong>Tonight’s targets are locked</strong><small>Accepted or saved assignments keep their original geometry and property roster.</small></div> : <>
-          <fieldset className="walk-choice-list"><legend>Outreach setting</legend>
-            <label><input type="radio" checked={!community} onChange={() => setCommunity(false)} /><span><strong>Neighborhood zone</strong><small>Take one or more visual bites out of a persistent mapped zone.</small></span></label>
+        <div className="walk-step-heading"><MapPin /><div><p>Step 2</p><h3>Where are you going?</h3></div></div>
+        {locked ? <div className="walk-locked-assignments"><strong>Routes are set</strong><small>Routes that are already assigned can’t be redrawn.</small></div> : <>
+          <fieldset className="walk-choice-list"><legend>What kind of walk?</legend>
+            <label><input type="radio" checked={!community} onChange={() => setCommunity(false)} /><span><strong>A neighborhood</strong><small>Knock on doors in a neighborhood.</small></span></label>
             {!community && <>
-              <select aria-label="Persistent parent zone" value={territoryId} onChange={(event) => { setTerritoryId(event.target.value); setTargets([]); }}><option value="">Choose a mapped zone</option>{mappedTerritories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-              {targets.length === 0 ? <ParentZoneCreator churchId={data.church.id} mapStyleUrl={data.preferences.mapStyleUrl} baseTerritory={territory} demo={data.sync.mode === "device_only"} open={zoneCreatorOpen} onOpenChange={setZoneCreatorOpen} onAddZone={onAddZone} onCreated={(zone) => { setCreatedZone(zone); setTerritoryId(zone.id); setCommunity(false); }} /> : <small className="walk-help">Remove tonight’s target drafts before switching to a newly drawn parent zone.</small>}
+              <select aria-label="Neighborhood" value={territoryId} onChange={(event) => { setTerritoryId(event.target.value); setTargets([]); }}><option value="">Choose a neighborhood</option>{mappedTerritories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+              {targets.length === 0 ? <ParentZoneCreator churchId={data.church.id} mapStyleUrl={data.preferences.mapStyleUrl} baseTerritory={territory} demo={data.sync.mode === "device_only"} open={zoneCreatorOpen} onOpenChange={setZoneCreatorOpen} onAddZone={onAddZone} onCreated={(zone) => { setCreatedZone(zone); setTerritoryId(zone.id); setCommunity(false); }} /> : <small className="walk-help">Remove the routes before switching neighborhoods.</small>}
             </>}
-            <label><input type="radio" checked={community} onChange={() => setCommunity(true)} /><span><strong>Community setting</strong><small>No mapped assignment is needed.</small></span></label>
+            <label><input type="radio" checked={community} onChange={() => setCommunity(true)} /><span><strong>A gathering</strong><small>A meal, service day or event.</small></span></label>
           </fieldset>
           {territory && !community && <div className="walk-target-planner-host" aria-hidden={zoneCreatorOpen || undefined} inert={zoneCreatorOpen || undefined}><WalkTargetPlanner parentTerritory={territory} eventId={outing?.id ?? "draft-event"} targets={targets} selectedTargetId={selectedTargetId} mapStyleUrl={data.preferences.mapStyleUrl} visitedParcelKeys={visitedParcelKeys} demo={data.sync.mode === "device_only"} onSelectedTargetChange={setSelectedTargetId} onChange={setTargets} /></div>}
         </>}
       </section>}
 
       {step === 2 && <section className="walk-step-panel">
-        <div className="walk-step-heading"><Users /><div><p>Step 3</p><h3>Invite people to the outing</h3></div></div>
-        <p className="walk-step-intro">This advance roster is what puts the outing on each person’s Home screen. Target crews wait until check-in, when you know who actually arrived.</p>
+        <div className="walk-step-heading"><Users /><div><p>Step 3</p><h3>Who’s coming?</h3></div></div>
+        <p className="walk-step-intro">They’ll see the walk on Home. You’ll form teams at check-in.</p>
         <OutingInvitationRoster data={data} eventId={outing?.id} selectedIds={invitedMemberIds} onChange={setInvitedMemberIds} />
         {issues.length > 0 && !locked && <ul className="walk-validation-list">{issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}
       </section>}
 
       {step === 3 && <section className="walk-step-panel">
         <div className="walk-step-heading"><Check /><div><p>Step 4</p><h3>Review the plan</h3></div></div>
-        <div className="walk-ready-fields"><h4>Preparation for volunteers</h4><label>Purpose<textarea rows={3} maxLength={1000} value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label><div className="walk-field-grid"><label>Meeting point<input maxLength={300} value={meetingPoint} onChange={(event) => setMeetingPoint(event.target.value)} /></label><label>Leader contact<input maxLength={254} value={leaderContact} onChange={(event) => setLeaderContact(event.target.value)} /></label></div></div>
-        <dl className="walk-review-list"><div><dt>When</dt><dd><strong>{outingInput?.name}</strong>{outingInput && <span>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: selectedTimezone }).formatRange(new Date(outingInput.startsAt), new Date(outingInput.endsAt))}</span>}</dd></div><div><dt>Zone</dt><dd>{community ? "Community setting" : territory?.name ?? "No zone"}</dd></div><div><dt>Invited</dt><dd><strong>{invitedMemberIds.length} {invitedMemberIds.length === 1 ? "person" : "people"}</strong><span>They’ll see this outing before check-in.</span></dd></div><div><dt>Tonight</dt><dd>{community ? "No mapped targets" : `${targets.length} targets · ${new Set(targets.flatMap((item) => item.parcels.map((parcel) => `${parcel.countyFips}:${parcel.gislink}`))).size} residential properties`} {!community && <span>All target crews will be assigned at check-in.</span>}</dd></div></dl>
-        {territory && !community && targets.length > 0 && <TargetPlanPreview data={data} territory={territory} targets={targets} label="Reviewed target plan" />}
+        <div className="walk-ready-fields"><h4>Details for volunteers</h4><label>Purpose<textarea rows={3} maxLength={1000} value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label><div className="walk-field-grid"><label>Meeting point<input maxLength={300} value={meetingPoint} onChange={(event) => setMeetingPoint(event.target.value)} /></label><label>Leader contact<input maxLength={254} value={leaderContact} onChange={(event) => setLeaderContact(event.target.value)} /></label></div></div>
+        <dl className="walk-review-list"><div><dt>When</dt><dd><strong>{outingInput?.name}</strong>{outingInput && <span>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: selectedTimezone }).formatRange(new Date(outingInput.startsAt), new Date(outingInput.endsAt))}</span>}</dd></div><div><dt>Neighborhood</dt><dd>{community ? "Gathering" : territory?.name ?? "No neighborhood"}</dd></div><div><dt>Invited</dt><dd><strong>{invitedMemberIds.length} {invitedMemberIds.length === 1 ? "person" : "people"}</strong><span>They’ll see it on Home.</span></dd></div><div><dt>Routes</dt><dd>{community ? "No routes" : `${targets.length} routes · ${new Set(targets.flatMap((item) => item.parcels.map((parcel) => `${parcel.countyFips}:${parcel.gislink}`))).size} homes`} {!community && <span>Teams form at check-in.</span>}</dd></div></dl>
+        {territory && !community && targets.length > 0 && <TargetPlanPreview data={data} territory={territory} targets={targets} label="Routes" />}
         {(readyMissing.length > 0 || (!community && !locked && issues.length > 0)) && <p className="walk-ready-note">Still needed to mark ready: {[...readyMissing, ...issues].join(", ")}.</p>}
       </section>}
 

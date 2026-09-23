@@ -76,7 +76,7 @@ export function WalkCrewBoard({ data, targets, crews, onChange, initialAttending
         })}
       </div>
       <div className="walk-crew-quick-actions"><button type="button" onClick={() => setAttendance(activeVolunteers.map((volunteer) => volunteer.id))}>Everyone is here</button><button type="button" disabled={!attendingIds.length} onClick={clearAttendance}>Clear check-in</button></div>
-      <p className="walk-crew-help">Marking someone absent also removes them from tonight’s crew.</p>
+      <p className="walk-crew-help">Marking someone absent takes them off tonight’s team.</p>
     </section>
 
     <p className="walk-crew-status" role="status"><Users size={15} aria-hidden="true" /><strong>{assignedCount} assigned</strong>{waitingIds.length ? ` · ${waitingIds.length} waiting: ${waitingIds.map((id) => names.get(id) ?? "Unavailable member").join(", ")}` : attendingIds.length ? " · Everyone here has a target." : " · Check people in, or staff targets later."}</p>
@@ -95,16 +95,16 @@ export function WalkCrewBoard({ data, targets, crews, onChange, initialAttending
             <summary><UserPlus size={18} aria-hidden="true" /> Add or move people</summary>
             <div>
               {waiting && <button type="button" className="walk-crew-add-all" onClick={() => addMembers(target.id, waitingIds)}>Assign everyone waiting</button>}
-              <div className="walk-crew-person-list" role="group" aria-label={`Crew for ${target.name}`}>
+              <div className="walk-crew-person-list" role="group" aria-label={`Team for ${target.name}`}>
                 {attendingIds.map((memberId) => {
                   const assignedTargetId = targetByMember.get(memberId);
                   const onThisTarget = assignedTargetId === target.id;
                   const assignedTarget = targets.find((item) => item.id === assignedTargetId);
-                  return <button type="button" key={memberId} className={onThisTarget ? "selected" : ""} aria-pressed={onThisTarget} onClick={() => moveMember(target.id, memberId)}><span>{names.get(memberId) ?? "Unavailable member"}<small>{onThisTarget ? "On this target" : assignedTarget ? `Move from ${assignedTarget.name}` : "Waiting"}</small></span>{onThisTarget && <Check size={18} aria-hidden="true" />}</button>;
+                  return <button type="button" key={memberId} className={onThisTarget ? "selected" : ""} aria-pressed={onThisTarget} onClick={() => moveMember(target.id, memberId)}><span>{names.get(memberId) ?? "Unavailable member"}<small>{onThisTarget ? "On this route" : assignedTarget ? `Move from ${assignedTarget.name}` : "Waiting"}</small></span>{onThisTarget && <Check size={18} aria-hidden="true" />}</button>;
                 })}
-                {!attendingIds.length && <p>Check in at least one person above, or use a saved group.</p>}
+                {!attendingIds.length && <p>Check people in above, or use a saved team.</p>}
               </div>
-              {savedGroups.length > 0 && <div className="walk-saved-groups"><span>Saved groups</span><div>{savedGroups.map((team) => <button type="button" key={team.id} onClick={() => addMembers(target.id, team.memberIds)}>{team.name}<small>{team.memberIds.filter((id) => activeVolunteers.some((volunteer) => volunteer.id === id)).length} active</small></button>)}</div></div>}
+              {savedGroups.length > 0 && <div className="walk-saved-groups"><span>Saved teams</span><div>{savedGroups.map((team) => <button type="button" key={team.id} onClick={() => addMembers(target.id, team.memberIds)}>{team.name}<small>{team.memberIds.filter((id) => activeVolunteers.some((volunteer) => volunteer.id === id)).length} active</small></button>)}</div></div>}
             </div>
           </details>
         </article>;

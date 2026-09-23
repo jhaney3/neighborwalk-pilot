@@ -30,16 +30,16 @@ export function usePlanningParcelsInView(viewport: MapViewport | null, publicMap
         : fetchPlanningParcelsForBoundary(boundary, { publicMap, signal: controller.signal });
       void loading.then((loaded) => {
         if (cancelled) return;
-        const message = loaded.availability === "unsupported_area" ? "Parcel coverage is limited to Giles, Lawrence, Lewis and Wayne counties."
-          : loaded.availability === "missing_inventory" ? "Residential parcel data has not been loaded for this area yet."
-          : loaded.truncated ? "Some residential parcels are shown. Zoom in for the complete neighborhood."
-          : !loaded.complete ? "Residential parcel data is not available for this area yet."
-          : loaded.parcels.features.length === 0 ? "No residential parcels were found in this view."
-          : `${loaded.parcels.features.length} residential parcels loaded. Draw your zone around the neighborhood.`;
+        const message = loaded.availability === "unsupported_area" ? "Home data covers Giles, Lawrence, Lewis and Wayne counties."
+          : loaded.availability === "missing_inventory" ? "Home data isn’t loaded for this area yet."
+          : loaded.truncated ? "Some homes are shown. Zoom in to see them all."
+          : !loaded.complete ? "Home data isn’t available for this area yet."
+          : loaded.parcels.features.length === 0 ? "No homes in this view."
+          : `${loaded.parcels.features.length} homes loaded. Draw around the neighborhood.`;
         setResult({ key, parcels: loaded.parcels, message, failed: !loaded.complete && !loaded.truncated });
       }).catch(() => {
         if (!cancelled) setResult({ key, parcels: EMPTY, failed: true,
-          message: "Residential parcels could not load. Check your connection and retry. Map data covers Giles, Lawrence, Lewis and Wayne counties." });
+          message: "Homes couldn’t load. Check your connection and try again." });
       }).finally(() => window.clearTimeout(deadline));
     }, 180);
     return () => { cancelled = true; controller.abort(); window.clearTimeout(debounce); window.clearTimeout(deadline); };

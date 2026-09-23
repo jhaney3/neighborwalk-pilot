@@ -13,7 +13,7 @@ test("all primary tabs work and marketing content is excluded", async ({ page })
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/demo");
-  await expect(page.getByRole("heading", { name: "Hello, Erica." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), Erica$/ })).toBeVisible();
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await nav.getByRole("button", { name: "Walks", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Walks", exact: true })).toBeVisible();
@@ -129,7 +129,7 @@ test("map filters and visit outcomes expose their selected state", async ({ page
 
   await page.getByRole("button", { name: "Address list", exact: true }).click();
   await page.getByRole("button", { name: /118 Crockett Street/ }).click();
-  const sheet = page.getByRole("dialog", { name: /Location details for 118 Crockett Street/ });
+  const sheet = page.getByRole("dialog", { name: /Home details for 118 Crockett Street/ });
   const talked = sheet.getByRole("button", { name: "Talked", exact: true });
   const noAnswer = sheet.getByRole("button", { name: "No answer", exact: true });
   await expect(talked).toHaveAttribute("aria-pressed", "true");
@@ -148,9 +148,9 @@ test("native compact controls retain 44 point hit targets", async ({ page }) => 
   expect(addAddressBounds!.width).toBeGreaterThanOrEqual(44);
   expect(Math.abs(addAddressBounds!.width - addAddressBounds!.height)).toBeLessThanOrEqual(1);
   await page.getByRole("button", { name: /118 Crockett Street/ }).click();
-  const sheet = page.getByRole("dialog", { name: /Location details for 118 Crockett Street/ });
+  const sheet = page.getByRole("dialog", { name: /Home details for 118 Crockett Street/ });
   for (const control of [
-    sheet.getByRole("button", { name: "Close location details" }),
+    sheet.getByRole("button", { name: "Close", exact: true }),
     sheet.getByRole("tab", { name: /Record visit/ }),
     sheet.getByRole("button", { name: "Talked", exact: true }),
   ]) {
@@ -194,15 +194,15 @@ test("drawing a lasting zone uses a full-screen two-stage flow", async ({ page }
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
-  const originalZone = await dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true }).inputValue();
-  const launch = dialog.getByRole("button", { name: "Draw and name a new zone", exact: true });
+  const originalZone = await dialog.getByRole("combobox", { name: "Neighborhood", exact: true }).inputValue();
+  const launch = dialog.getByRole("button", { name: "New neighborhood", exact: true });
   await launch.click();
 
   const creator = dialog.locator(".walk-parent-zone-creator");
-  await expect(creator.getByRole("heading", { name: "Draw your zone", exact: true })).toBeFocused();
+  await expect(creator.getByRole("heading", { name: "Draw it", exact: true })).toBeFocused();
   const creatorBounds = await creator.boundingBox();
   expect(creatorBounds).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
-  await expect(dialog.getByRole("heading", { name: "Choose the zone, then tonight’s targets", exact: true })).toBeHidden();
+  await expect(dialog.getByRole("heading", { name: "Where are you going?", exact: true })).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
   const map = creator.getByRole("region", { name: /Interactive map of/ });
@@ -210,29 +210,29 @@ test("drawing a lasting zone uses a full-screen two-stage flow", async ({ page }
   expect(mapBounds?.height).toBeGreaterThan(800);
   await dragAcrossMap(page, map);
   await expect(creator.getByText("Rectangle ready", { exact: true })).toBeVisible();
-  const review = creator.getByRole("button", { name: "Review zone", exact: true });
+  const review = creator.getByRole("button", { name: "Next", exact: true });
   await expect(review).toBeEnabled();
   await review.click();
 
-  await expect(creator.getByRole("heading", { name: "Name your zone", exact: true })).toBeFocused();
-  await expect(creator.getByRole("textbox", { name: "Zone name", exact: true })).toBeVisible();
+  await expect(creator.getByRole("heading", { name: "Name it", exact: true })).toBeFocused();
+  await expect(creator.getByRole("textbox", { name: "Neighborhood name", exact: true })).toBeVisible();
   await creator.getByRole("button", { name: "Back", exact: true }).click();
   await expect(creator.getByText("Rectangle ready", { exact: true })).toBeVisible();
   await expect(review).toBeEnabled();
   await creator.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(creator).toHaveCount(0);
   await expect(launch).toBeFocused();
-  await expect(dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true })).toHaveValue(originalZone);
+  await expect(dialog.getByRole("combobox", { name: "Neighborhood", exact: true })).toHaveValue(originalZone);
 
   await launch.click();
   const reopenedCreator = dialog.locator(".walk-parent-zone-creator");
   await dragAcrossMap(page, reopenedCreator.getByRole("region", { name: /Interactive map of/ }));
-  await reopenedCreator.getByRole("button", { name: "Review zone", exact: true }).click();
+  await reopenedCreator.getByRole("button", { name: "Next", exact: true }).click();
   const zoneName = `Mobile zone ${Date.now()}`;
-  await reopenedCreator.getByRole("textbox", { name: "Zone name", exact: true }).fill(zoneName);
-  await reopenedCreator.getByRole("button", { name: "Create and use this zone", exact: true }).click();
+  await reopenedCreator.getByRole("textbox", { name: "Neighborhood name", exact: true }).fill(zoneName);
+  await reopenedCreator.getByRole("button", { name: "Create neighborhood", exact: true }).click();
   await expect(reopenedCreator).toHaveCount(0);
-  await expect(dialog.getByRole("combobox", { name: "Persistent parent zone", exact: true }).locator("option:checked")).toHaveText(zoneName);
+  await expect(dialog.getByRole("combobox", { name: "Neighborhood", exact: true }).locator("option:checked")).toHaveText(zoneName);
 });
 
 test("zone creation stays inline above the phone breakpoint", async ({ page }) => {
@@ -242,13 +242,13 @@ test("zone creation stays inline above the phone breakpoint", async ({ page }) =
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
-  await dialog.getByRole("button", { name: "Draw and name a new zone", exact: true }).click();
+  await dialog.getByRole("button", { name: "New neighborhood", exact: true }).click();
 
   const creator = dialog.locator(".walk-parent-zone-creator");
-  await expect(creator.getByText("Draw a lasting neighborhood zone", { exact: true })).toBeVisible();
-  await expect(creator.getByRole("textbox", { name: "Zone name", exact: true })).toBeVisible();
-  await expect(creator.getByRole("button", { name: "Review zone", exact: true })).toBeHidden();
-  await expect(creator.getByRole("heading", { name: "Draw your zone", exact: true })).toBeHidden();
+  await expect(creator.getByText("Draw a neighborhood", { exact: true })).toBeVisible();
+  await expect(creator.getByRole("textbox", { name: "Neighborhood name", exact: true })).toBeVisible();
+  await expect(creator.getByRole("button", { name: "Next", exact: true })).toBeHidden();
+  await expect(creator.getByRole("heading", { name: "Draw it", exact: true })).toBeHidden();
   const creatorBounds = await creator.boundingBox();
   expect(creatorBounds?.y).toBeGreaterThan(0);
   expect(creatorBounds?.height).toBeLessThan(900);
@@ -275,7 +275,7 @@ test("a People location opens a map with a contextual return", async ({ page }) 
   const scrollTop = await workspace.evaluate((element) => element.scrollTop);
   await location.click();
   await expect(page.getByRole("button", { name: "Back to People" })).toBeVisible();
-  await expect(page.getByRole("dialog", { name: /Location details/ })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: /Home details/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Back to People" }).click();
   await expect(page.getByRole("tab", { name: "Needs follow-up", exact: true })).toHaveAttribute("aria-selected", "true");
@@ -309,7 +309,7 @@ for (const width of [320, 393, 768]) {
   test(`workspace fits ${width}px and touch navigation stays accessible`, async ({ page }) => {
     await page.setViewportSize({ width, height: 852 });
     await page.goto("/demo");
-    await expect(page.getByRole("heading", { name: "Hello, Erica." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), Erica$/ })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const nav = page.getByRole("navigation", { name: "Main navigation" });
     for (const button of await nav.getByRole("button").all()) {
@@ -334,7 +334,7 @@ test("location details keep the same sheet height across record, people and hist
   await page.getByRole("button", { name: "Address list", exact: true }).click();
   await page.getByRole("button", { name: /118 Crockett Street/ }).click();
 
-  const sheet = page.getByRole("dialog", { name: /Location details for 118 Crockett Street/ });
+  const sheet = page.getByRole("dialog", { name: /Home details for 118 Crockett Street/ });
   await expect(sheet).toBeVisible();
   await sheet.evaluate(async (element) => { await Promise.all(element.getAnimations().map((animation) => animation.finished)); });
   const bounds = async () => sheet.evaluate((element) => {
@@ -381,18 +381,18 @@ test("a new person can be created from the visit person selector", async ({ page
   await page.getByRole("button", { name: "Address list", exact: true }).click();
   await page.getByRole("button", { name: /144 Crockett Street/ }).click();
 
-  const sheet = page.getByRole("dialog", { name: /Location details for 144 Crockett Street/ });
+  const sheet = page.getByRole("dialog", { name: /Home details for 144 Crockett Street/ });
   await sheet.getByRole("button", { name: "Add a person or note", exact: true }).click();
   const person = sheet.getByRole("combobox", { name: /^Person/ });
   await expect(person.getByRole("option", { name: "Add a new person…", exact: true })).toBeAttached();
   await person.selectOption({ label: "Add a new person…" });
 
   await expect(sheet.getByRole("tab", { name: "People 0", exact: true })).toHaveAttribute("aria-selected", "true");
-  await sheet.getByRole("textbox", { name: "Name or useful description", exact: true }).fill("Mobile Test Neighbor");
+  await sheet.getByRole("textbox", { name: "Name", exact: true }).fill("Mobile Test Neighbor");
   await sheet.getByRole("button", { name: "Save person", exact: true }).click();
 
   await expect(sheet.getByRole("tab", { name: "Record visit", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(person.locator("option:checked")).toHaveText("Mobile Test Neighbor");
-  await expect(sheet.getByText("Person saved and selected for this visit.", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("Saved and added to this visit.", { exact: true })).toBeVisible();
   await expect(sheet.getByRole("tab", { name: "People 1", exact: true })).toBeVisible();
 });

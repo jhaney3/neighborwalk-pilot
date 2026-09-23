@@ -1,0 +1,29 @@
+/* Home: one hero for the next walk, then quiet grouped lists. */
+.today-view { display: grid; align-content: start; gap: var(--space-6); }
+.today-view > .view-heading { margin-bottom: 0; }
+.today-view > .view-heading .eyebrow { margin-bottom: 2px; }
+.today-view .list-group + .list-group { margin-top: 0; }
+
+.home-hero { display: grid; justify-items: start; gap: var(--space-2); padding: var(--space-5); border-radius: var(--radius-lg); color: var(--on-hero); background: var(--hero-bg); }
+.home-hero-label { color: var(--on-hero-2); font-size: var(--fs-footnote); font-weight: 500; }
+.home-hero h2 { color: var(--on-hero); font-family: var(--font-display); font-size: var(--fs-title1); line-height: var(--lh-title1); font-weight: 600; overflow-wrap: anywhere; }
+.home-hero-meta { color: var(--on-hero-2); font-size: var(--fs-subhead); line-height: var(--lh-subhead); }
+.home-hero .hero-action { margin-top: var(--space-2); color: var(--hero-button-ink); background: var(--hero-button-bg); }
+.home-hero .inline-error { color: var(--on-hero); background: rgba(0, 0, 0, .2); }
+
+.home-invitation { display: grid; gap: var(--space-3); padding: 12px var(--space-4); }
+.home-invitation + .home-invitation { border-top: 1px solid var(--hairline); }
+.home-invitation-copy { display: grid; gap: 2px; }
+.home-invitation-copy span { color: var(--label-2); font-size: var(--fs-subhead); line-height: var(--lh-subhead); }
+.home-invitation-actions, .home-invitation-answer { display: flex; align-items: center; gap: var(--space-2); }
+.home-invitation-actions .button { flex: 1; min-height: 40px; }
+.home-invitation-answer .text-button, .home-invitation-actions .text-button { min-height: 40px; padding: 0 var(--space-2); font-size: var(--fs-subhead); }
+
+.home-replies-toggle { width: 100%; min-height: 44px; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); color: var(--label-2); font-size: var(--fs-subhead); }
+.home-replies-toggle span { flex: 1; text-align: left; }
+.home-replies-toggle svg { transition: transform .2s ease; }
+.home-replies.is-open .home-replies-toggle svg { transform: rotate(180deg); }
+
+.list-row-link .list-row-title { color: var(--tint); }
+.today-view .encounter-launcher { padding: 0; }
+.today-view .encounter-launcher > .button { width: 100%; }

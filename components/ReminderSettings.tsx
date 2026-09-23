@@ -52,10 +52,10 @@ export function ReminderSettings({ churchId, timezone, online, connected }: { ch
     setMessage(enabled ? "Email reminders are on." : "Email reminders are off. A message already in flight may still arrive.");
   };
   return <section className="settings-section">
-    <div className="settings-section-heading"><span><Mail size={18} /></span><div><h2>Email reminders</h2><p>Daily reminders for your own next steps.</p></div></div>
+    <div className="settings-section-heading"><span><Mail size={18} /></span><div><h2>Email reminders</h2><p>A daily email about your follow-ups.</p></div></div>
     <div className="settings-section-body">
       <p>Get at most one email a day when work is due or a handoff needs your response. Checks run during daytime hours in {timezone}.</p>
-      <p>Only you can opt in. Emails contain a protected link—never neighbor details.</p>
+      <p>Emails never include names or addresses.</p>
       {!connected ? <p>Email reminders aren’t available in the demo.</p> : !online ? <p>Reconnect to manage email reminders.</p> : <>
         {!available && <p role="status">Email reminders aren’t available on this deployment.</p>}
         {error && <p role="alert">{error}</p>}
