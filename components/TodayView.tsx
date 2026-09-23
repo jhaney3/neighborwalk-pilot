@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { ChevronDown, HeartHandshake, MapPinned } from "lucide-react";
+import { ChevronDown, HeartHandshake } from "lucide-react";
 import { calendarDate, formatCalendarDate } from "../lib/calendar";
 import type { NeighborWalkData, OutreachEvent } from "../lib/domain";
 import { homeWalk } from "../lib/home-walk";
@@ -13,13 +13,12 @@ function greetingFor(timezone: string, now = new Date()) {
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 
-export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onPerson, onOuting, onReviewSync, onPeople, onViewMap, onStart, onWalkResponse, additionalAction }: {
+export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onPerson, onOuting, onReviewSync, onPeople, onStart, onWalkResponse }: {
   data: NeighborWalkData; activeVolunteerId: string; canManage: boolean;
   onFollowUps: (id?: string, scope?: "mine" | "unowned" | "declined") => void; onPerson: (id: string) => void;
   onOuting: (id?: string) => void; onReviewSync: () => void; onPeople: () => void;
-  onViewMap: () => void; onStart: (id: string, territoryId: string, targetId?: string) => Promise<unknown>;
+  onStart: (id: string, territoryId: string, targetId?: string) => Promise<unknown>;
   onWalkResponse: (participant: OutingParticipant, response: OutingResponse) => Promise<unknown>;
-  additionalAction?: React.ReactNode;
 }) {
   const responseAction = useAsyncAction();
   const startAction = useAsyncAction();
@@ -76,7 +75,7 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
   });
 
   return <section className="content-view today-view">
-    <ViewHeading eyebrow={formatCalendarDate(today, { weekday: "long", month: "long", day: "numeric" })} title={`${greetingFor(timezone)}, ${name}`} aside={canManage && <button type="button" className="button quiet small" aria-label="View map" onClick={onViewMap}><MapPinned size={16} aria-hidden="true" /> Map</button>} />
+    <ViewHeading eyebrow={formatCalendarDate(today, { weekday: "long", month: "long", day: "numeric" })} title={`${greetingFor(timezone)}, ${name}`} />
 
     {outing
       ? <section className="home-hero" aria-labelledby="home-next-walk">
@@ -120,6 +119,5 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
       {needsReview > 0 && <ListRow title="Changes to review" value={needsReview} onClick={onReviewSync} />}
     </ListGroup>}
 
-    {additionalAction}
   </section>;
 }

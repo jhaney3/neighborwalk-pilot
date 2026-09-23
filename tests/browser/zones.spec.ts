@@ -5,6 +5,12 @@ import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { DEMO_CENTER } from "../../lib/seed";
 
+/** The map lives under Walks: open the Walks tab, then its Map view. */
+async function openMap(page: Page) {
+  await page.getByRole("navigation").getByRole("button", { name: /^Walks/ }).click();
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Map", exact: true }).click();
+}
+
 type TargetFixture = {
   eventId: string;
   eventName: string;
@@ -194,48 +200,19 @@ async function dragAcrossMap(page: Page, map: Locator, from: readonly [number, n
   await page.mouse.up();
 }
 
-test("a leader can start drawing a new zone from the app header", async ({ page }) => {
+test("a leader creates a neighborhood from the Walks map", async ({ page }) => {
   await openDemo(page);
-
-  const addZone = page.getByRole("button", { name: "Add zone", exact: true });
-  await expect(addZone).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(addZone).toBeVisible();
+  await openMap(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await addZone.click();
 
-  const drawingControls = page.locator(".draw-controls");
-  await expect(drawingControls).toBeVisible();
-  const shape = page.getByRole("group", { name: "Boundary shape", exact: true });
-  const rectangle = shape.getByRole("button", { name: "Rectangle", exact: true });
-  const polygon = shape.getByRole("button", { name: "Polygon", exact: true });
-  const finish = drawingControls.getByRole("button", { name: "Finish boundary", exact: true });
-  await expect(rectangle).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".map-drawing-panel")).toContainText("Press and drag diagonally");
-  await expect(finish).toBeDisabled();
-
-  const map = page.getByRole("region", { name: /Interactive map of/ });
-  const mapShell = page.locator(".map-engine-shell");
-  await expect(mapShell).toHaveClass(/map-drawing-active/);
-  await expect(mapShell).toHaveCSS("touch-action", "none");
-  await expect(map.locator(".maplibregl-canvas")).toHaveCSS("touch-action", "none");
-  const bounds = await map.boundingBox();
-  expect(bounds).not.toBeNull();
-  await map.click({ position: { x: bounds!.width * .2, y: bounds!.height * .35 } });
-  await expect(finish).toBeDisabled();
-  await dragAcrossMap(page, map, [.2, .35], [.8, .75]);
-  await expect(page.locator(".map-drawing-panel")).toContainText("Rectangle ready");
-  await expect(finish).toBeEnabled();
-
-  await polygon.click();
-  await expect(polygon).toHaveAttribute("aria-pressed", "true");
-  await expect(finish).toBeDisabled();
-  await map.click({ position: { x: bounds!.width * .2, y: bounds!.height * .35 } });
-  await map.click({ position: { x: bounds!.width * .8, y: bounds!.height * .4 } });
-  await map.click({ position: { x: bounds!.width * .5, y: bounds!.height * .75 } });
-  await expect(page.locator(".map-drawing-panel")).toContainText("3 corners added");
-  await expect(finish).toBeEnabled();
-  await expect(addZone).toHaveCount(0);
+  await page.getByRole("button", { name: "Draw a neighborhood", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New neighborhood", exact: true });
+  await expect(dialog).toBeVisible();
+  const creator = dialog.locator(".walk-parent-zone-creator");
+  await expect(creator.getByRole("heading", { name: "Draw it", exact: true })).toBeVisible();
+  await expect(creator.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add zone", exact: true })).toHaveCount(0);
 });
 
 async function targetFixtureState(page: Page, fixture: TargetFixture) {
@@ -466,7 +443,8 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   const zoneName = `Fictional drawn zone ${suffix}`;
   const runtimeErrors = collectRuntimeErrors(page);
   const planningRequests = await openDemo(page);
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("textbox", { name: "Walk name", exact: true }).fill(walkName);
@@ -579,7 +557,8 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
 
 test("the planner starts from a persistent zone and offers area and street target modes", async ({ page }) => {
   await openDemo(page);
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
@@ -668,7 +647,8 @@ test("real Lawrence parcels support a new zone and ready whole-zone walk without
 
   await openDemo(page, { realPlanningGis: true });
   await installLawrenceDemoZone(page);
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("textbox", { name: "Walk name", exact: true }).fill(walkName);

@@ -77,6 +77,7 @@ type Props = {
   onAddList?: (name: string) => Promise<string>; onOpenGuide: (id: string) => void;
   onRecordEncounter: (input: EncounterInput) => Promise<unknown>;
   onCreatePerson: (input: ResidentInput) => Promise<string>;
+  viewSwitch?: React.ReactNode;
 };
 
 export function OutreachView(props: Props) {
@@ -100,6 +101,7 @@ export function OutreachView(props: Props) {
   };
   return <section className="content-view outreach-view">
     <ViewHeading title="Walks" aside={!selected && canManage && <button className="button primary outreach-plan-button" aria-label="Plan a walk" onClick={() => setWizard("new")}><Plus size={16} aria-hidden="true" /><span>Plan a walk</span></button>} />
+    {!selected && props.viewSwitch && <div className="walks-view-switch">{props.viewSwitch}</div>}
     {selected ? <><button className="button quiet outing-back-button" onClick={() => onSelect()}><ArrowLeft size={15} /> All walks</button><OutingDetail key={selected.id} {...props} outing={selected} onEdit={() => selected.status === "draft" ? setWizard(selected) : setEditor(selected)} onRepeatRequest={() => setRepeat(selected)} /></>
       : <><label className="checkbox-label"><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show past walks</label>
         {listAction.error && <p role="alert" className="inline-error">{listAction.error}</p>}

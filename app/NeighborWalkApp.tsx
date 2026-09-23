@@ -20,7 +20,6 @@ import {
   Info,
   LoaderCircle,
   Lock,
-  Map as MapIcon,
   MapPin,
   MapPinned,
   Navigation,
@@ -42,7 +41,7 @@ import { MobileInvitation } from "../components/MobileInvitation";
 import { AccountDeletion } from "../components/AccountDeletion";
 import { appHref, appRoute, type AppView } from "../lib/app-routes";
 import { TodayView } from "../components/TodayView";
-import { EncounterComposer } from "../components/EncounterComposer";
+import { EncounterForm } from "../components/EncounterComposer";
 import { OutreachView } from "../components/OutreachView";
 import { RecoveryView } from "../components/RecoveryView";
 import { DataHealthView } from "../components/DataHealthView";
@@ -60,7 +59,8 @@ import { GuideView } from "../components/GuideView";
 import { GuideChangeRecovery } from "../components/GuideChangeRecovery";
 import { LeaderView } from "../components/LeaderView";
 import { SettingsView } from "../components/SettingsView";
-import { Badge, ConfirmProvider, ListGroup, ListRow, Modal, initials, useConfirm } from "../components/ui";
+import { Badge, ConfirmProvider, ListGroup, ListRow, Modal, SegmentedControl, initials, useConfirm } from "../components/ui";
+import { ParentZoneCreator } from "../components/ParentZoneCreator";
 import {
   centerForBoundary,
   outcomeMeta,
@@ -177,6 +177,8 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
   const [territoryEditorOpen, setTerritoryEditorOpen] = useState(false);
   const [editingTerritoryId, setEditingTerritoryId] = useState<string | null>(null);
   const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
+  const [neighborhoodCreatorOpen, setNeighborhoodCreatorOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const showToast = (message: string, tone: ToastTone = "success") => setToast({ message: compactToastMessage(message), tone });
   const reminderDataRef = useRef(data);
@@ -466,15 +468,6 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
     restoreScroll();
   };
 
-  const planWalk = () => {
-    navigate("outreach");
-    if (pathname.startsWith("/app")) window.history.replaceState(null, "", appHref("outreach") + "?plan=1");
-    else setDemoPlanWalk(true);
-  };
-  const viewMap = () => {
-    setOutreachDisplay("map");
-    navigate("map");
-  };
   const openPeopleDirectory = () => {
     navigate("people");
     if (pathname.startsWith("/app")) window.history.replaceState(null, "", appHref("people") + "?view=all");
@@ -566,16 +559,14 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
     showToast("Tap a spot on the map", "info");
   };
 
-  const startDrawing = () => {
-    navigate("map");
+  // New neighborhoods always use the two-stage creator; the older free-draw
+  // mode remains only for redrawing an existing boundary.
+  const openNeighborhoodCreator = () => {
+    if (view !== "map") navigate("map");
     setOutreachDisplay("map");
     setSelectedPropertyId(null);
     setAddMode(false);
-    setEditingTerritoryId(null);
-    setTerritoryEditorOpen(false);
-    setDrawShape("rectangle");
-    setDraftBoundary([]);
-    setDrawMode(true);
+    setNeighborhoodCreatorOpen(true);
   };
 
   const openTerritoryEditor = (territoryId: string) => {
@@ -605,6 +596,16 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
   };
 
   const outreachDisplaySwitch = <div className="outreach-display-switch" role="group" aria-label="View as"><button aria-pressed={showAddressList} onClick={() => setOutreachDisplay("list")}>Address list</button><button disabled={!activeTerritory.center || activeTerritory.kind === "list"} aria-pressed={!showAddressList} onClick={() => setOutreachDisplay("map")}>Map</button></div>;
+  const walksView = view === "map" ? (showAddressList ? "list" : "map") : "walks";
+  const walksSwitch = <SegmentedControl label="Walks view" value={walksView} options={[
+    { value: "walks", label: "Walks" },
+    { value: "map", label: "Map", disabled: !activeTerritory.center || activeTerritory.kind === "list" },
+    { value: "list", label: "List" },
+  ]} onChange={(next) => {
+    if (next === "walks") { navigate("outreach"); return; }
+    setOutreachDisplay(next);
+    if (view !== "map") navigate("map");
+  }} />;
 
   return (
     <main className="app-shell">
@@ -615,7 +616,6 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
           <span><strong>{data.church.name}</strong><small><i className={`status-dot ${syncStatusTone}`} aria-hidden="true" /><span>{syncStatusLabel}</span></small></span>
         </button>
         <div className="header-status">
-          {canManage && !fieldOuting && !drawMode && <button className="button quiet header-zone-button" onClick={startDrawing}><MapPinned size={16} /><span>Add zone</span></button>}
           <button className="profile-button" onClick={() => navigate("settings")} aria-label="Open profile and settings"><span className="profile-avatar" aria-hidden="true">{initials(activeVolunteer.name)}</span><span>{activeVolunteer.name}</span></button>
         </div>
       </header>
@@ -632,23 +632,23 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
             <div className="progress-track"><i style={{ width: `${coverage.percent}%` }} /></div>
             <p><span>{coverage.touched} touched</span><span>{coverage.remaining} remaining</span></p>
           </div>}
+          <button type="button" className="button accent sidebar-log-button" onClick={() => setLogOpen(true)}><Plus size={18} aria-hidden="true" /> Log a conversation</button>
           <nav className="sidebar-nav" aria-label="Main sections">
             <NavButton active={view === "today"} icon={<House size={18} />} label="Home" onClick={() => navigate("today")} />
-            <NavButton active={view === "outreach" || Boolean(fieldOuting)} icon={<Footprints size={18} />} label="Walks" count={walkAttentionCount} onClick={() => navigate("outreach")} />
+            <NavButton active={view === "outreach" || view === "map" || Boolean(fieldOuting)} icon={<Footprints size={18} />} label="Walks" count={walkAttentionCount} onClick={() => navigate("outreach")} />
             <NavButton active={view === "people" || view === "followups"} icon={<Users size={18} />} label="People" count={peopleAttentionCount} onClick={() => { setFollowUpPersonId(null); navigate("people"); }} />
-            <NavButton active={["more", "guide", "leader", "settings", "map", "recovery", "data"].includes(view) && !fieldOuting} icon={<CircleEllipsis size={18} />} label="More" onClick={() => navigate("more")} />
+            <NavButton active={["more", "guide", "leader", "settings", "recovery", "data"].includes(view)} icon={<CircleEllipsis size={18} />} label="More" onClick={() => navigate("more")} />
           </nav>
         </aside>
 
         <section className="workspace">
           {view === "data" && (canManage && data.sync.mode === "connected" ? <DataHealthView data={data} online={online} onRun={actions.runAdministration} onExport={actions.exportChurchRecords} onAuthenticate={actions.reauthenticateAdmin} onPending={actions.getAdministrationPending} onReviewPending={actions.reviewAdministrationPending} onPreviewRetention={actions.getRetentionPreview} onPreviewDuplicates={actions.getDuplicatePreview} onRefresh={actions.syncNow} onOpenPerson={(id) => navigate("people", id)} onOpenLocation={(id) => navigate("map", id)} /> : <section className="content-view"><h1>Data &amp; health</h1><p>Sign in as a church leader to use these tools.</p></section>)}
           {view === "recovery" && <RecoveryView data={data} online={online} onPreview={actions.previewRecovery} onResolve={actions.resolveRecovery} onExport={actions.downloadDeviceRecovery} onAuthoredExport={actions.downloadAuthoredDeviceRecovery} onArchives={actions.listDeviceArchives} onDownloadArchive={actions.downloadDeviceArchive} onSync={actions.syncNow} />}
-          {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={openPeopleDirectory} onViewMap={viewMap} onStart={startWalk} onWalkResponse={async (participant, status) => { await actions.saveOutingResponse(participant.id, status); showToast(status === "going" ? "You’re going" : "Response saved"); }} additionalAction={<EncounterComposer data={data} onSave={async (input) => { await actions.recordVisit(input); showToast("Conversation saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} />} />}
-          {view === "outreach" && <OutreachView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onRecordEncounter={async (input) => { await actions.recordVisit(input); showToast("Conversation saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} initialCreate={pathname.startsWith("/app") ? searchParams.get("plan") === "1" : demoPlanWalk} onCreateClosed={() => { setDemoPlanWalk(false); if (pathname.startsWith("/app") && searchParams.has("plan")) window.history.replaceState(null, "", appHref("outreach", route.id)); }} onSelect={(id) => navigate("outreach", id)} onStart={startWalk} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onSaveRoster={actions.saveOutingRoster} onSaveCrews={actions.saveWalkCrews} onAddZone={actions.addTerritory} onSaveTarget={actions.saveTarget} onReplaceTarget={actions.replaceTarget} onOpenGuide={(id) => navigate("guide", id)} />}
+          {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={openPeopleDirectory} onStart={startWalk} onWalkResponse={async (participant, status) => { await actions.saveOutingResponse(participant.id, status); showToast(status === "going" ? "You’re going" : "Response saved"); }} />}
+          {view === "outreach" && <OutreachView viewSwitch={walksSwitch} data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onRecordEncounter={async (input) => { await actions.recordVisit(input); showToast("Conversation saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} initialCreate={pathname.startsWith("/app") ? searchParams.get("plan") === "1" : demoPlanWalk} onCreateClosed={() => { setDemoPlanWalk(false); if (pathname.startsWith("/app") && searchParams.has("plan")) window.history.replaceState(null, "", appHref("outreach", route.id)); }} onSelect={(id) => navigate("outreach", id)} onStart={startWalk} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onSaveRoster={actions.saveOutingRoster} onSaveCrews={actions.saveWalkCrews} onAddZone={actions.addTerritory} onSaveTarget={actions.saveTarget} onReplaceTarget={actions.replaceTarget} onOpenGuide={(id) => navigate("guide", id)} />}
           {view === "more" && <section className="content-view more-view"><h1>More</h1>
             <ListGroup label="Your church">
               <ListRow icon={<BookOpenText />} title="Conversation guides" onClick={() => navigate("guide")} />
-              <ListRow icon={<MapIcon />} title="Map & address lists" onClick={viewMap} />
               {canManage && <ListRow icon={<UsersRound />} title="Team & invitations" onClick={() => navigate("leader")} />}
               {canManage && data.sync.mode === "connected" && <ListRow icon={<Database />} title="Data & health" onClick={() => navigate("data")} />}
             </ListGroup>
@@ -670,7 +670,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
                 </div>
                 <div className="fieldwork-header-actions">{outreachDisplaySwitch}<button className="button quiet fieldwork-finish-button" disabled={fieldworkAction.busy} onClick={() => void finishFieldwork()}><CheckCircle2 size={16} /> {fieldworkAction.busy ? "Finishing…" : "Finish for tonight"}</button></div>
               </header>}
-              {!fieldOuting && <div className="map-view-controls">{outreachDisplaySwitch}{canManage && <button type="button" className="button primary map-plan-walk-button" onClick={planWalk} aria-label="Plan a walk"><Plus size={16} aria-hidden="true" /><span>Plan a walk</span></button>}</div>}
+              {!fieldOuting && <div className="map-view-controls">{walksSwitch}</div>}
               {fieldworkAction.error && <p role="alert" className="inline-error fieldwork-error">{fieldworkAction.error}</p>}
               {showAddressList ? <AddressList key={fieldTarget?.id ?? activeTerritory.id} targetName={fieldTarget?.name} targetParcels={fieldTarget ? mapParcels : undefined} printContext={fieldPrintContext} lockedTerritoryId={fieldOuting ? activeTerritory.id : undefined} data={fieldTarget ? { ...data, properties: territoryProperties } : data} onOpen={(id) => { if (fieldOuting) setSelectedPropertyId(id); else navigate("map", id); }} onOpenParcel={(parcel) => {
                 const coordinates = parcelSelectionPoint(parcel);
@@ -780,7 +780,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
                 <div className="map-floating-actions">
                   {!drawMode && <button className={`map-action-button ${addMode ? "active" : ""}`} aria-label={addMode ? "Cancel adding a home" : "Add a home"} onClick={() => { setAddMode((current) => !current); setSelectedPropertyId(null); setGuidedPropertyId(null); setSelectedParcel(null); }}><Plus size={18} /><span>{addMode ? "Cancel adding" : "Add home"}</span></button>}
                   {canManage && !fieldTarget && !drawMode && <button className="map-action-button secondary" aria-label={`Edit ${activeTerritory.name}`} onClick={() => openTerritoryEditor(activeTerritory.id)}><Edit3 size={18} /><span>Edit neighborhood</span></button>}
-                  {canManage && !fieldTarget && !drawMode && <button className="map-action-button secondary" aria-label="Draw a neighborhood" onClick={startDrawing}><MapPinned size={18} /><span>New neighborhood</span></button>}
+                  {canManage && !fieldTarget && !drawMode && <button className="map-action-button secondary" aria-label="Draw a neighborhood" onClick={openNeighborhoodCreator}><MapPinned size={18} /><span>New neighborhood</span></button>}
                 </div>
                 {drawMode && <div className="draw-controls"><button className="button quiet" disabled={!draftBoundary.length} onClick={() => setDraftBoundary((points) => undoDrawingPoint(points, drawShape))}><Undo2 size={15} /> {drawShape === "rectangle" ? "Clear rectangle" : "Undo corner"}</button><button className="button quiet" onClick={cancelDrawing}>Cancel</button><button className="button primary" disabled={!drawingBoundaryReady(draftBoundary, drawShape)} onClick={() => setTerritoryEditorOpen(true)}><Check size={15} /> Finish boundary</button></div>}
               </div>
@@ -821,7 +821,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
             }}
           />}
           {view === "guide" && <GuideView key={route.id ?? "guides"} routeGuideId={route.id} onSelectGuide={(id) => navigate("guide", id)} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} effectiveGuideId={favoriteConversationGuide?.id} activeTeamId={activeGuideTeam?.id} activeTeamName={activeGuideTeam?.name} teams={data.teams} teamGuideDefaults={guideLibrary.teamGuideDefaults} canManage={canManage} allowBuiltInManagement={data.sync.mode === "device_only"} libraryError={guideLibraryError} changesDisabled={Boolean(supabaseUser && (!online || guideChanging || guidePending))} pendingRequest={Boolean(guidePending)} recovery={supabaseUser ? <GuideChangeRecovery pending={guidePending} online={online} busy={guideChanging} onRefresh={actions.refreshGuideLibrary} onRetry={actions.retryGuideChange} onReview={actions.reviewGuidePending} /> : undefined} onSave={actions.saveConversationGuide} onDelete={actions.deleteConversationGuide} onSetFavorite={actions.setFavoriteConversationGuide} onSetTeamDefault={actions.setTeamConversationGuide} />}
-          {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} onSelectTerritory={(id) => { void actions.selectTerritory(id).then(() => navigate("map")).catch(() => showToast("Couldn’t open that area", "error")); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} onOpenOutreach={() => navigate("outreach")} onOpenToday={() => navigate("today")} onOpenSettings={() => navigate("settings")} onOpenData={() => navigate("data")} onAuthenticate={actions.reauthenticateAdmin} onAccessChanged={actions.syncNow} />}
+          {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} onSelectTerritory={(id) => { void actions.selectTerritory(id).then(() => navigate("map")).catch(() => showToast("Couldn’t open that area", "error")); }} onEditTerritory={openTerritoryEditor} onStartDrawing={openNeighborhoodCreator} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} onOpenOutreach={() => navigate("outreach")} onOpenToday={() => navigate("today")} onOpenSettings={() => navigate("settings")} onOpenData={() => navigate("data")} onAuthenticate={actions.reauthenticateAdmin} onAccessChanged={actions.syncNow} />}
           {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} accountEmail={supabaseUser?.email} onSignOut={onSignOut ? async () => {
             if (saving || guideChanging) throw new Error("Wait for saving to finish, then sign out.");
             const pendingAdministration = await actions.getAdministrationPending();
@@ -834,14 +834,19 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
 
       <nav className="mobile-nav" aria-label="Main navigation">
         <MobileNav active={view === "today"} icon={<House size={24} />} label="Home" onClick={() => navigate("today")} />
-        <MobileNav active={view === "outreach" || Boolean(fieldOuting)} icon={<Footprints size={24} />} label="Walks" count={walkAttentionCount} onClick={() => navigate("outreach")} />
+        <MobileNav active={view === "outreach" || view === "map" || Boolean(fieldOuting)} icon={<Footprints size={24} />} label="Walks" count={walkAttentionCount} onClick={() => navigate("outreach")} />
         <MobileNav active={view === "people" || view === "followups"} icon={<Users size={24} />} label="People" count={peopleAttentionCount} onClick={() => navigate("people")} />
-        <MobileNav active={["more", "guide", "leader", "settings", "map", "recovery", "data"].includes(view) && !fieldOuting} icon={<CircleEllipsis size={24} />} label="More" onClick={() => navigate("more")} />
+        <MobileNav active={["more", "guide", "leader", "settings", "recovery", "data"].includes(view)} icon={<CircleEllipsis size={24} />} label="More" attention={deviceNeedsAttention} onClick={() => navigate("more")} />
       </nav>
+      <button type="button" className="tab-log-button" aria-label="Log a conversation" onClick={() => setLogOpen(true)}><Plus size={26} aria-hidden="true" /></button>
 
+      {logOpen && <EncounterForm data={data} outingId={fieldOuting?.id} onSave={async (input) => { await actions.recordVisit(input); showToast("Conversation saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} onClose={() => setLogOpen(false)} />}
+      {neighborhoodCreatorOpen && <Modal title="New neighborhood" wide mobileImmersive onClose={() => setNeighborhoodCreatorOpen(false)}>
+        <ParentZoneCreator churchId={data.church.id} mapStyleUrl={data.preferences.mapStyleUrl} baseTerritory={activeTerritory.center ? activeTerritory : undefined} demo={data.sync.mode === "device_only"} open onOpenChange={(open) => { if (!open) setNeighborhoodCreatorOpen(false); }} onAddZone={actions.addTerritory} onCreated={(territory) => { setNeighborhoodCreatorOpen(false); void actions.selectTerritory(territory.id); setOutreachDisplay("map"); showToast("Neighborhood created"); }} />
+      </Modal>}
       {pendingAdd && <AddPropertyModal intent={pendingAdd} existingDwellingCount={pendingParcelDwellings.length} guideName={favoriteConversationGuide?.title} guideAvailable={Boolean(favoriteConversationGuide?.steps.length)} onClose={() => { setPendingAdd(null); setAddMode(false); }} onSave={handleAddProperty} />}
       {selectedParcel && <ParcelSummaryModal selection={selectedParcel} dwellings={selectedParcelDwellings} onClose={() => setSelectedParcel(null)} onOpenDwelling={(propertyId) => { setSelectedParcel(null); setGuidedPropertyId(null); setSelectedPropertyId(propertyId); }} onAddDwelling={beginAddingDwelling} />}
-      {territoryPickerOpen && <TerritoryPickerModal data={data} coverageByTerritory={coverageByTerritory} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onEdit={openTerritoryEditor} onDraw={() => { setTerritoryPickerOpen(false); startDrawing(); }} />}
+      {territoryPickerOpen && <TerritoryPickerModal data={data} coverageByTerritory={coverageByTerritory} activeTerritoryId={activeTerritory.id} canManage={canManage} onClose={() => setTerritoryPickerOpen(false)} onSelect={(territoryId) => { actions.selectTerritory(territoryId); setTerritoryPickerOpen(false); setSelectedPropertyId(null); }} onEdit={openTerritoryEditor} onDraw={() => { setTerritoryPickerOpen(false); openNeighborhoodCreator(); }} />}
       {territoryEditorOpen && <TerritoryModal key={`${editingTerritoryId ?? "new"}-${draftBoundary.length}`} territory={editingTerritory} territories={territoryEditorTerritories} boundaryChanged={draftBoundary.length >= 3} onClose={() => { setTerritoryEditorOpen(false); if (!drawMode) setEditingTerritoryId(null); }} onRedraw={editingTerritoryId ? () => startBoundaryRedraw(editingTerritoryId) : undefined} onDelete={editingTerritory ? async (destinationTerritoryId) => {
         await actions.deleteTerritory(editingTerritory.id, destinationTerritoryId);
         setSelectedPropertyId(null); setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false); showToast("Neighborhood deleted");
@@ -1011,9 +1016,9 @@ function NavButton({ active, icon, label, count, onClick }: { active: boolean; i
   return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined} aria-label={accessibilityLabel}>{icon}<span>{label}</span>{count ? <b aria-hidden="true">{count}</b> : null}</button>;
 }
 
-function MobileNav({ active, icon, label, count, onClick }: { active: boolean; icon: React.ReactNode; label: string; count?: number; onClick: () => void }) {
-  const accessibilityLabel = count ? `${label}, ${count} item${count === 1 ? "" : "s"} need attention` : label;
-  return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined} aria-label={accessibilityLabel}><span>{icon}{count ? <b aria-hidden="true">{count}</b> : null}</span><small>{label}</small></button>;
+function MobileNav({ active, icon, label, count, attention = false, onClick }: { active: boolean; icon: React.ReactNode; label: string; count?: number; attention?: boolean; onClick: () => void }) {
+  const accessibilityLabel = count ? `${label}, ${count} item${count === 1 ? "" : "s"} need attention` : attention ? `${label}, needs attention` : label;
+  return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined} aria-label={accessibilityLabel}><span>{icon}{count ? <b aria-hidden="true">{count}</b> : attention ? <b className="dot" aria-hidden="true" /> : null}</span><small>{label}</small></button>;
 }
 
 function AppLoading() {

@@ -45,11 +45,11 @@ async function signIn(page: Page, account = "leader") {
   await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
 }
 async function encounter(page: Page, note: string) {
-  await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
+  await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Add a person or note", exact: true }).click();
   await dialog.getByRole("textbox", { name: "Brief factual note (optional)" }).fill(note);
-  await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
 }
 function recorded(label: string) {
@@ -151,12 +151,12 @@ test("a reviewed encounter correction survives a lost response and preserves the
   await expect(dialog).toBeHidden();
   await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
   await page.goto(origin + "/app/today");
-  await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
+  await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox", { name: "What happened?", exact: true }).selectOption("follow_up");
   await dialog.getByRole("combobox", { name: "Person (optional)", exact: true }).selectOption({ label });
   await dialog.getByRole("textbox", { name: "Requested next step", exact: true }).fill("Fictional promised next step survives correction");
-  await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
   if (!/^Fictional browser rehearsal [a-f0-9-]+ corrected person$/.test(label)) throw new Error("Invalid fixture label");
@@ -519,16 +519,16 @@ test("quota failure retains the form and never claims a persisted encounter", as
   });
   await signIn(page);
   await page.evaluate(() => sessionStorage.setItem("fictional-quota-test", "on"));
-  await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
+  await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Add a person or note", exact: true }).click();
   await dialog.getByRole("textbox", { name: "Brief factual note (optional)" }).fill(prefix + " quota /one");
-  await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
   await expect(dialog.getByRole("textbox")).toHaveValue(prefix + " quota /one");
   expect(recorded(prefix + " quota")).toBe(0);
   await page.evaluate(() => sessionStorage.removeItem("fictional-quota-test"));
-  await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => recorded(prefix + " quota")).toBe(1);
 });
@@ -695,7 +695,7 @@ test("a second tab cannot overwrite unsent work and can reopen after the first c
   expect(recorded(prefix + " tabs")).toBe(0);
   const second = await context.newPage(); await second.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
   await expect(second.getByText(/already open in another tab or window/)).toBeVisible();
-  await expect(second.getByRole("button", { name: "Record a community encounter", exact: true })).toHaveCount(0);
+  await expect(second.getByRole("button", { name: "Log a conversation", exact: true })).toHaveCount(0);
   expect(await queued(second)).toBe(1);
   expect(recorded(prefix + " tabs")).toBe(0);
   await page.close(); await second.reload();
@@ -713,11 +713,11 @@ test("a second tab cannot overwrite unsent work and can reopen after the first c
 
 test("a reassigned next step requires the responsible volunteer to accept before completing", async ({ browser, context, page }) => {
   await isolate(context); await signIn(page);
-  await page.getByRole("button", { name: "Record a community encounter", exact: true }).click();
+  await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox", { name: "What happened?" }).selectOption("follow_up");
   await dialog.getByRole("textbox", { name: "Requested next step" }).fill(prefix + " task /one");
-  await dialog.getByRole("button", { name: "Save encounter", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => queued(page)).toBe(0);
   const taskState = () => JSON.parse(execFileSync("psql", [database, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",

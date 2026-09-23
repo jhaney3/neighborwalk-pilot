@@ -1,5 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+/** The map lives under Walks: open the Walks tab, then its Map view. */
+async function openMap(page: Page) {
+  await page.getByRole("navigation").getByRole("button", { name: /^Walks/ }).click();
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Map", exact: true }).click();
+}
+
 async function dragAcrossMap(page: Page, map: Locator) {
   const bounds = await map.boundingBox();
   expect(bounds).not.toBeNull();
@@ -72,7 +78,7 @@ test("Done releases focus from single-line inputs", async ({ page }) => {
   await expect(churchName).not.toBeFocused();
 
   await nav.getByRole("button", { name: "Home", exact: true }).click();
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
   const search = page.getByRole("combobox", { name: "Search any address", exact: true });
   await search.fill("708 Shelby Ave");
   await page.keyboard.press("Enter");
@@ -95,7 +101,7 @@ test.describe("touch focus treatment", () => {
 
   test("touch-opened sheets and controls avoid focus rings until keyboard navigation", async ({ page }) => {
     await page.goto("/demo");
-    await page.getByRole("button", { name: "Record a community encounter" }).tap();
+    await page.getByRole("button", { name: "Log a conversation", exact: true }).tap();
     const close = page.getByRole("button", { name: "Close dialog" });
     await expect(close).toBeFocused();
     await expect(close).toHaveCSS("outline-style", "none");
@@ -118,7 +124,7 @@ test.describe("touch focus treatment", () => {
 test("map filters and visit outcomes expose their selected state", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/demo");
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
 
   const all = page.getByRole("button", { name: "All", exact: true });
   const followUp = page.getByRole("button", { name: "Follow-up", exact: true });
@@ -127,7 +133,7 @@ test("map filters and visit outcomes expose their selected state", async ({ page
   await expect(followUp).toHaveAttribute("aria-pressed", "true");
   await expect(all).toHaveAttribute("aria-pressed", "false");
 
-  await page.getByRole("button", { name: "Address list", exact: true }).click();
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "List", exact: true }).click();
   await page.getByRole("button", { name: /118 Crockett Street/ }).click();
   const sheet = page.getByRole("dialog", { name: /Home details for 118 Crockett Street/ });
   const talked = sheet.getByRole("button", { name: "Talked", exact: true });
@@ -141,8 +147,8 @@ test("map filters and visit outcomes expose their selected state", async ({ page
 test("native compact controls retain 44 point hit targets", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/demo");
-  await page.getByRole("button", { name: "View map", exact: true }).click();
-  await page.getByRole("button", { name: "Address list", exact: true }).click();
+  await openMap(page);
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "List", exact: true }).click();
   const addAddressBounds = await page.getByRole("button", { name: "Add address manually" }).boundingBox();
   expect(addAddressBounds).not.toBeNull();
   expect(addAddressBounds!.width).toBeGreaterThanOrEqual(44);
@@ -190,7 +196,8 @@ test("drawing a lasting zone uses a full-screen two-stage flow", async ({ page }
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/demo");
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
@@ -238,7 +245,8 @@ test("drawing a lasting zone uses a full-screen two-stage flow", async ({ page }
 test("zone creation stays inline above the phone breakpoint", async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 900 });
   await page.goto("/demo");
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
@@ -258,7 +266,7 @@ test("a People location opens a map with a contextual return", async ({ page }) 
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/demo");
 
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
   await expect(page.getByRole("button", { name: "Back to People" })).toHaveCount(0);
 
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: /^People/ }).click();
@@ -317,8 +325,9 @@ for (const width of [320, 393, 768]) {
       expect(bounds?.height).toBeGreaterThanOrEqual(44);
       expect(bounds?.width).toBeGreaterThanOrEqual(44);
     }
-    await page.getByRole("button", { name: "View map", exact: true }).click();
+    await openMap(page);
     await expect(page.getByRole("combobox", { name: "Search any address", exact: true })).toBeVisible();
+    await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
     await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     const modal = await page.getByRole("dialog").boundingBox();
@@ -330,8 +339,8 @@ for (const width of [320, 393, 768]) {
 test("location details keep the same sheet height across record, people and history", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/demo");
-  await page.getByRole("button", { name: "View map", exact: true }).click();
-  await page.getByRole("button", { name: "Address list", exact: true }).click();
+  await openMap(page);
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "List", exact: true }).click();
   await page.getByRole("button", { name: /118 Crockett Street/ }).click();
 
   const sheet = page.getByRole("dialog", { name: /Home details for 118 Crockett Street/ });
@@ -377,8 +386,8 @@ test("location details keep the same sheet height across record, people and hist
 test("a new person can be created from the visit person selector", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/demo");
-  await page.getByRole("button", { name: "View map", exact: true }).click();
-  await page.getByRole("button", { name: "Address list", exact: true }).click();
+  await openMap(page);
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "List", exact: true }).click();
   await page.getByRole("button", { name: /144 Crockett Street/ }).click();
 
   const sheet = page.getByRole("dialog", { name: /Home details for 144 Crockett Street/ });

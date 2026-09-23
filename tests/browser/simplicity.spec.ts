@@ -2,6 +2,12 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { DEMO_CENTER } from "../../lib/seed";
 
+/** The map lives under Walks: open the Walks tab, then its Map view. */
+async function openMap(page: Page) {
+  await page.getByRole("navigation").getByRole("button", { name: /^Walks/ }).click();
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Map", exact: true }).click();
+}
+
 const destinations = ["Home", "Walks", "People", "More"] as const;
 
 async function openDemo(page: Page) {
@@ -251,8 +257,9 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
   const parentName = "Crockett Heights";
 
   await openDemo(page);
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
   await expect(page.getByRole("combobox", { name: "Search any address", exact: true })).toBeVisible();
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   await page.getByRole("dialog", { name: "Plan a walk" }).getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Home", exact: true }).click();
@@ -405,10 +412,8 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
 
 test("recording no answer never asks for a person", async ({ page }) => {
   await openDemo(page);
-  const navigation = page.getByRole("navigation", { name: "Main sections" });
-  await navigation.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("button", { name: "Map & address lists", exact: true }).click();
-  await page.getByRole("group", { name: "View as" }).getByRole("button", { name: "Address list", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "List", exact: true }).click();
   await page.getByRole("button", { name: /^118 Crockett Street/ }).click();
 
   const before = await demoSnapshot(page, { address: "118 Crockett Street" });
@@ -463,7 +468,8 @@ test("an advance invitation becomes field access only after check-in and crew as
   const parentName = "Crockett Heights";
 
   await openDemo(page);
-  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await openMap(page);
+  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "Plan a walk", exact: true });
   await dialog.getByRole("textbox", { name: "Walk name", exact: true }).fill(walkName);

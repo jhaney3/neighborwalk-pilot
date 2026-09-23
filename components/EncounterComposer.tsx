@@ -17,10 +17,10 @@ type EncounterComposerProps = {
 
 export function EncounterComposer({ data, outingId, onSave, onCreatePerson }: EncounterComposerProps) {
   const [open, setOpen] = useState(false);
-  return <div className="encounter-launcher"><button className="button quiet" onClick={() => setOpen(true)}><MessageCircle size={18} /> Record a community encounter</button>
+  return <div className="encounter-launcher"><button className="button quiet" onClick={() => setOpen(true)}><MessageCircle size={18} /> Log a conversation</button>
     {open && <EncounterForm data={data} outingId={outingId} onSave={onSave} onCreatePerson={onCreatePerson} onClose={() => setOpen(false)} />}</div>;
 }
-function EncounterForm({ data, outingId, onSave, onCreatePerson, onClose }: EncounterComposerProps & { onClose: () => void }) {
+export function EncounterForm({ data, outingId, onSave, onCreatePerson, onClose }: EncounterComposerProps & { onClose: () => void }) {
   const [context, setContext] = useState<EncounterInput["context"]>("community_meal");
   const [eventId, setEventId] = useState(outingId ?? "");
   const [personId, setPersonId] = useState("");
@@ -64,7 +64,7 @@ function EncounterForm({ data, outingId, onSave, onCreatePerson, onClose }: Enco
     setCreatedPersonName(name);
     setPersonCreatorOpen(false);
   });
-  return <Modal title="Record a community encounter" description="At a meal, service project, or through a referral. An address is optional, and you can link or create a person when helpful." wide={personCreatorOpen} onClose={action.busy || personAction.busy ? () => undefined : onClose}>
+  return <Modal title="Log a conversation" description="From a meal, service project, referral or anywhere else." wide={personCreatorOpen} onClose={action.busy || personAction.busy ? () => undefined : onClose}>
     <form className="form-stack" onSubmit={(e) => { e.preventDefault(); if (personCreatorOpen) { if (canCreatePerson) void createPerson(); return; } void action.run(() => onSave({ context, eventId: eventId || undefined,
       residentId: showDetails ? personId || undefined : undefined, outcome, objectiveNote: showDetails ? note : undefined, followUpDate: outcome === "follow_up" ? date : undefined }), onClose); }}>
       <label>What happened?<select value={outcome} onChange={(e) => { const value = e.target.value as EncounterInput["outcome"]; setOutcome(value); if (value === "follow_up") setDetailsOpen(true); }}><option value="conversation">Conversation</option><option value="follow_up">Follow-up requested</option><option value="declined">Conversation declined</option></select></label>
@@ -88,7 +88,7 @@ function EncounterForm({ data, outingId, onSave, onCreatePerson, onClose }: Enco
         {outcome === "follow_up" && <><label>Follow-up date ({data.church.timezone})<input type="date" required value={date} min={calendarDaysFromNow(0, data.church.timezone)} onChange={(e) => setDate(e.target.value)} /></label><p>{personId ? "The person’s care owner receives the next step." : "You are responsible for this next step."} Recorded restrictions still apply.</p>{followUpRestricted && <p className="inline-notice" role="status">The selected person’s {followUpChannel} contact method is restricted. Record the encounter as a conversation if needed, but do not schedule this task.</p>}</>}
       </div>}
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-      <div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy || personAction.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={action.busy || personAction.busy || personCreatorOpen || followUpRestricted}>{action.busy ? "Saving to device…" : "Save encounter"}</button></div>
+      <div className="modal-actions"><button type="button" className="button quiet" disabled={action.busy || personAction.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={action.busy || personAction.busy || personCreatorOpen || followUpRestricted}>{action.busy ? "Saving…" : "Save conversation"}</button></div>
     </form>
   </Modal>;
 }

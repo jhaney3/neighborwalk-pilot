@@ -244,7 +244,7 @@ dialog.property-drawer .contact-restrictions { margin-top: 20px; padding: 16px; 
 .fieldwork-header .outreach-display-switch { margin: 0; }
 .fieldwork-finish-button { min-height: 36px; font-size: var(--fs-subhead); }
 .fieldwork-error { margin: 0 0 10px; }
-.mobile-nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
 .recovery-view input:not([type="checkbox"]) { font-size: var(--fs-callout); min-height: 44px; }
 
 /* ---- Leader data & health (admin) ---- */
