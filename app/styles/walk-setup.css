@@ -82,7 +82,9 @@
 .walk-target-planner { display: grid; gap: 10px; }
 .walk-target-planner-host { display: contents; }
 
-.outing-fieldwork-entry { display: grid; justify-items: stretch; gap: 6px; width: min(250px,100%); }
+.outing-fieldwork-entry { display: grid; justify-items: stretch; gap: 6px; width: 100%; }
+.outing-fieldwork-entry label { display: grid; }
+.outing-fieldwork-entry select, .outing-fieldwork-entry .outing-fieldwork-button { width: 100%; }
 .outing-fieldwork-entry label { gap: 4px; font-size: var(--text-supporting); }
 .outing-fieldwork-entry small { color: var(--label-2); line-height: 1.35; }
 .outing-community-entry { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding: 14px 16px; border: 0; border-radius: var(--radius-md); background: var(--bg-grouped-3); }

@@ -21,7 +21,7 @@
 .people-directory-label { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 10px 16px; border-bottom: 1px solid var(--hairline); }
 .people-directory-label span { color: var(--label-2); font-size: var(--fs-footnote); font-weight: 600; }
 .people-directory-label small { color: var(--label-2); font-size: var(--fs-caption); }
-.people-directory-list { display: grid; max-height: calc(100vh - 274px); min-height: 360px; overflow-y: auto; }
+.people-directory-list { display: grid; align-content: start; max-height: calc(100vh - 274px); min-height: 360px; overflow-y: auto; }
 .person-list-card { position: relative; width: 100%; min-height: 64px; display: grid; grid-template-columns: 40px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 10px 16px; border: 0; color: inherit; background: transparent; cursor: pointer; text-align: left; transition: background .15s ease; }
 .person-list-card + .person-list-card::before { content: ""; position: absolute; left: 68px; right: 0; top: 0; height: 1px; background: var(--hairline); }
 .person-list-card:hover { background: var(--fill-4); }
@@ -56,17 +56,11 @@
 .person-profile-avatar { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; color: var(--on-hero); background: var(--hero-bg); font-size: var(--fs-headline); font-weight: 600; }
 .person-profile-heading-copy { min-width: 0; }
 .person-profile-heading-line { min-width: 0; display: flex; align-items: center; gap: 8px; }
-.person-profile-identity h2 { min-width: 0; margin: 0; overflow: hidden; font-size: var(--fs-title2); line-height: var(--lh-title2); font-weight: 700; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
+.person-profile-identity h2 { min-width: 0; margin: 0; overflow: hidden; font-family: var(--font-display); font-size: var(--fs-title1); line-height: var(--lh-title1); font-weight: 600; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
 .person-privacy-summary { display: flex; align-items: center; gap: 4px; margin-top: 6px; color: var(--tint); font-size: var(--text-caption); }
 .person-profile-status { display: inline-flex; padding: 2px 8px; border-radius: var(--radius-pill); color: var(--tint); background: var(--tint-soft); font-size: var(--fs-caption); font-weight: 600; }
 .person-profile-status.paused { color: var(--orange-text); background: var(--orange-soft); }
 .person-profile-status.archived { color: var(--label-2); background: var(--gray-5); }
-.person-profile-contact { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-left: 64px; }
-.person-profile-contact a,.person-profile-contact button { min-width: 0; min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 10px; border: 0; border-radius: var(--radius-pill); color: var(--tint); background: var(--tint-soft); cursor: pointer; text-decoration: none; }
-.person-profile-contact a:hover,.person-profile-contact button:hover { background: var(--tint-soft-2); }
-.person-profile-contact span,.person-profile-contact small,.person-profile-contact strong { min-width: 0; display: block; }
-.person-profile-contact small { margin-bottom: 1px; color: var(--label-2); font-size: var(--text-caption); line-height: 1; }
-.person-profile-contact strong { max-width: 210px; overflow: hidden; font-size: var(--text-supporting); text-overflow: ellipsis; white-space: nowrap; }
 .person-safety-notice { margin: 12px 16px 0; }
 .discipleship-path { padding: 14px 16px; border: 0; border-radius: var(--radius-md); background: var(--bg-grouped-3); }
 .discipleship-path > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -84,11 +78,9 @@
 .person-care-grid { display: grid; grid-template-columns: minmax(0,1.45fr) minmax(220px,.75fr); gap: 9px; padding: 11px 16px 13px; }
 .care-owner-card,.care-next-card { min-width: 0; padding: 14px; border: 0; border-radius: var(--radius-md); background: var(--bg-grouped-3); container: care-card / inline-size; }
 .care-owner-card { background: var(--bg-grouped-3); }
-.care-owner-identity { display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 8px; margin-top: 9px; }
-.care-owner-avatar { width: 32px; height: 32px; font-size: var(--fs-footnote); }
-.care-owner-card strong,.care-owner-card small { display: block; }
-.care-owner-card strong { font-size: var(--text-control); }
-.care-owner-card small { margin-top: 2px; color: var(--label-2); font-size: var(--text-caption); line-height: 1.35; }
+.care-owner-card.list-group-rows { align-self: start; padding: 0; box-shadow: none; }
+.care-owner-card > :not(.list-row) { margin: -8px var(--space-4) var(--space-1); }
+.care-owner-avatar { width: 28px; height: 28px; font-size: var(--fs-caption); }
 .handoff-panel { display: grid; gap: 8px; margin-top: 10px; padding: 12px; border: 0; border-radius: var(--radius-sm); background: var(--bg-grouped-2); }
 .handoff-panel-heading { min-width: 0; display: grid; grid-template-columns: 30px minmax(0,1fr); align-items: center; gap: 9px; }
 .handoff-panel-heading > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--radius-xs); color: var(--tint); background: var(--tint-soft-2); }
@@ -99,8 +91,7 @@
 .handoff-panel-actions .button { width: auto; height: auto; min-width: 0; min-height: 40px; margin: 0; padding: 8px 11px; white-space: normal; text-align: center; line-height: 1.2; }
 .handoff-panel-actions .button.primary { flex: 1 1 180px; }
 .handoff-panel-actions .button.quiet { flex: 1 1 80px; }
-.care-owner-handoff { margin-top: 8px; }
-.care-owner-handoff > summary { width: fit-content; color: var(--tint); cursor: pointer; font-size: var(--text-caption); font-weight: 600; list-style-position: inside; }
+.care-owner-handoff > summary { width: fit-content; min-height: 32px; display: flex; align-items: center; padding-left: 40px; color: var(--tint); cursor: pointer; font-size: var(--fs-subhead); font-weight: 600; list-style-position: inside; }
 .care-owner-card label { display: grid; grid-template-columns: minmax(0,1fr); align-items: center; gap: 5px; margin-top: 8px; }
 .care-owner-card label > span { color: var(--label-2); font-size: var(--text-caption); }
 .care-owner-card select { width: 100%; height: 32px; min-width: 0; overflow: hidden; padding: 0 7px; border: 1px solid var(--hairline); border-radius: var(--radius-xs); background: var(--bg-grouped-2); font-size: var(--text-supporting); text-overflow: ellipsis; white-space: nowrap; }
@@ -394,21 +385,10 @@
 .person-profile-identity { align-items: center; }
 .person-privacy-summary { margin-top: 4px; color: var(--label-2); font-size: var(--fs-caption); }
 .person-privacy-summary svg { color: var(--label-3); }
-.person-profile-contact { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; margin-top: 14px; padding-left: 0; }
-.person-profile-contact a, .person-profile-contact button { min-width: 0; display: grid; grid-template-columns: 1fr; gap: 6px; padding: 10px 12px; border-radius: var(--radius-sm); color: var(--label); background: var(--bg-grouped-3); text-align: left; }
-.person-profile-contact a:hover, .person-profile-contact button:hover { background: var(--fill-3); }
-.person-profile-contact a svg, .person-profile-contact button svg { width: 18px; height: 18px; color: var(--tint); }
-.person-profile-contact small { margin: 0; color: var(--label-2); font-size: var(--fs-caption); line-height: 1.2; }
-.person-profile-contact strong { max-width: none; color: var(--label); font-size: var(--fs-footnote); font-weight: 600; line-height: 1.3; }
 .care-owner-card, .care-next-card { background: var(--bg-grouped-3); }
 .care-next-card.overdue { background: var(--red-soft); }
 .profile-section-label { color: var(--label-2); font-size: var(--fs-caption); font-weight: 600; letter-spacing: .02em; }
 .care-next-card p { font-size: var(--fs-body); font-weight: 500; line-height: var(--lh-body); }
-@media (max-width: 480px) {
-  .person-profile-contact { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
-  .person-profile-contact > * { flex: none; }
-  .person-profile-contact strong { max-width: none; }
-}
 .person-privacy-summary { align-items: flex-start; gap: 6px; line-height: 1.35; }
 .person-privacy-summary svg { flex: none; margin-top: 2px; }
 
@@ -428,5 +408,8 @@
   .followup-contact-action { grid-column: auto; margin-top: 0; }
 }
 
-.person-last-contact { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 12px 16px 0; color: var(--label-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
-.person-last-contact small { flex-basis: 100%; display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-caption); }
+
+/* Contact details, home and last contact read as one grouped list inside the card. */
+.person-profile-facts { margin: 12px 16px 0; }
+.person-profile .list-group-rows { background: var(--bg-grouped-3); box-shadow: none; }
+.person-profile-facts a.list-row { text-decoration: none; }

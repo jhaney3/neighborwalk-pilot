@@ -2,14 +2,18 @@
 .map-view { position: relative; height: 100%; display: flex; flex-direction: column; padding: 14px 16px 16px; overflow: hidden; }
 .mobile-context-row { display: none; }
 .map-view-controls { position: relative; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
-.map-view-controls .outreach-display-switch { margin: 0; }
 .map-toolbar { position: relative; z-index: 30; display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.map-filter-scroll { display: flex; gap: 6px; padding: 2px 0; }
-.map-filter-scroll button { min-height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: var(--radius-pill); color: var(--label); background: var(--bg-grouped-2); box-shadow: var(--shadow-sm); font-size: var(--fs-footnote); font-weight: 600; white-space: nowrap; transition: background-color .15s ease, color .15s ease; }
-.map-filter-scroll button i { width: 8px; height: 8px; border: 1px solid rgba(0, 0, 0, .1); border-radius: 50%; }
-.map-filter-scroll button.active { color: var(--on-tint); background: var(--tint); }
-.map-filter-scroll button.active i { border-color: rgba(255, 255, 255, .5); }
 .map-search-wrap { position: relative; min-width: 240px; flex: 1; }
+/* Filter lives behind one round button; the active filter shows as a chip. */
+.map-filter { position: relative; flex: none; }
+.map-filter-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; width: 220px; display: grid; padding: 6px; border-radius: var(--radius-md); background: var(--bg-grouped-2); box-shadow: var(--shadow-md); }
+.map-filter-menu button { min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: var(--radius-sm); color: var(--label); font-size: var(--fs-body); text-align: left; }
+.map-filter-menu button:hover { background: var(--fill-3); }
+.map-filter-menu button span { flex: 1; }
+.map-filter-menu button svg { color: var(--tint); }
+.map-filter-menu i, .map-filter-chip i { width: 10px; height: 10px; flex: none; border: 1px solid rgba(0, 0, 0, .12); border-radius: 50%; }
+.map-filter-menu i.all { background: conic-gradient(var(--tint) 0 50%, var(--accent) 0); }
+.map-filter-chip { position: absolute; top: 12px; left: 12px; z-index: 20; min-height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: var(--radius-pill); color: var(--tint); background: var(--bg-grouped-2); box-shadow: var(--shadow-sm); font-size: var(--fs-footnote); font-weight: 600; }
 .map-search { width: 100%; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: var(--radius-pill); background: var(--bg-grouped-2); box-shadow: var(--shadow-sm); transition: box-shadow .15s ease; }
 .map-search.active { box-shadow: 0 0 0 3px var(--tint-soft-3), var(--shadow-sm); }
 .map-search svg { color: var(--label-3); }

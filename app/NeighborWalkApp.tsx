@@ -5,7 +5,6 @@ import {
   BookOpenText,
   Building2,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   CircleAlert,
@@ -18,14 +17,17 @@ import {
   Footprints,
   House,
   Info,
+  List as ListIcon,
   LoaderCircle,
   Lock,
+  Map as MapIcon,
   MapPin,
   MapPinned,
   Navigation,
   Plus,
   Search,
   Settings2,
+  SlidersHorizontal,
   ShieldCheck,
   Undo2,
   Users,
@@ -161,6 +163,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
   const [peopleMapReturn, setPeopleMapReturn] = useState<PeopleMapReturn | null>(null);
   const [guidedPropertyId, setGuidedPropertyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | Outcome>("all");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [addressResults, setAddressResults] = useState<AddressSearchResult[]>([]);
   const [addressSearchStatus, setAddressSearchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -596,7 +599,8 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
     setTerritoryEditorOpen(false);
   };
 
-  const outreachDisplaySwitch = <div className="outreach-display-switch" role="group" aria-label="View as"><button aria-pressed={showAddressList} onClick={() => setOutreachDisplay("list")}>Address list</button><button disabled={!activeTerritory.center || activeTerritory.kind === "list"} aria-pressed={!showAddressList} onClick={() => setOutreachDisplay("map")}>Map</button></div>;
+  const mapAvailable = Boolean(activeTerritory.center) && activeTerritory.kind !== "list";
+  const displayToggle = <button type="button" className="round-button" aria-label={showAddressList ? "Show map" : "Show list"} disabled={showAddressList && !mapAvailable} onClick={() => setOutreachDisplay(showAddressList ? "map" : "list")}>{showAddressList ? <MapIcon size={20} aria-hidden="true" /> : <ListIcon size={20} aria-hidden="true" />}</button>;
   const walksView = view === "map" ? (showAddressList ? "list" : "map") : "walks";
   const walksSwitch = <SegmentedControl label="Walks view" value={walksView} options={[
     { value: "walks", label: "Walks" },
@@ -667,9 +671,10 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
               {!fieldOuting && peopleMapReturn && !selectedProperty && <div className="map-people-return"><button type="button" onClick={returnFromPeopleMap} aria-label="Back to People"><ArrowLeft size={20} aria-hidden="true" /><span>People</span></button></div>}
               {fieldOuting && <header className="fieldwork-header">
                 <div className="field-context">
-                  <button className="field-context-back" onClick={() => navigate("outreach", fieldOuting.id)}><span className="field-context-back-icon" aria-hidden="true"><ArrowLeft size={18} /></span><span className="field-context-back-copy"><strong>{fieldTarget?.name ?? fieldOuting.name}</strong><span>{fieldTarget ? `${fieldOuting.name} · ${coverage.touched} of ${coverage.total} reached · ${coverageValue}` : "Conversations here are saved to this walk."}</span></span></button>
+                  <button className="field-context-back" onClick={() => navigate("outreach", fieldOuting.id)}><span className="field-context-back-icon" aria-hidden="true"><ArrowLeft size={18} /></span><span className="field-context-back-copy"><strong>{fieldTarget?.name ?? fieldOuting.name}</strong><span>{fieldTarget ? fieldOuting.name : "Conversations here are saved to this walk."}</span></span></button>
+                  <div className="fieldwork-header-actions">{displayToggle}<button className="text-button fieldwork-finish-button" aria-label={fieldworkAction.busy ? "Finishing…" : "Finish for tonight"} disabled={fieldworkAction.busy} onClick={() => void finishFieldwork()}>{fieldworkAction.busy ? "Finishing…" : "Finish"}</button></div>
                 </div>
-                <div className="fieldwork-header-actions">{outreachDisplaySwitch}<button className="button quiet fieldwork-finish-button" disabled={fieldworkAction.busy} onClick={() => void finishFieldwork()}><CheckCircle2 size={16} /> {fieldworkAction.busy ? "Finishing…" : "Finish for tonight"}</button></div>
+                {fieldTarget && <div className="field-progress" aria-label={`${coverage.touched} of ${coverage.total} homes reached`}><span className="field-progress-track"><i style={{ width: `${coverage.percent ?? 0}%` }} /></span><span>{coverage.touched} of {coverage.total} homes</span><strong>{coverageValue}</strong></div>}
               </header>}
               {!fieldOuting && <div className="map-view-controls">{walksSwitch}</div>}
               {fieldworkAction.error && <p role="alert" className="inline-error fieldwork-error">{fieldworkAction.error}</p>}
@@ -684,7 +689,6 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
                 <div><strong>{coverageValue}</strong><span>{coverageLabel}</span></div>
               </div>}
               <div className="map-toolbar">
-                <div className="map-filter-scroll" role="group" aria-label="Filter homes">{mapFilterOptions.map((option) => <button key={option.value} className={filter === option.value ? "active" : ""} aria-pressed={filter === option.value} onClick={() => setFilter(option.value)}>{option.label}{option.value !== "all" && <i style={{ background: outcomeMeta[option.value].color }} />}</button>)}</div>
                 <div className="map-search-wrap" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false); }}>
                   <div className={`map-search${searchOpen ? " active" : ""}`}>
                     <Search size={16} />
@@ -740,8 +744,13 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
                     {addressSearchStatus === "error" && <p>Address search is unavailable. Check the connection and try again.</p>}
                   </div>}
                 </div>
+                <div className="map-filter" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFilterOpen(false); }}>
+                  <button type="button" className={`round-button${filter !== "all" ? " active" : ""}`} aria-label="Filter" aria-expanded={filterOpen} onClick={() => setFilterOpen((open) => !open)} onKeyDown={(event) => { if (event.key === "Escape") setFilterOpen(false); }}><SlidersHorizontal size={19} aria-hidden="true" /></button>
+                  {filterOpen && <div className="map-filter-menu" role="group" aria-label="Filter homes">{mapFilterOptions.map((option) => <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => { setFilter(option.value); setFilterOpen(false); }}>{option.value !== "all" ? <i style={{ background: outcomeMeta[option.value].color }} aria-hidden="true" /> : <i className="all" aria-hidden="true" />}<span>{option.label}</span>{filter === option.value && <Check size={16} aria-hidden="true" />}</button>)}</div>}
+                </div>
               </div>
               <div className="map-stage">
+                {filter !== "all" && <button type="button" className="map-filter-chip" onClick={() => setFilter("all")} aria-label={`Showing ${mapFilterOptions.find((option) => option.value === filter)?.label}. Clear filter`}><i style={{ background: outcomeMeta[filter].color }} aria-hidden="true" />{mapFilterOptions.find((option) => option.value === filter)?.label}<X size={14} aria-hidden="true" /></button>}
                 <MapCanvas territory={canvasTerritory} target={fieldTarget} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchTarget={searchTarget} addMode={addMode} drawMode={drawMode} drawShape={drawShape} drawModeLabel={editingTerritoryId ? "New boundary" : "New zone"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} parcels={mapParcels} onViewportChange={setMapViewport} onSelectProperty={(id) => { if (!fieldOuting) navigate("map", id); setSelectedPropertyId(id); setGuidedPropertyId(null); setSelectedParcel(null); setAddMode(false); }} onAddIntent={async (intent) => {
                   if (fieldTarget && (!intent.parcel || !fieldTarget.parcels.some((parcel) => parcelKey(parcel) === parcelKey(intent.parcel!)))) { showToast("That home isn’t on this route", "error"); return; }
                   if (intent.parcel) {

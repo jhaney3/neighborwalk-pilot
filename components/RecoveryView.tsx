@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { NeighborWalkData } from "../lib/domain";
 import { recoveryChoices } from "../lib/outreach-recovery";
 import { useAsyncAction } from "../lib/use-async-action";
-import { ViewHeading } from "./ui";
+import { ListGroup, ListRow, ViewHeading } from "./ui";
 
 type Archive = { key: string; reason: string; createdAt: string };
 export function RecoveryView({ data, online, onPreview, onResolve, onExport, onAuthoredExport, onArchives, onDownloadArchive, onSync }: {
@@ -62,10 +62,14 @@ export function RecoveryView({ data, online, onPreview, onResolve, onExport, onA
   return <section className="content-view recovery-view">
     <ViewHeading title="Sync" />
     <section className={`device-status-card ${statusTone}`}>
-      <header><span className="device-status-icon">{statusTone === "calm" ? <CheckCircle2 size={25} /> : statusTone === "offline" ? <CloudOff size={25} /> : <AlertTriangle size={25} />}</span><div><p>{hasAttention ? "Check again" : "Up to date"}</p><h2>{statusTitle}</h2><span>{statusDetail}</span></div><strong className="device-status-pill">{connected ? online ? "Connected" : "Offline" : "Device only"}</strong></header>
-      <div className="device-status-facts"><div><small>Connection</small><strong>{connected ? online ? "Online" : "Offline" : "Sample mode"}</strong></div><div><small>Waiting to send</small><strong>{commands.length}</strong></div><div><small>Last sent</small><strong>{connected ? lastShared : "Not connected"}</strong></div></div>
+      <header><span className="device-status-icon">{statusTone === "calm" ? <CheckCircle2 size={25} /> : statusTone === "offline" ? <CloudOff size={25} /> : <AlertTriangle size={25} />}</span><div><h2>{statusTitle}</h2><span>{statusDetail}</span></div></header>
       {connected && <div className="device-status-actions"><button className={`button ${hasAttention ? "primary" : "quiet"}`} disabled={action.busy || !online} onClick={() => void action.run(async () => { const ok = await onSync(); setMessage(ok ? "Checked." : "Your changes are still saved on this phone."); })}><RefreshCcw size={16} /> {hasAttention ? "Try again" : "Check again"}</button>{reviewRequired && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(async () => onExport())}><Download size={16} /> Download recovery copy</button>}</div>}
     </section>
+    <ListGroup className="device-status-facts">
+      <ListRow title="Connection" value={connected ? online ? "Online" : "Offline" : "Sample mode"} />
+      <ListRow title="Waiting to send" value={String(commands.length)} />
+      <ListRow title="Last sent" value={connected ? lastShared : "Not connected"} />
+    </ListGroup>
 
     {!!commands.length && <section className="device-status-panel"><div className="device-panel-heading"><span><Wifi size={20} /></span><div><p>On this phone</p><h2>Waiting to send</h2><small>Changes send in order. One that needs review holds the rest.</small></div></div><ol className="device-queue">{commands.map((queued, index) => {
       const queueState = queued.state === "needs_review" ? "Needs review" : first?.state === "needs_review" && index ? "Waiting" : "Waiting to send";

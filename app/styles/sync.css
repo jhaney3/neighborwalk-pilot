@@ -1,0 +1,68 @@
+/* ---- Device recovery ---- */
+.recovery-view { font-size: 16px; line-height: 1.6; }
+.recovery-view .button { max-width: 100%; height: auto; min-height: 44px; padding-block: 9px; white-space: normal; text-align: center; }
+.device-status-card,.device-status-panel,.device-advanced-tools { border: 1px solid var(--hairline); border-radius: var(--radius-lg); background: var(--bg-grouped-2); box-shadow: 0 12px 34px rgba(0,0,0,.06); }
+.device-status-card { overflow: hidden; border: 0; background: var(--bg-grouped-2); box-shadow: var(--shadow-sm); }
+.recovery-view > .device-status-facts { margin-top: var(--space-4); }
+.device-status-card.attention { border-color: var(--orange-line); background: var(--bg-grouped-2); }
+.device-status-card.offline { background: var(--bg-grouped-2); }
+.device-status-card > header { display: grid; grid-template-columns: 52px minmax(0,1fr); align-items: start; gap: 14px; padding: 20px; }
+.device-status-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: var(--radius-lg); color: var(--tint); background: var(--tint-soft-2); }
+.device-status-card.attention .device-status-icon { color: var(--orange-text); background: var(--orange-soft); }
+.device-status-card.offline .device-status-icon { color: var(--label-2); background: var(--gray-5); }
+.device-status-card header h2,.device-status-card header span { margin: 0; }
+.device-status-card header h2 { font-family: var(--font-display); font-size: var(--fs-title2); line-height: var(--lh-title2); font-weight: 600; letter-spacing: 0; }
+.device-status-card header div > span { display: block; max-width: 650px; margin-top: 7px; color: var(--label-2); font-size: var(--text-control); line-height: 1.5; }
+.device-status-actions,.device-panel-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.device-status-actions { padding: 16px 25px; }
+.device-status-panel { margin-top: 16px; padding: 23px 25px 25px; }
+.device-panel-heading { display: grid; grid-template-columns: 42px minmax(0,1fr); gap: 12px; }
+.device-panel-heading > span { width: 42px; height: 42px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--on-tint); background: var(--tint); }
+.recovery-resolution .device-panel-heading > span { color: var(--orange-text); background: var(--orange-soft); }
+.device-panel-heading p,.device-panel-heading h2,.device-panel-heading small { display: block; margin: 0; }
+.device-panel-heading p { color: var(--tint); font: 600 var(--text-caption)/1 var(--font-sans); }
+.device-panel-heading h2 { margin-top: 5px; font-size: 21px; line-height: 1.2; letter-spacing: -.015em; }
+.device-panel-heading small { max-width: 680px; margin-top: 4px; color: var(--label-2); font-size: var(--text-supporting); line-height: 1.5; }
+.device-queue { display: grid; gap: 8px; margin: 18px 0 0; padding: 0; list-style: none; }
+.device-queue > li { display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 11px; padding: 13px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--bg-grouped-3); }
+.device-queue-number { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--tint); background: var(--tint-soft-2); font-weight: 700; }
+.device-queue-copy { min-width: 0; }
+.device-queue-copy > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.device-queue-copy > div > strong { text-transform: capitalize; }
+.device-queue-copy > div > span { flex: none; padding: 5px 8px; border-radius: 99px; color: var(--tint); background: var(--tint-soft-2); font-size: var(--text-caption); font-weight: 700; }
+.device-queue-copy > div > span.attention { color: var(--orange-text); background: var(--orange-soft); }
+.device-queue-copy p { margin: 4px 0 0; color: var(--label-2); font-size: var(--text-supporting); }
+.device-queue-copy .device-queue-error { color: var(--red-text); }
+.device-queue-copy details { margin-top: 9px; }
+.device-queue-copy summary { width: fit-content; color: var(--tint); cursor: pointer; font-size: var(--text-caption); font-weight: 700; }
+.recovery-resolution > p { max-width: 760px; margin: 18px 0 14px; color: var(--label-2); }
+.recovery-review { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hairline); }
+.recovery-snapshot-time { color: var(--tint); font-size: var(--text-supporting); font-weight: 700; }
+.recovery-confirmation { max-width: 620px; margin-top: 16px; }
+.device-advanced-tools { overflow: hidden; margin-top: 16px; }
+.device-advanced-tools > summary { display: flex; align-items: center; gap: 11px; padding: 16px 20px; cursor: pointer; list-style: none; }
+.device-advanced-tools > summary::-webkit-details-marker { display: none; }
+.device-advanced-tools > summary::after { margin-left: auto; color: var(--label-2); content: "+"; font-size: 23px; line-height: 1; }
+.device-advanced-tools[open] > summary::after { content: "−"; }
+.device-advanced-tools > summary > span { width: 38px; height: 38px; display: grid; place-items: center; flex: none; border-radius: var(--radius-sm); color: var(--tint); background: var(--tint-soft-2); }
+.device-advanced-tools summary strong,.device-advanced-tools summary small { display: block; }
+.device-advanced-tools summary strong { color: var(--label); font-size: var(--text-control); }
+.device-advanced-tools summary small { margin-top: 2px; color: var(--label-2); font-size: var(--text-caption); }
+.device-advanced-body { padding: 18px 20px 20px; border-top: 1px solid var(--hairline); }
+.device-advanced-body > p { max-width: 760px; margin: 0 0 14px; color: var(--label-2); font-size: var(--text-supporting); }
+.device-advanced-body .device-authored-note { margin-top: 11px; font-size: var(--text-caption); }
+.device-archive-section { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+.device-archive-section strong,.device-archive-section span { display: block; }
+.device-archive-section span { margin-top: 3px; color: var(--label-2); font-size: var(--text-caption); }
+.device-archive-list { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.device-archive-list li { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 12px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--bg-grouped-3); }
+.device-archive-list strong,.device-archive-list span { display: block; }
+.device-archive-list strong { font-size: var(--text-supporting); }
+.device-archive-list span { margin-top: 3px; color: var(--label-2); font-size: var(--text-caption); }
+.device-status-message { margin-top: 16px; }
+.recovery-view pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; font-size: 14px; }
+.recovery-comparison > label { display: block; border-bottom: 1px solid var(--hairline); padding: 20px 0; }
+.recovery-comparison input[type="checkbox"] { width: 22px; height: 22px; margin-right: 12px; }
+.comparison-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.comparison-values section { padding: 14px; background: var(--bg-grouped-3); border-radius: var(--radius-sm); }
+.comparison-values h3 { font-size: 14px; }

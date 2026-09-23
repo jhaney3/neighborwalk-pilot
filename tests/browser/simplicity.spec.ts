@@ -332,7 +332,8 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
   const walkCard = page.locator(".outing-card").filter({ hasText: walkName });
   await expect(walkCard).toHaveCount(1);
   await expect(walkCard).not.toContainText("Prepare the purpose and plan together.");
-  await walkCard.getByRole("button", { name: "Continue setup", exact: true }).click();
+  await walkCard.click();
+  await page.getByRole("button", { name: "Resume setup", exact: true }).click();
 
   dialog = page.getByRole("dialog", { name: "Resume walk setup" });
   await expect(dialog.getByRole("textbox", { name: "Walk name", exact: true })).toHaveValue(walkName);
@@ -515,9 +516,7 @@ test("an advance invitation becomes field access only after check-in and crew as
   await page.locator(".outing-card").filter({ hasText: walkName }).click();
   await expect(openWalk).toBeEnabled();
   await openWalk.click();
-  const display = page.getByRole("group", { name: "View as", exact: true });
-  await expect(display.getByRole("button", { name: "Map", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await display.getByRole("button", { name: "Address list", exact: true }).click();
+  await page.getByRole("button", { name: "Show list", exact: true }).click();
   const addressList = page.getByRole("region", { name: "Outreach address list", exact: true });
   await expect(addressList.getByRole("combobox", { name: "Neighborhood", exact: true })).toHaveCount(0);
   await expect(addressList.getByRole("button", { name: /Address unavailable Crockett Heights Not knocked yet/ })).toHaveCount(6);

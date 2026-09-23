@@ -51,7 +51,7 @@ import {
   type ResidentInput,
 } from "../lib/domain";
 import { MapCanvas } from "./MapCanvas";
-import { Modal, useConfirm } from "./ui";
+import { ListGroup, ListRow, Modal, useConfirm } from "./ui";
 
 export type PeopleViewProps = {
   data: NeighborWalkData;
@@ -210,7 +210,7 @@ export function PeopleView({
 
       <div className={`people-workbench${selectedId ? " has-profile" : ""}`}>
         <section className="people-directory" aria-label="People directory">
-          <div className="people-directory-label"><span>{filtered.length} {filtered.length === 1 ? "person" : "people"}</span><small>{owner === "mine" ? "Assigned to you" : "All accessible"}</small></div>
+          <div className="people-directory-label"><span>{filtered.length} {filtered.length === 1 ? "person" : "people"}</span>{owner === "mine" && <small>Yours</small>}</div>
           <div className="people-directory-list">
             {filtered.map((resident) => {
               const property = properties.get(resident.propertyId ?? "");
@@ -338,15 +338,15 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
           <div className="person-profile-heading-copy"><div className="person-profile-heading-line"><h2>{resident.name || "Name not provided"}</h2>{resident.status !== "active" && <span className={`person-profile-status ${resident.status}`}>{resident.status === "paused" ? "Paused" : "Archived"}</span>}</div><small className="person-privacy-summary"><LockKeyhole size={12} /> {accessSummary}</small></div>
           {canEdit && <button className="button quiet small person-profile-edit" aria-label="Edit profile" onClick={onEdit}><Edit3 size={14} /><span>Edit profile</span></button>}
         </div>
-        <div className="person-profile-contact">
-          {!contactRestricted(data, resident.id, "call") && resident.phone && <a href={`tel:${resident.phone}`}><Phone size={14} /><span><small>{resident.preferredContact === "call" ? "Preferred" : "Phone"}</small><strong>{formatPhoneNumber(resident.phone)}</strong></span></a>}
-          {!contactRestricted(data, resident.id, "email") && resident.email && <a href={`mailto:${resident.email}`}><Mail size={14} /><span><small>{resident.preferredContact === "email" ? "Preferred" : "Email"}</small><strong>{resident.email}</strong></span></a>}
-          {property && <button onClick={onOpenProperty}><MapPin size={14} /><span><small>Home</small><strong>{property.address}{property.unit ? ` · ${property.unit}` : ""}</strong></span></button>}
-        </div>
       </header>
 
       {followUpRestricted && <p role="status" className="inline-notice person-safety-notice">{noContact ? "Don’t contact. No new follow-ups." : `They asked not to be contacted by ${followUpChannel}.`} Only a leader can change this.</p>}
-      <p className="person-last-contact"><Info size={15} aria-hidden="true" /><span>{lastContactDate ? `Last contact ${lastContactDate}` : "No contact yet"}</span>{resident.legacyCreatorAccess && <small><LockKeyhole size={13} aria-hidden="true" /> Whoever added them can still see this profile</small>}</p>
+      <ListGroup className="person-profile-facts">
+        {!contactRestricted(data, resident.id, "call") && resident.phone && <a className="list-row" href={`tel:${resident.phone}`}><span className="list-row-icon" aria-hidden="true"><Phone /></span><span className="list-row-text"><span className="list-row-title">{formatPhoneNumber(resident.phone)}</span><span className="list-row-subtitle">{resident.preferredContact === "call" ? "Phone, preferred" : "Phone"}</span></span></a>}
+        {!contactRestricted(data, resident.id, "email") && resident.email && <a className="list-row" href={`mailto:${resident.email}`}><span className="list-row-icon" aria-hidden="true"><Mail /></span><span className="list-row-text"><span className="list-row-title">{resident.email}</span><span className="list-row-subtitle">{resident.preferredContact === "email" ? "Email, preferred" : "Email"}</span></span></a>}
+        {property && <ListRow icon={<MapPin />} title={`${property.address}${property.unit ? `, ${property.unit}` : ""}`} subtitle="Home" onClick={onOpenProperty} />}
+        <ListRow className="person-last-contact" icon={<Info />} title={lastContactDate ? `Last contact ${lastContactDate}` : "No contact yet"} subtitle={resident.legacyCreatorAccess ? "Whoever added them can still see this profile" : undefined} />
+      </ListGroup>
       {action.error && <p role="alert" className="inline-error">{action.error}</p>}
 
       <div className="person-care-grid">
@@ -359,9 +359,8 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
           </button> : <><div><span className="profile-section-label">Next step</span></div><p className="care-next-empty">Nothing planned.</p></>}
           <div className="care-next-actions">{canEdit && !followUpRestricted && <FollowUpPlanner timezone={data.church.timezone} defaultDays={data.church.defaultFollowUpDays} noteLimit={data.church.noteCharacterLimit} onSave={onAddFollowUp} />}{!followUps && <button onClick={onOpenFollowUps}>Open follow-ups <ChevronRight size={13} /></button>}</div>
         </section>
-        <section className="care-owner-card">
-          <span className="profile-section-label">Owner</span>
-          <div className="care-owner-identity"><span className="care-owner-avatar" aria-hidden="true">{personInitials(owner?.name)}</span><div><strong>{owner?.name ?? "Choose an owner"}</strong></div></div>
+        <section className="care-owner-card list-group-rows">
+          <ListRow className="care-owner-identity" icon={<span className="care-owner-avatar">{personInitials(owner?.name)}</span>} title={owner?.name ?? "Choose an owner"} subtitle="Owner" />
           {resident.pendingOwnerId ? <div className="handoff-panel">
             <div className="handoff-panel-heading"><span><Clock3 size={15} /></span><div><strong>{isHandoffRecipient ? "Handoff requested" : `Waiting on ${pendingOwner?.name ?? "recipient"}`}</strong><small>{isHandoffRecipient ? "You’ve been asked to take over." : "Waiting for them to accept."}</small></div></div>
             <p>{owner?.name ?? "Current owner"} remains responsible until {isHandoffRecipient ? "you accept" : "the handoff is accepted"}.</p>

@@ -16,6 +16,13 @@
 
 .mobile-nav b.dot { right: -3px; top: -2px; min-width: 9px; width: 9px; height: 9px; padding: 0; background: var(--accent); }
 
+/* Round icon button used over the map and in the field header. */
+.round-button { width: 44px; height: 44px; display: grid; place-items: center; flex: none; border-radius: 50%; color: var(--tint); background: var(--bg-grouped-2); box-shadow: var(--shadow-sm); transition: transform .12s ease, background-color .15s ease; }
+.round-button:active { transform: scale(.94); }
+.round-button:disabled { opacity: .4; }
+.round-button.active { color: var(--on-tint); background: var(--tint); }
+.fieldwork-header .round-button { width: 40px; height: 40px; background: var(--tint-soft); box-shadow: none; }
+
 /* Walks / Map / List switch */
 .walks-view-switch { margin: -8px 0 16px; }
 .walks-view-switch .segmented-control, .map-view-controls .segmented-control { width: 100%; }

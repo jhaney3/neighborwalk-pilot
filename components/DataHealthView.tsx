@@ -54,14 +54,14 @@ export function DataHealthView(props: Props) {
     <div className="data-health-topline">
       <section className={`data-connection-card ${online ? "is-online" : "is-offline"}`} aria-labelledby="data-connection-title">
         <span className="data-connection-icon" aria-hidden="true">{online ? <Cloud size={22} /> : <CloudOff size={22} />}</span>
-        <div><p className="eyebrow">Workspace status</p><h2 id="data-connection-title">{online ? "Connected to shared records" : "You’re working offline"}</h2><p>{online
+        <div><h2 id="data-connection-title">{online ? "Connected to shared records" : "You’re working offline"}</h2><p>{online
           ? pendingChanges ? `${pendingChanges} device ${pendingChanges === 1 ? "change is" : "changes are"} still waiting to be shared.` : "Nothing waiting to send."
           : "Reconnect to use these tools."}</p></div>
         <button type="button" className="button quiet" disabled={!online || action.busy} onClick={() => void run(async () => { if (!await onRefresh()) throw new Error("Refresh didn’t finish. Check Sync."); setMessage("Refreshed."); })}><RefreshCw size={16} /> Refresh</button>
       </section>
       <section className="data-admin-check" aria-labelledby="data-admin-check-title">
         <span className="data-admin-check-icon" aria-hidden="true"><ShieldCheck size={22} /></span>
-        <div><p className="eyebrow">Protected actions</p><h2 id="data-admin-check-title">Recent sign-in required</h2><p>Confirm your sign-in if it’s been more than 15 minutes.</p></div>
+        <div><h2 id="data-admin-check-title">Recent sign-in required</h2><p>Confirm your sign-in if it’s been more than 15 minutes.</p></div>
         <details>
           <summary role="button">Confirm sign-in <ChevronDown size={16} aria-hidden="true" /></summary>
           <form className="data-auth-form" onSubmit={(e) => { e.preventDefault(); void action.run(() => onAuthenticate(password), () => { setPassword(""); setMessage("Sign-in confirmed."); }); }}>
@@ -78,7 +78,7 @@ export function DataHealthView(props: Props) {
         <button className="button quiet" disabled={!online || action.busy} onClick={() => { void confirm({ title: "Mark this request reviewed?", message: "It won’t be sent again. Changes already made on the server stay.", confirmLabel: "Mark reviewed" }).then((confirmed) => { if (confirmed) void run(onReviewPending, () => setMessage("Request marked reviewed. Nothing was sent again.")); }); }}>Mark reviewed</button></div>
     </section>}
     <section className="data-tool-picker" aria-labelledby="data-tool-picker-title">
-      <header><p className="eyebrow">Available tools</p><h2 id="data-tool-picker-title">What do you need to do?</h2><p>Pick a tool to get started.</p></header>
+      <header><h2 id="data-tool-picker-title" className="list-group-label">Tools</h2></header>
       <div className="data-tool-list">
         <details className="data-tool-card">
           <summary role="button"><span className="data-tool-icon"><Download size={21} /></span><span><strong>Export records</strong><small>Download people, homes or follow-ups.</small></span><ChevronDown className="data-tool-chevron" size={19} /></summary>

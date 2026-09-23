@@ -1,0 +1,57 @@
+/* ---- Responsive ---- */
+@media (max-width: 820px) {
+  .fieldwork-header { padding: 6px 6px 8px; }
+  .field-context-back { max-width: 100%; }
+  .field-context-back-copy strong { white-space: nowrap; }
+  .fieldwork-header-actions { gap: 4px; }
+  .today-grid, .outing-preparation-grid { grid-template-columns: 1fr; gap: 12px; }
+  .home-walk-response-list { grid-template-columns: 1fr; }
+  .today-card { padding: 20px; }
+  .outing-detail { padding: 0; }
+  .outing-hero { padding: 20px; }
+  .outing-hero-main { display: grid; gap: 16px; }
+  .outing-fieldwork-button { width: 100%; }
+  .outing-meta-grid { grid-template-columns: 1fr; }
+  .outing-summary-row > div { display: grid; align-content: start; gap: 4px; }
+  .outing-summary-row span { font-size: 11px; }
+  .outing-support-actions .button { flex: 1 1 auto; }
+  .outing-lifecycle { align-items: stretch; flex-direction: column; gap: 14px; padding: 17px; }
+  .outing-lifecycle-actions { flex-wrap: wrap; }
+  .outing-lifecycle-actions .button { flex: 1; }
+  .outing-panel { padding: 20px; }
+  .outing-section-title-row { align-items: stretch; flex-direction: column; }
+  .outing-section-title-row > .button { width: 100%; }
+  .device-status-card > header { grid-template-columns: 46px minmax(0,1fr); padding: 20px; }
+  .device-status-icon { width: 46px; height: 46px; border-radius: var(--radius-lg); }
+  .device-status-actions { padding: 15px 20px; }
+  .device-status-panel { padding: 20px; }
+  .exception-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 820px) {
+  .list-toolbar { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; }
+  .list-toolbar > label { min-width: 0; }
+  .list-toolbar input, .list-toolbar select { width: 100%; min-width: 0; }
+  .target-address-list .view-heading { margin-bottom: 10px; }
+  .target-address-list .list-toolbar { grid-template-columns: minmax(0,1fr) auto; }
+  .target-address-list .list-toolbar > .button { width: auto; margin-left: 0; padding-inline: 11px; }
+}
+@media (max-width: 480px) {
+  .list-toolbar { grid-template-columns: 1fr; }
+  .target-address-list .list-toolbar { grid-template-columns: minmax(0,1fr) auto; }
+  .outing-hero h2 { font-size: var(--fs-title1); }
+  .outing-support-actions { display: grid; grid-template-columns: 1fr; }
+  .outing-support-actions .button { width: 100%; }
+  .outing-summary-row strong { font-size: 18px; }
+  .outing-summary-row > div { padding: 10px 8px; }
+  .outing-panel { padding: 17px; }
+  .outing-debrief-form .button { width: 100%; }
+  .device-status-card > header { grid-template-columns: 44px minmax(0,1fr); gap: 12px; padding: 16px; }
+  .device-status-icon { width: 44px; height: 44px; }
+  .device-status-actions,.device-panel-actions { align-items: stretch; flex-direction: column; }
+  .device-status-actions .button,.device-panel-actions .button { width: 100%; }
+  .device-panel-heading { grid-template-columns: 38px minmax(0,1fr); }
+  .device-panel-heading > span { width: 38px; height: 38px; }
+  .device-queue-copy > div { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .device-archive-section,.device-archive-list li { align-items: stretch; flex-direction: column; }
+  .device-archive-section .button,.device-archive-list .button { width: 100%; }
+}

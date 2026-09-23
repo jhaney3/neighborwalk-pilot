@@ -1,0 +1,42 @@
+/* ---- Property sheet as a dialog ---- */
+dialog.property-drawer { position: fixed; inset: auto 24px 24px auto; margin: 0; color: var(--label); }
+dialog.property-drawer::backdrop { background: rgba(0, 0, 0, .18); }
+dialog.property-drawer .contact-restrictions { margin-top: 20px; padding: 16px; }
+@media (max-width: 820px) {
+  dialog.property-drawer { inset: auto 0 0; width: 100%; max-width: none; max-height: 92svh; margin: 0; border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; padding-bottom: calc(20px + var(--bottom-inset)); }
+}
+
+/* ---- Address list ---- */
+.address-list { flex: 1; min-height: 0; overflow: auto; }
+.address-rows { list-style: none; padding: 0; margin: 16px 0; overflow: hidden; border-radius: var(--radius-lg); background: var(--bg-grouped-2); }
+.address-rows li { border-bottom: 1px solid var(--hairline); }
+.address-rows li:last-child { border-bottom: 0; }
+.address-rows button { display: flex; gap: 14px; align-items: center; width: 100%; min-height: 64px; padding: 12px 16px; color: var(--label); background: transparent; font-size: var(--fs-body); text-align: left; }
+.address-rows button:hover:not(:disabled) { background: var(--fill-4); }
+.address-rows button:disabled { color: var(--label-2); cursor: default; opacity: 1; }
+.address-rows button > span { flex: 1; min-width: 0; }
+.address-rows small { display: block; margin-top: 2px; color: var(--label-2); font-size: var(--fs-footnote); }
+.address-rows button > svg:last-child { color: var(--label-3); }
+.address-list-sequence { width: 28px; height: 28px; display: grid; place-items: center; flex: none !important; border-radius: 50%; color: var(--label-2); background: var(--fill-3); font-size: var(--fs-caption); font-weight: 600; }
+.target-address-list { padding: 12px 0 28px; }
+.target-address-list .view-heading { align-items: end; margin-bottom: 14px; }
+.target-address-list .view-heading h1 { font-size: var(--fs-title1); line-height: var(--lh-title1); }
+.target-address-list .view-heading > div:first-child > p:last-child { margin-top: 4px; }
+.target-address-list .list-toolbar { justify-content: flex-start; margin-bottom: 10px; }
+.target-address-list .list-toolbar > label { width: min(380px, 100%); }
+.target-address-list .list-toolbar > .button { margin-left: auto; }
+.target-address-list .address-rows { margin-top: 10px; }
+.target-address-note { margin: 8px 0; padding: 10px 14px; border-radius: var(--radius-sm); color: var(--label-2); background: var(--bg-grouped-2); font-size: var(--fs-footnote); }
+.restriction-label { color: var(--red-text); }
+
+/* ---- Notices ---- */
+.inline-notice, .inline-error { padding: 12px 14px; margin: 12px 0; border-radius: var(--radius-sm); font-size: var(--fs-footnote); line-height: 1.45; }
+.inline-notice { color: var(--orange-text); background: var(--orange-soft); }
+.inline-error { color: var(--red-text); background: var(--red-soft); }
+.inline-notice button { display: inline-flex; align-items: center; min-height: 32px; color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; vertical-align: middle; }
+.followup-unowned-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; }
+.followup-unowned-notice button { flex: none; min-height: 34px; padding: 0 12px; border-radius: var(--radius-pill); color: var(--orange-text); background: rgba(255, 149, 0, .16); text-decoration: none; }
+.list-toolbar { align-items: end; }
+.handoff-panel { font-size: var(--fs-footnote); line-height: 1.5; }
+.print-heading { display: none; }
+.field-worksheet-packet { display: none; }

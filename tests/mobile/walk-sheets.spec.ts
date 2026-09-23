@@ -6,7 +6,7 @@ for (const width of [320, 393]) test(`walk options release taps and sheets fit a
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/demo");
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Walks", exact: true }).click();
-  await page.getByRole("button", { name: /^View details for / }).first().click();
+  await page.locator(".walk-list .outing-card").first().click();
   const options = page.getByRole("button", { name: "Options", exact: true });
   for (let repeat = 0; repeat < 2; repeat++) {
     await options.click();
@@ -44,7 +44,7 @@ for (const width of [320, 393]) test(`walk options release taps and sheets fit a
 test("opening a walk defaults to your crew assignment and allows a leader override", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Walks", exact: true }).click();
-  await page.getByRole("button", { name: /^View details for / }).first().click();
+  await page.locator(".walk-list .outing-card").first().click();
   const target = page.getByRole("combobox", { name: "Route" });
   await expect(target.locator("option:checked")).toHaveText("Crockett north");
   await expect(page.getByText("Your route is selected.", { exact: true })).toBeVisible();

@@ -12,7 +12,15 @@
 @import "./styles/auth.css";
 @import "./styles/responsive.css";
 @import "./styles/controls.css";
-@import "./styles/readiness.css";
+@import "./styles/guide-polish.css";
+@import "./styles/address-list.css";
+@import "./styles/today.css";
+@import "./styles/walk-detail.css";
+@import "./styles/data-health.css";
+@import "./styles/sync.css";
+@import "./styles/screens-responsive.css";
+@import "./styles/print.css";
+@import "./styles/walk-lists.css";
 @import "./styles/home.css";
 @import "./styles/shell.css";
 @import "./styles/conversations.css";

@@ -527,26 +527,28 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   expect(await plannedWalkState(page, walkName, zoneName)).toEqual(firstState);
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
+  // Walks are rows; the walk page holds the one state-based action.
   const readyCard = page.locator(".outing-card").filter({ hasText: walkName });
-  const startWalk = readyCard.getByRole("button", { name: "Start walk", exact: true });
-  await expect(startWalk).toBeVisible();
+  await expect(readyCard.getByText("Ready", { exact: true })).toBeVisible();
+  await readyCard.click();
+  const statusControls = page.getByRole("region", { name: "Walk status controls", exact: true });
+  const startWalk = statusControls.getByRole("button", { name: "Start walk", exact: true });
   await startWalk.click();
-  await expect(readyCard.getByText("Live", { exact: true })).toBeVisible();
+  await expect(statusControls).toContainText("Live");
   await expect(startWalk).toHaveCount(0);
   const startedState = await plannedWalkState(page, walkName, zoneName);
   expect(startedState.events[0].status).toBe("active");
 
-  const completeWalk = readyCard.getByRole("button", { name: "Complete walk", exact: true });
-  await expect(completeWalk).toBeVisible();
-  await completeWalk.click();
-  const completion = page.getByRole("alertdialog", { name: "Complete this walk?" });
+  await statusControls.getByRole("button", { name: "End walk", exact: true }).click();
+  const completion = page.getByRole("alertdialog", { name: "End this walk for everyone?" });
   await expect(completion).toContainText("It closes for everyone.");
-  await completion.getByRole("button", { name: "Complete walk", exact: true }).click();
+  await completion.getByRole("button", { name: "End walk", exact: true }).click();
+  await expect(statusControls).toContainText("Done");
+  await page.getByRole("button", { name: "All walks", exact: true }).click();
   await expect(readyCard).toHaveCount(0);
   await page.getByRole("checkbox", { name: "Show past walks", exact: true }).check();
   const completedCard = page.locator(".outing-card").filter({ hasText: walkName });
   await expect(completedCard.getByText("Done", { exact: true })).toBeVisible();
-  await expect(completedCard.getByRole("button", { name: "Complete walk", exact: true })).toHaveCount(0);
   const completedState = await plannedWalkState(page, walkName, zoneName);
   expect(completedState.events[0].status).toBe("completed");
   await page.reload();
@@ -790,8 +792,7 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   await expect(page.getByText("of this route reached", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Loading the neighborhood map", { exact: true })).toBeHidden();
   await captureDesktopAndMobile(page, `zones-${fixture.secondTargetId}-accepted-field`);
-  const display = page.getByRole("group", { name: "View as", exact: true });
-  await display.getByRole("button", { name: "Address list", exact: true }).click();
+  await page.getByRole("button", { name: "Show list", exact: true }).click();
   const roster = page.getByRole("region", { name: "Outreach address list", exact: true });
   await expect(roster.getByRole("combobox", { name: "Neighborhood", exact: true })).toHaveCount(0);
   await expect(roster.getByRole("button", { name: "Print field worksheet", exact: true })).toBeVisible();
@@ -829,8 +830,8 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   await finishConfirmation.getByRole("button", { name: "Finish route", exact: true }).click();
   const statusControls = page.getByRole("region", { name: "Walk status controls", exact: true });
   await expect(statusControls).toContainText("Live");
-  await statusControls.getByRole("button", { name: "Complete walk", exact: true }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Complete walk", exact: true }).click();
+  await statusControls.getByRole("button", { name: "End walk", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "End walk", exact: true }).click();
   await expect(statusControls).toContainText("Done");
   const assignment = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });
   await expect(assignment).toContainText("Finished tonight");

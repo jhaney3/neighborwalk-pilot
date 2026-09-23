@@ -150,12 +150,18 @@ test("map filters and visit outcomes expose their selected state", async ({ page
   await page.goto("/demo");
   await openMap(page);
 
-  const all = page.getByRole("button", { name: "All", exact: true });
-  const followUp = page.getByRole("button", { name: "Follow-up", exact: true });
-  await expect(all).toHaveAttribute("aria-pressed", "true");
-  await followUp.click();
-  await expect(followUp).toHaveAttribute("aria-pressed", "true");
-  await expect(all).toHaveAttribute("aria-pressed", "false");
+  const filterButton = page.getByRole("button", { name: "Filter", exact: true });
+  const filters = page.getByRole("group", { name: "Filter homes" });
+  await filterButton.click();
+  await expect(filters.getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await filters.getByRole("button", { name: "Follow-up", exact: true }).click();
+  // Choosing a filter closes the menu and leaves a chip that clears it.
+  await expect(filters).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Showing Follow-up. Clear filter" })).toBeVisible();
+  await filterButton.click();
+  await expect(filters.getByRole("button", { name: "Follow-up", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(filters.getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Escape");
 
   await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "List", exact: true }).click();
   await page.getByRole("button", { name: /118 Crockett Street/ }).click();

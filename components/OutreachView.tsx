@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, CalendarDays, Check, MapPin, MessageCircle, PencilLine, Plus, Repeat2, Users } from "lucide-react";
+import { CalendarDays, Check, MapPin, MessageCircle, PencilLine, Plus, Repeat2, Users } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { calendarDaysFromNow, churchDateTimeToIso, localDateTimeValue } from "../lib/calendar";
 import type { ConversationGuide, NeighborWalkData, OutreachEvent, ResidentInput, Territory } from "../lib/domain";
@@ -15,7 +15,7 @@ import { ConversationRow } from "./ConversationFeed";
 import { communityConversations } from "../lib/conversations";
 import { OutingInvitationRoster } from "./OutingInvitationRoster";
 import type { NewParentZoneInput } from "./ParentZoneCreator";
-import { Badge, EmptyState, ListGroup, Modal, ViewHeading, useConfirm, type ConfirmOptions } from "./ui";
+import { BackButton, Badge, EmptyState, ListGroup, ListRow, Modal, ViewHeading, useConfirm, type ConfirmOptions } from "./ui";
 import { assignmentStatusLabels, walkStatusLabels } from "../lib/status-labels";
 import { WalkSetupWizard } from "./WalkSetupWizard";
 import { WalkCrewBoard, type WalkCrews } from "./WalkCrewBoard";
@@ -23,7 +23,7 @@ import { WalkTargetPlanner, type WalkTargetDraft } from "./WalkTargetPlanner";
 
 type Assignment = NonNullable<NeighborWalkData["assignments"]>[number];
 type LoadedPlanningInventory = { boundarySignature: string; result: PlanningParcelResult };
-const completeWalkConfirmation: ConfirmOptions = { title: "Complete this walk?", message: "It closes for everyone. Conversations and follow-ups stay.", confirmLabel: "Complete walk" };
+const completeWalkConfirmation: ConfirmOptions = { title: "End this walk for everyone?", message: "It closes for everyone. Conversations and follow-ups stay.", confirmLabel: "End walk" };
 
 export function isCommunityOuting(eventId: string, assignments: readonly { eventId: string; status?: string }[], targets: readonly { eventId: string }[]) {
   return !assignments.some((assignment) => assignment.eventId === eventId)
@@ -84,50 +84,25 @@ type Props = {
 
 export function OutreachView(props: Props) {
   const { data, canManage, selectedId, onSelect, onSave, onRepeat } = props;
-  const confirm = useConfirm();
   const [wizard, setWizard] = useState<"new" | OutreachEvent | null>(props.initialCreate ? "new" : null);
   const [editor, setEditor] = useState<OutreachEvent | null>(null);
   const [repeat, setRepeat] = useState<OutreachEvent | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [pendingCardId, setPendingCardId] = useState<string>();
-  const listAction = useAsyncAction();
   const selected = data.events.find((e) => e.id === selectedId);
   const outings = data.events.filter((e) => showArchived || !["archived", "cancelled", "completed"].includes(e.status)).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const transitionFromCard = async (outing: OutreachEvent, status: OutreachEvent["status"]) => {
-    if (status === "completed" && !await confirm(completeWalkConfirmation)) return;
-    setPendingCardId(outing.id);
-    void listAction.run(async () => {
-      try { await onSave({ ...outing, status }, outing.id); }
-      finally { setPendingCardId(undefined); }
-    });
-  };
   return <section className="content-view outreach-view">
-    <ViewHeading title="Walks" aside={!selected && canManage && <button className="button primary outreach-plan-button" aria-label="Plan a walk" onClick={() => setWizard("new")}><Plus size={16} aria-hidden="true" /><span>Plan a walk</span></button>} />
+    {selected ? <BackButton label="Walks" ariaLabel="All walks" onClick={() => onSelect()} /> : <ViewHeading title="Walks" aside={canManage && <button className="button primary outreach-plan-button" aria-label="Plan a walk" onClick={() => setWizard("new")}><Plus size={16} aria-hidden="true" /><span>Plan a walk</span></button>} />}
     {!selected && props.viewSwitch && <div className="walks-view-switch">{props.viewSwitch}</div>}
-    {selected ? <><button className="button quiet outing-back-button" onClick={() => onSelect()}><ArrowLeft size={15} /> All walks</button><OutingDetail key={selected.id} {...props} outing={selected} onEdit={() => selected.status === "draft" ? setWizard(selected) : setEditor(selected)} onRepeatRequest={() => setRepeat(selected)} /></>
-      : <><label className="checkbox-label"><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show past walks</label>
-        {listAction.error && <p role="alert" className="inline-error">{listAction.error}</p>}
-        {outings.length ? <div className="outing-grid">{outings.map((outing) => {
-          const assignmentCount = data.assignments?.filter((assignment) => assignment.eventId === outing.id && !["cancelled", "declined"].includes(assignment.status)).length ?? 0;
-          const cardAction = canManage
-            ? outing.status === "draft"
-              ? { label: "Continue setup", onClick: () => setWizard(outing), primary: false }
-              : outing.status === "scheduled"
-                ? { label: "Review setup", onClick: () => setWizard(outing), primary: false }
-                : outing.status === "ready"
-                  ? { label: "Start walk", pendingLabel: "Starting…", onClick: () => transitionFromCard(outing, "active"), primary: true }
-                  : outing.status === "active"
-                    ? { label: "Complete walk", pendingLabel: "Completing…", onClick: () => transitionFromCard(outing, "completed"), primary: true }
-                    : undefined
-            : undefined;
-          const cardPending = pendingCardId === outing.id;
-          return <article className="outing-card" key={outing.id}>
-            <div className="outing-card-status-row"><Badge tone={walkStatusLabels[outing.status].tone}>{walkStatusLabels[outing.status].label}</Badge>{cardAction && <button type="button" className={`button outing-card-action ${cardAction.primary ? "primary" : "quiet"}`} disabled={listAction.busy} onClick={cardAction.onClick}>{cardPending ? cardAction.pendingLabel ?? cardAction.label : cardAction.label}</button>}</div>
-            <h2>{outing.name}</h2>
-            <div className="outing-card-meta"><p><CalendarDays size={18} aria-hidden="true" /> <span>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: outing.timezone ?? data.church.timezone }).format(new Date(outing.startsAt))}</span></p>{outing.meetingPoint && <p><MapPin size={18} aria-hidden="true" /> <span>{outing.meetingPoint}</span></p>}<p className="outing-card-areas"><Users size={18} aria-hidden="true" /> <span>{assignmentCount} {assignmentCount === 1 ? "route" : "routes"}</span></p></div>
-            <button type="button" className="outing-card-details" aria-label={`View details for ${outing.name}`} onClick={() => onSelect(outing.id)} />
-          </article>;
-        })}</div>
+    {selected ? <><OutingDetail key={selected.id} {...props} outing={selected} onEdit={() => selected.status === "draft" ? setWizard(selected) : setEditor(selected)} onRepeatRequest={() => setRepeat(selected)} /></>
+      : <><label className="checkbox-label walk-archive-toggle"><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show past walks</label>
+        {outings.length ? <ListGroup className="walk-list">{outings.map((outing) => {
+          const routeCount = data.assignments?.filter((assignment) => assignment.eventId === outing.id && !["cancelled", "declined"].includes(assignment.status)).length ?? 0;
+          const when = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: outing.timezone ?? data.church.timezone }).format(new Date(outing.startsAt));
+          return <ListRow key={outing.id} className="outing-card" title={outing.name}
+            subtitle={[when, outing.meetingPoint, routeCount ? `${routeCount} ${routeCount === 1 ? "route" : "routes"}` : undefined].filter(Boolean).join(", ")}
+            value={<Badge tone={walkStatusLabels[outing.status].tone}>{walkStatusLabels[outing.status].label}</Badge>}
+            onClick={() => onSelect(outing.id)} />;
+        })}</ListGroup>
           : <EmptyState icon={<CalendarDays size={26} />} title="No walks yet" copy={canManage ? "Pick a neighborhood and the streets you’ll cover." : "Walks you’re invited to will show up here."} />}</>}
     {wizard && <WalkSetupWizard data={data} guides={props.guides} outing={wizard === "new" ? undefined : wizard} onClose={() => { setWizard(null); props.onCreateClosed?.(); }} onComplete={(id) => { setWizard(null); onSelect(id); }} onSaveOuting={onSave} onSaveTarget={props.onSaveTarget} onSaveAssignment={props.onAssign} onSaveRoster={props.onSaveRoster} onAddZone={props.onAddZone} />}
     {editor && <OutingEditor churchTimezone={data.church.timezone} guides={props.guides} outing={editor} onClose={() => setEditor(null)} onSave={async (input) => { const id = await onSave(input, editor.id); setEditor(null); onSelect(id); }} />}
@@ -243,24 +218,24 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
         const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length;
         buttons[next]?.focus();
       }
-    }}>{outing.status === "completed" && <button role="menuitem" className="button quiet small" disabled={action.busy} onClick={() => { closeStatusMenu(); void transition("archived"); }}>Archive walk</button>}{!closed && <button role="menuitem" className="button danger small" disabled={action.busy} onClick={() => { closeStatusMenu(); void confirm({ title: "Cancel this walk?", message: "Conversations and follow-ups stay.", confirmLabel: "Cancel walk", cancelLabel: "Keep walk", destructive: true }).then((confirmed) => { if (confirmed) void transition("cancelled"); }); }}>Cancel walk</button>}</div></>}</div>}{["draft", "scheduled"].includes(outing.status) && <button className="button primary" disabled={action.busy} onClick={() => void transition("ready")}>Mark ready</button>}{outing.status === "ready" && <button className="button primary" disabled={action.busy} onClick={() => void transition("active")}>Start walk</button>}{outing.status === "active" && <button className="button primary" disabled={action.busy} onClick={() => { void confirm(completeWalkConfirmation).then((confirmed) => { if (confirmed) void transition("completed"); }); }}>Complete walk</button>}</div></section>}
+    }}>{outing.status === "completed" && <button role="menuitem" className="button quiet small" disabled={action.busy} onClick={() => { closeStatusMenu(); void transition("archived"); }}>Archive walk</button>}{!closed && <button role="menuitem" className="button danger small" disabled={action.busy} onClick={() => { closeStatusMenu(); void confirm({ title: "Cancel this walk?", message: "Conversations and follow-ups stay.", confirmLabel: "Cancel walk", cancelLabel: "Keep walk", destructive: true }).then((confirmed) => { if (confirmed) void transition("cancelled"); }); }}>Cancel walk</button>}</div></>}</div>}{["draft", "scheduled"].includes(outing.status) && <button className={`button ${outing.status === "scheduled" ? "primary" : "quiet"}`} disabled={action.busy} onClick={() => void transition("ready")}>Mark ready</button>}{outing.status === "ready" && <button className="button primary" disabled={action.busy} onClick={() => void transition("active")}>Start walk</button>}{outing.status === "active" && <button className="button quiet" disabled={action.busy} onClick={() => { void confirm(completeWalkConfirmation).then((confirmed) => { if (confirmed) void transition("completed"); }); }}>End walk</button>}</div></section>}
     <header className="outing-hero">
-      <div className="outing-hero-main"><div><div className="outing-hero-kicker"><Badge tone={walkStatusLabels[outing.status].tone}>{walkStatusLabels[outing.status].label}</Badge></div><h2>{outing.name}</h2>{outing.purpose && <p>{outing.purpose}</p>}</div>
+      <div className="outing-hero-main"><div>{!canManage && <div className="outing-hero-kicker"><Badge tone={walkStatusLabels[outing.status].tone}>{walkStatusLabels[outing.status].label}</Badge></div>}<h2>{outing.name}</h2>{outing.purpose && <p>{outing.purpose}</p>}</div>
         {!closed && !communityOuting && <div className="outing-fieldwork-entry">
           {fieldAssignments.length > 1 && <label><span>Route</span><select value={fieldAssignment?.id ?? ""} onChange={(event) => setFieldAssignmentId(event.target.value)}>{!fieldAssignment && <option value="">Choose a route</option>}{fieldAssignments.map((assignment) => <option key={assignment.id} value={assignment.id}>{data.walkTargets.find((target) => target.id === assignment.targetId)?.name ?? data.territories.find((territory) => territory.id === assignment.territoryId)?.name ?? "Archived route"}</option>)}</select></label>}
           {fieldAssignment && personalFieldAssignments.some((assignment) => assignment.id === fieldAssignment.id) && <small>Your route{fieldAssignments.length === 1 ? `: ${data.walkTargets.find((target) => target.id === fieldAssignment.targetId)?.name ?? data.territories.find((territory) => territory.id === fieldAssignment.territoryId)?.name ?? "Archived route"}` : " is selected."}</small>}
-          <button className="button primary outing-fieldwork-button" disabled={action.busy || !fieldworkAvailable || !fieldAssignment} onClick={() => { if (fieldAssignment) void action.run(() => onStart(outing.id, fieldAssignment.territoryId, fieldAssignment.targetId)); }}>Open walk</button>
+          <button className={`button ${outing.status === "active" ? "primary" : "quiet"} outing-fieldwork-button`} disabled={action.busy || !fieldworkAvailable || !fieldAssignment} onClick={() => { if (fieldAssignment) void action.run(() => onStart(outing.id, fieldAssignment.territoryId, fieldAssignment.targetId)); }}>Open walk</button>
           {!fieldworkAvailable && <small>Mark the walk ready to open it.</small>}
           {fieldworkAvailable && !fieldAssignments.length && <small>{canManage ? "Add a route to open the walk." : "Reply on Home. Your leader will check you in and give you a route when the walk starts."}</small>}
         </div>}
       </div>
-      <div className="outing-meta-grid">
-        <div><span><CalendarDays size={17} /></span><div><small>Date &amp; time</small><strong>{dateLabel}</strong><p>{startTime}–{endTime} · {timezone}</p></div></div>
-        <div><span><MapPin size={17} /></span><div><small>Meeting point</small><strong>{outing.meetingPoint || "Not set yet"}</strong>{!outing.meetingPoint && <p>Add one when you edit the walk.</p>}</div></div>
-        <div><span><Users size={17} /></span><div><small>Leader contact</small><strong>{outing.leaderContact || "Not set yet"}</strong>{!outing.leaderContact && <p>Add one when you edit the walk.</p>}</div></div>
-      </div>
+      <ListGroup className="outing-facts">
+        <ListRow icon={<CalendarDays />} title={dateLabel} subtitle={`${startTime}–${endTime}, ${timezone}`} />
+        <ListRow icon={<MapPin />} title={outing.meetingPoint || "No meeting point yet"} subtitle={outing.meetingPoint ? "Meeting point" : "Add one when you edit the walk."} />
+        <ListRow icon={<Users />} title={outing.leaderContact || "No leader contact yet"} subtitle={outing.leaderContact ? "Leader contact" : "Add one when you edit the walk."} />
+      </ListGroup>
       <div className="outing-summary-row" aria-label="Walk summary"><div><strong>{outingTargets.length ? `${activeAssignments.filter((assignment) => assignment.targetId).length}/${outingTargets.length}` : activeAssignments.length}</strong><span>Routes with a team</span></div><div><strong>{encounters.length}</strong><span>Conversations</span></div><div><strong>{openTasks.length}</strong><span>Open follow-ups</span></div></div>
-      <div className="outing-support-actions">{canManage && <><button className="button quiet" onClick={onEdit}>{outing.status === "draft" ? "Resume setup" : "Edit walk"}</button><button className="button quiet" onClick={onRepeatRequest}><Repeat2 size={16} /> Repeat walk</button></>}
+      <div className="outing-support-actions">{canManage && <><button className={`button ${outing.status === "draft" ? "primary" : "quiet"}`} onClick={onEdit}>{outing.status === "draft" ? "Resume setup" : "Edit walk"}</button><button className="button quiet" onClick={onRepeatRequest}><Repeat2 size={16} /> Repeat walk</button></>}
         {guide ? <button className="button quiet" onClick={() => onOpenGuide(guide.id)}>Open {guide.title}</button> : <span>Conversation guide is optional.</span>}
       </div>
       {!closed && communityOuting && <div className="outing-community-entry"><div><strong>Gathering</strong><span>Log conversations from a meal, service day or other gathering.</span></div><ConversationLauncher data={data} outingId={outing.id} onSave={onRecordEncounter} onCreatePerson={onCreatePerson} /></div>}
@@ -279,7 +254,7 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
       })}</ul>
         : <p className="outing-roster-empty">No one has been invited yet.</p>}
     </section>}
-    <section className="outing-panel outing-assignments-panel"><div className="outing-section-title-row"><div className="outing-section-heading"><span><Users size={20} /></span><div><h3>Teams</h3></div></div>{canManage && !closed && openTargets.length > 0 && <button className="button primary" onClick={() => setCrewEditorOpen(true)}><PencilLine size={15} /> Edit teams</button>}</div>
+    <section className="outing-panel outing-assignments-panel"><div className="outing-section-title-row"><div className="outing-section-heading"><span><Users size={20} /></span><div><h3>Teams</h3></div></div>{canManage && !closed && openTargets.length > 0 && <button className="button quiet" onClick={() => setCrewEditorOpen(true)}><PencilLine size={15} /> Edit teams</button>}</div>
       <ul className="assignment-list">{crewItems.map(({ key, assignment, target }) => {
         const areaName = target?.name ?? data.territories.find((t) => t.id === assignment?.territoryId)?.name ?? "Archived route";
         const memberIds = assignment?.assignedVolunteerId ? [assignment.assignedVolunteerId] : data.teams.find((team) => team.id === assignment?.assignedTeamId)?.memberIds ?? [];
