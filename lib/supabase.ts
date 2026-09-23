@@ -1,6 +1,7 @@
 import { isMobileApp } from "./mobile";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { assertSafeSupabaseUrl, isProductionApp, storageKey } from "./environment";
+import { timeoutSignal } from "./platform";
 
 import type { Database } from "./database.types";
 export type { Json } from "./database.types";
@@ -22,7 +23,7 @@ export async function authServiceUnreachable() {
   assertSafeSupabaseUrl(supabaseUrl, isProductionApp, (isMobileApp && window.location.protocol === "capacitor:" && window.location.hostname === "localhost") ? undefined : window.location.hostname);
   try {
     await fetch(`${supabaseUrl}/auth/v1/health`, { headers: { apikey: supabasePublishableKey },
-      credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(3000) });
+      credentials: "omit", cache: "no-store", signal: timeoutSignal(3000) });
     return false;
   } catch { return true; }
 }

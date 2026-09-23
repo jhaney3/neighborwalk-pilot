@@ -47,5 +47,8 @@ enabled = false
 [edge_runtime]
 enabled = false
 
+[functions.push-delivery]
+verify_jwt = false
+
 [analytics]
 enabled = false

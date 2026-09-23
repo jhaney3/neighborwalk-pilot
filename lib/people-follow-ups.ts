@@ -100,7 +100,7 @@ export function groupFollowUpsByPerson(tasks: readonly FollowUp[], data: Neighbo
   return [...groups.values()]
     .map((group) => ({
       ...group,
-      tasks: group.tasks.toSorted((left, right) => left.dueAt.localeCompare(right.dueAt) || left.id.localeCompare(right.id)),
+      tasks: [...group.tasks].sort((left, right) => left.dueAt.localeCompare(right.dueAt) || left.id.localeCompare(right.id)),
     }))
-    .toSorted((left, right) => left.earliestDueAt.localeCompare(right.earliestDueAt) || left.label.localeCompare(right.label));
+    .sort((left, right) => left.earliestDueAt.localeCompare(right.earliestDueAt) || left.label.localeCompare(right.label));
 }

@@ -116,7 +116,7 @@ export function parcelSelectionPoint(parcel: ParcelFeature): Coordinates | null 
 
 export function parcelInsideZone(parcel: ParcelFeature, boundary: Coordinates[]) {
   const point = parcelSelectionPoint(parcel);
-  const first = boundary[0]; const last = boundary.at(-1);
+  const first = boundary[0]; const last = boundary[boundary.length - 1];
   const ring = first && (first[0] !== last?.[0] || first[1] !== last?.[1]) ? [...boundary, first] : boundary;
   return Boolean(point && geometryContainsPoint({ type: "Polygon", coordinates: [ring] }, point));
 }
@@ -161,7 +161,7 @@ export function parsePlanningParcelResponse(value: unknown): PlanningParcelResul
 
 function parentPolygon(boundary: Coordinates[]) {
   if (boundary.length < 3) throw new Error("A mapped parent zone needs at least three boundary points.");
-  const first = boundary[0]; const last = boundary.at(-1);
+  const first = boundary[0]; const last = boundary[boundary.length - 1];
   return { type: "Polygon" as const, coordinates: [first[0] === last?.[0] && first[1] === last?.[1] ? boundary : [...boundary, first]] };
 }
 

@@ -7,7 +7,7 @@ const EARTH_METERS = 6_371_008.8;
 export function closeRing(points: Coordinates[]): Coordinates[] {
   if (!points.length) return [];
   const first = points[0];
-  const last = points.at(-1);
+  const last = points[points.length - 1];
   return first[0] === last?.[0] && first[1] === last?.[1] ? points : [...points, first];
 }
 
@@ -56,7 +56,7 @@ export function haversineMeters(a: Coordinates, b: Coordinates) {
 }
 
 export function lineEndpoints(line: LineString): [Coordinates, Coordinates] {
-  return [line.coordinates[0] as Coordinates, line.coordinates.at(-1) as Coordinates];
+  return [line.coordinates[0] as Coordinates, line.coordinates[line.coordinates.length - 1] as Coordinates];
 }
 
 type StreetLine = { id: string; name?: string | null; geometry: LineString };
@@ -141,8 +141,8 @@ export function clipLineToBoundary(line: LineString, boundary: Coordinates[]): L
       if (!geometryContainsPoint({ type: "Polygon", coordinates: [edge] }, midpoint)) continue;
       const first = stablePoint(start[0] + (end[0] - start[0]) * from, start[1] + (end[1] - start[1]) * from);
       const last = stablePoint(start[0] + (end[0] - start[0]) * to, start[1] + (end[1] - start[1]) * to);
-      const previous = pieces.at(-1);
-      if (previous && samePoint(previous.at(-1)!, first)) previous.push(last);
+      const previous = pieces[pieces.length - 1];
+      if (previous && samePoint(previous[previous.length - 1]!, first)) previous.push(last);
       else pieces.push([first, last]);
     }
   }

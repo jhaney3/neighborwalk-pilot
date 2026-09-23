@@ -117,7 +117,7 @@ export function PropertyDrawer({
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     element?.showModal();
     element?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
-    return () => { element?.close(); previousFocus?.focus(); };
+    return () => { element?.close(); previousFocus?.focus({ preventScroll: true }); };
   }, []);
   const requestClose = () => { if (!action.busy && !drawer.current?.querySelector('[aria-busy="true"]')) onClose(); };
   const [tab, setTab] = useState<"record" | "people" | "history">("record");
@@ -283,6 +283,7 @@ export function PropertyDrawer({
                   key={value}
                   className={outcome === value ? "active" : ""}
                   data-outcome={value}
+                  aria-pressed={outcome === value}
                   onClick={() => {
                     setOutcome(value);
                     if (value === "no_answer") {

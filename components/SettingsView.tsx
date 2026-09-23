@@ -11,7 +11,8 @@ import { isSafeWebUrl, type ConversationGuide, type NeighborWalkData } from "../
 import { isSupportedMapStyleUrl } from "../lib/map-config";
 import { Modal, ViewHeading } from "./ui";
 import { ReminderSettings } from "./ReminderSettings";
-import { getMobileColorTheme, setMobileColorTheme } from "../mobile/theme";
+import { DeviceReminderSettings } from "./DeviceReminderSettings";
+import { getMobileColorTheme, setMobileColorTheme, type MobileColorThemePreference } from "../mobile/theme";
 
 export function SettingsView({
   data,
@@ -69,7 +70,7 @@ export function SettingsView({
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updatingPassword, setUpdatingPassword] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => getMobileColorTheme() === "dark");
+  const [colorTheme, setColorTheme] = useState<MobileColorThemePreference>(getMobileColorTheme);
   const pendingDeviceChanges = data.sync.commands?.length ?? data.sync.pending.length;
   const deviceNeedsAttention = Boolean(data.sync.legacyRecoveryRequired || pendingDeviceChanges || data.sync.lastError || (data.sync.mode === "connected" && !online));
 
@@ -140,7 +141,11 @@ export function SettingsView({
       {storageError && <div className="settings-message error" role="alert"><AlertTriangle size={15} />{storageError}</div>}
       <div className="settings-grid">
         {isMobileApp && <SettingsSection icon={<Moon size={18} />} title="Appearance" description="Choose how NeighborWalk looks on this iPhone or iPad.">
-          <label className="toggle-row"><input type="checkbox" checked={darkMode} onChange={(event) => { const enabled = event.target.checked; setDarkMode(enabled); setMobileColorTheme(enabled ? "dark" : "light"); }} /><span><strong>Dark mode</strong>Use darker surfaces and lighter text throughout the app.</span></label>
+          <label className="form-field"><span>Color appearance</span><select value={colorTheme} onChange={(event) => {
+            const next = event.target.value as MobileColorThemePreference;
+            setColorTheme(next);
+            setMobileColorTheme(next);
+          }}><option value="system">Match iPhone or iPad</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
         </SettingsSection>}
 
         {data.sync.mode === "connected" && <SettingsSection icon={<LockKeyhole size={18} />} title="Account and access" description="Your access level is assigned by a church leader.">
@@ -184,6 +189,11 @@ export function SettingsView({
         </SettingsSection>
 
         <ReminderSettings key={data.church.id} churchId={data.church.id} timezone={data.church.timezone} online={online} connected={data.sync.mode === "connected"} />
+
+        {isMobileApp && data.sync.mode === "connected" && <DeviceReminderSettings
+          data={data}
+          onSetEnabled={(enabled) => onSetPreference("notificationsEnabled", enabled)}
+        />}
 
         <SettingsSection icon={<Database size={18} />} title="Data and synchronization" description={data.sync.mode === "connected" ? "Changes save to the church workspace automatically. Manual sync remains available as a fallback." : "This build is device-only until your backend is connected."}>
           <div className={`connection-card ${data.sync.mode}`}>

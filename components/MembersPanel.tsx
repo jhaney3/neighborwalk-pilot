@@ -68,7 +68,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
         if (page.error) throw page.error;
         roster.push(...page.data);
         if (page.data.length < 500) break;
-        const next = page.data.at(-1)!.user_id;
+        const next = page.data[page.data.length - 1]!.user_id;
         if (next <= cursor) throw new Error("The member cursor did not advance; a partial roster was not accepted.");
         cursor = next;
       }
@@ -80,7 +80,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
         if (page.error) throw page.error;
         invites.push(...page.data);
         if (page.data.length < 500) break;
-        const next = page.data.at(-1)!.id;
+        const next = page.data[page.data.length - 1]!.id;
         if (next <= cursor) throw new Error("The invitation cursor did not advance; a partial list was not accepted.");
         cursor = next;
       }

@@ -6,10 +6,13 @@ import { Haptics } from "@capacitor/haptics";
 import { Network } from "@capacitor/network";
 import { NeighborWalkRoot } from "../components/SupabaseGate";
 import { NeighborWalkApp } from "../app/NeighborWalkApp";
-import { installNavigation, usePathname } from "./navigation";
+import { installNavigation, navigate, usePathname } from "./navigation";
 import { receiveAuthLink } from "./auth-links";
+import { publishNativeConnectivity } from "./connectivity";
 import { installSingleLineKeyboardDismissal } from "./keyboard";
 import { installMobileColorTheme } from "./theme";
+import { addDeviceReminderTapListener } from "./notifications";
+import { addRemotePushTapListener, REMOTE_PUSH_REFRESH_EVENT } from "./push-notifications";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "../app/styles/foundation.css";
 import "../app/styles/map.css";
@@ -34,8 +37,14 @@ if (Capacitor.isNativePlatform()) {
   const printer = registerPlugin<{ print(): Promise<{ completed: boolean }> }>("NeighborWalkPrint");
   window.print = () => { void printer.print().catch(() => window.alert("The worksheet could not be printed. Please try again.")); };
   void App.addListener("appUrlOpen", ({ url }) => receiveAuthLink(url));
+  void App.addListener("appStateChange", ({ isActive }) => {
+    if (isActive) window.dispatchEvent(new Event(REMOTE_PUSH_REFRESH_EVENT));
+  });
   void App.getLaunchUrl().then((result) => { if (result) receiveAuthLink(result.url); });
-  void Network.addListener("networkStatusChange", ({ connected }) => window.dispatchEvent(new Event(connected ? "online" : "offline")));
+  void Network.getStatus().then(({ connected }) => publishNativeConnectivity(connected)).catch(() => {});
+  void Network.addListener("networkStatusChange", ({ connected }) => publishNativeConnectivity(connected));
+  void addDeviceReminderTapListener((target) => navigate(target));
+  void addRemotePushTapListener((target) => navigate(target));
   document.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest(".mobile-nav button:not(.active)")) void Haptics.selectionChanged().catch(() => {});
   });

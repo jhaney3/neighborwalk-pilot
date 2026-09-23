@@ -15,6 +15,7 @@ import { applyParcelSelectionOverrides, parcelInsideZone, planningDatasetIdentit
 import type { WalkTargetGeometry, WalkTargetInput } from "../lib/walk-targets";
 import { compactToastMessage } from "../lib/toasts";
 import { MapDrawingModeControl } from "./MapDrawingModeControl";
+import { randomUuid } from "../lib/platform";
 
 export type WalkTargetDraft = WalkTargetInput & { clientId: string; id?: string };
 export type PlanningMapData = { streets: StreetSegmentCollection; parcels: ParcelFeatureCollection; parcelRevision?: string; parcelComplete: boolean; fromCache?: boolean };
@@ -335,14 +336,14 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
     if (draftKind === "streets") { const chosen = streets.features.filter((feature) => streetIds.has(feature.properties.id)); if (!chosen.length) return; geometry = { type: "MultiLineString", coordinates: chosen.flatMap(streetSegmentLines).map((line) => line.coordinates.map((position) => [position[0], position[1]] as Coordinates)) }; selectionKind = "streets"; }
     else { if (!drawingBoundaryReady(points, draftKind) || error) return; geometry = polygon(points); selectionKind = draftKind; }
     if (!parcelIds.size) return;
-    const clientId = `draft-${crypto.randomUUID()}`; const color = TARGET_COLORS[targets.length % TARGET_COLORS.length];
+    const clientId = `draft-${randomUuid()}`; const color = TARGET_COLORS[targets.length % TARGET_COLORS.length];
     const chosenStreets = streets.features.filter((feature) => streetIds.has(feature.properties.id));
     const target: WalkTargetDraft = { clientId, eventId, territoryId: parentTerritory.id, name: selectionKind === "streets" ? chosenStreets[0]?.properties.name ?? `Street target ${targets.length + 1}` : `Area ${targets.length + 1}`, color, selectionKind, geometry,
       streetSelection: selectionKind === "streets" ? { side: "both", corridorMeters: STREET_PARCEL_CORRIDOR_METERS, source: OVERTURE_TRANSPORTATION_SOURCE, sourceRevision: streets.metadata?.release ?? "unknown", segmentIds: [...streetIds], streetNames: [...new Set(chosenStreets.flatMap((feature) => feature.properties.name ? [feature.properties.name] : []))] } : undefined,
       parcels: planningParcelRoster(parcelIds, automaticParcelIds, eligibleParcels, parcelRevision, selectionKind === "streets" ? "street_auto" : "polygon_auto") };
     onChange([...targets, target]); onSelectedTargetChange(clientId); setPoints([]); setStreetIds(new Set()); setParcelOverrides(new Map()); setOverlapNotice(undefined); setDraftKind(undefined); setMode("select");
   };
-  const addWhole = () => { if (!planningComplete) return; const ids = new Set(eligibleParcels.features.map((feature) => `${feature.properties.countyFips}:${feature.properties.gislink}`)); if (!ids.size) return; const clientId = `draft-${crypto.randomUUID()}`; onChange([...targets, { clientId, eventId, territoryId: parentTerritory.id, name: parentTerritory.name, color: TARGET_COLORS[targets.length % TARGET_COLORS.length], selectionKind: "whole_zone", geometry: polygon(parentTerritory.boundary), parcels: planningParcelRoster(ids, ids, eligibleParcels, parcelRevision, "polygon_auto") }]); onSelectedTargetChange(clientId); };
+  const addWhole = () => { if (!planningComplete) return; const ids = new Set(eligibleParcels.features.map((feature) => `${feature.properties.countyFips}:${feature.properties.gislink}`)); if (!ids.size) return; const clientId = `draft-${randomUuid()}`; onChange([...targets, { clientId, eventId, territoryId: parentTerritory.id, name: parentTerritory.name, color: TARGET_COLORS[targets.length % TARGET_COLORS.length], selectionKind: "whole_zone", geometry: polygon(parentTerritory.boundary), parcels: planningParcelRoster(ids, ids, eligibleParcels, parcelRevision, "polygon_auto") }]); onSelectedTargetChange(clientId); };
 
   return <section className="walk-target-planner" aria-label={`Plan targets inside ${parentTerritory.name}`}>
     <div className="walk-target-tools" role="toolbar" aria-label="Target drawing tools">

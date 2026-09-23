@@ -12,7 +12,7 @@ export function Modal({ title, description, wide = false, mobileImmersive = fals
     element?.showModal();
     return () => {
       element?.close();
-      previousFocus?.focus();
+      previousFocus?.focus({ preventScroll: true });
     };
   }, []);
   const requestClose = () => { if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose(); };

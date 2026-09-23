@@ -218,7 +218,7 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
       const targetAssignments = assignments.filter((assignment) => assignment.targetId === target.id);
       const assignment = targetAssignments.find((item) => ["assigned", "accepted"].includes(item.status))
         ?? (target.finishedAt ? targetAssignments.find((item) => item.status === "completed") : undefined)
-        ?? (closed ? targetAssignments.at(-1) : undefined);
+        ?? (closed ? targetAssignments[targetAssignments.length - 1] : undefined);
       return { key: target.id, target, assignment };
     }),
     ...assignments.filter((assignment) => !assignment.targetId && (closed || !["cancelled", "declined"].includes(assignment.status)))

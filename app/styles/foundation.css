@@ -91,7 +91,9 @@
   --sidebar-width: 272px;
   --page-inset: 16px;
   --top-inset: env(safe-area-inset-top, 0px);
+  --right-inset: env(safe-area-inset-right, 0px);
   --bottom-inset: env(safe-area-inset-bottom, 0px);
+  --left-inset: env(safe-area-inset-left, 0px);
 
   /* Legacy aliases — feature modules still reference these names. */
   --font-archivo: var(--font-sans);

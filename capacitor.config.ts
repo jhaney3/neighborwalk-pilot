@@ -9,6 +9,8 @@ const config: CapacitorConfig = {
   plugins: {
     Keyboard: { resize: "body", resizeOnFullScreen: true },
     CapacitorHttp: { enabled: true },
+    LocalNotifications: { presentationOptions: ["banner", "list", "sound"] },
+    PushNotifications: { presentationOptions: ["alert", "sound"] },
   },
 };
 export default config;

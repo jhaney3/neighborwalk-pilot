@@ -621,7 +621,7 @@ export function enforceRetention(data: NeighborWalkData, now = new Date()): Neig
   const keepFollowUps = data.followUps.filter(
     (followUp) => followUp.status === "scheduled"
       || Boolean(followUp.sourceVisitId && keepVisitIds.has(followUp.sourceVisitId))
-      || new Date(followUp.history.at(-1)?.createdAt ?? followUp.createdAt) >= cutoff,
+      || new Date(followUp.history[followUp.history.length - 1]?.createdAt ?? followUp.createdAt) >= cutoff,
   );
   const keepAudit = data.audit.filter((entry) => new Date(entry.createdAt) >= cutoff);
   const activeFollowUpResidentIds = new Set(

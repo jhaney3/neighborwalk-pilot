@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 
 export type MobileColorTheme = "light" | "dark";
+export type MobileColorThemePreference = "system" | MobileColorTheme;
 
 const STORAGE_KEY = "neighborwalk.mobile.color-theme";
 const systemPreference = () => typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -16,12 +17,8 @@ function storedPreference(): MobileColorTheme | null {
   }
 }
 
-export function getMobileColorTheme(): MobileColorTheme {
-  if (typeof document !== "undefined") {
-    const applied = document.documentElement.dataset.theme;
-    if (applied === "light" || applied === "dark") return applied;
-  }
-  return storedPreference() ?? systemPreference();
+export function getMobileColorTheme(): MobileColorThemePreference {
+  return storedPreference() ?? "system";
 }
 
 export function applyMobileColorTheme(theme: MobileColorTheme) {
@@ -32,13 +29,14 @@ export function applyMobileColorTheme(theme: MobileColorTheme) {
   if (Capacitor.isNativePlatform()) void nativeAppearance.setTheme({ theme }).catch(() => {});
 }
 
-export function setMobileColorTheme(theme: MobileColorTheme) {
+export function setMobileColorTheme(theme: MobileColorThemePreference) {
   try {
-    window.localStorage.setItem(STORAGE_KEY, theme);
+    if (theme === "system") window.localStorage.removeItem(STORAGE_KEY);
+    else window.localStorage.setItem(STORAGE_KEY, theme);
   } catch {
     // The visual preference still applies for this session when storage is unavailable.
   }
-  applyMobileColorTheme(theme);
+  applyMobileColorTheme(theme === "system" ? systemPreference() : theme);
 }
 
 export function installMobileColorTheme() {

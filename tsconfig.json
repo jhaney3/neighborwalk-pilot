@@ -41,6 +41,7 @@
     "work",
     "outputs",
     "mobile/dist",
-    "ios"
+    "ios",
+    "supabase/functions"
   ]
 }

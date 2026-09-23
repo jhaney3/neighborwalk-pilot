@@ -83,6 +83,9 @@ import { coverageForTerritory, type TerritoryCoverageById } from "../lib/territo
 import { useTerritoryParcels } from "../lib/use-territory-parcels";
 import { useVisibleParcels } from "../lib/use-visible-parcels";
 import { compactToastMessage } from "../lib/toasts";
+import { calendarDate } from "../lib/calendar";
+import { deviceReminderFingerprint, reconcileDeviceReminders } from "../mobile/notifications";
+import { registerRemotePush, REMOTE_PUSH_REFRESH_EVENT, remotePushConfigured } from "../mobile/push-notifications";
 
 type View = AppView;
 type AddIntent = { coordinates: Coordinates; suggestedAddress: string; buildingGeometry?: Coordinates[]; parcel?: ParcelDetails; legacyPropertyIds?: string[] };
@@ -168,6 +171,31 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
   const [toast, setToast] = useState("");
   const showToast = (message: string) => setToast(compactToastMessage(message));
+  const reminderDataRef = useRef(data);
+  const remindersEnabled = data?.preferences.notificationsEnabled === true;
+  const signedInUserId = supabaseUser?.id;
+  const reminderFingerprint = useMemo(() => data ? deviceReminderFingerprint(data) : "", [data]);
+
+  useEffect(() => { reminderDataRef.current = data; }, [data]);
+
+  useEffect(() => {
+    if (!isMobileApp || !remindersEnabled || !reminderFingerprint) return;
+    const current = reminderDataRef.current;
+    if (!current) return;
+    // This refresh never prompts. iOS permission is requested only from the
+    // explicit Settings action, while normal data refreshes keep schedules current.
+    void reconcileDeviceReminders(current).catch(() => {});
+  }, [reminderFingerprint, remindersEnabled]);
+
+  useEffect(() => {
+    if (!isMobileApp || !remotePushConfigured || !remindersEnabled || !online || !signedInUserId) return;
+    // Refresh APNs registration after an authenticated launch/reconnect without
+    // prompting; the explicit Settings action owns the iOS permission prompt.
+    const refresh = () => { void registerRemotePush().catch(() => {}); };
+    refresh();
+    window.addEventListener(REMOTE_PUSH_REFRESH_EVENT, refresh);
+    return () => window.removeEventListener(REMOTE_PUSH_REFRESH_EVENT, refresh);
+  }, [online, remindersEnabled, signedInUserId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -264,6 +292,13 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     : data.sync.lastSyncedAt ? "Shared · " + new Date(data.sync.lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Connected";
   const syncStatusTone = data.sync.lastError || needsReview ? "error" : !online ? "offline" : saving || syncing || pendingChanges ? "pending" : "online";
   const canManage = workspaceMembership ? workspaceMembership.role === "leader" : activeVolunteer.role === "leader";
+  const openOutingIds = new Set(data.events.filter((event) => ["draft", "scheduled", "ready", "active"].includes(event.status)).map((event) => event.id));
+  const walkAttentionCount = data.outingParticipants.filter((participant) => participant.volunteerId === activeVolunteer.id
+    && participant.status === "invited" && openOutingIds.has(participant.eventId)).length;
+  const churchToday = calendarDate(new Date(), data.church.timezone);
+  const peopleAttentionCount = data.followUps.filter((task) => task.status === "scheduled" && task.assignedVolunteerId === activeVolunteer.id
+    && (task.acceptance === "pending" || calendarDate(task.dueAt, data.church.timezone) <= churchToday)).length
+    + data.residents.filter((person) => person.pendingOwnerId === activeVolunteer.id).length;
   const requestedView = route.view;
   const view = requestedView === "leader" && !canManage ? "today" : requestedView;
   const fieldOuting = route.fieldOutingId ? data.events.find((e) => e.id === route.fieldOutingId) : undefined;
@@ -581,8 +616,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
           </div>}
           <nav className="sidebar-nav" aria-label="Main sections">
             <NavButton active={view === "today"} icon={<House size={18} />} label="Home" onClick={() => navigate("today")} />
-            <NavButton active={view === "outreach" || Boolean(fieldOuting)} icon={<Footprints size={18} />} label="Walks" onClick={() => navigate("outreach")} />
-            <NavButton active={view === "people" || view === "followups"} icon={<Users size={18} />} label="People" onClick={() => { setFollowUpPersonId(null); navigate("people"); }} />
+            <NavButton active={view === "outreach" || Boolean(fieldOuting)} icon={<Footprints size={18} />} label="Walks" count={walkAttentionCount} onClick={() => navigate("outreach")} />
+            <NavButton active={view === "people" || view === "followups"} icon={<Users size={18} />} label="People" count={peopleAttentionCount} onClick={() => { setFollowUpPersonId(null); navigate("people"); }} />
             <NavButton active={["more", "guide", "leader", "settings", "map", "recovery", "data"].includes(view) && !fieldOuting} icon={<CircleEllipsis size={18} />} label="More" onClick={() => navigate("more")} />
           </nav>
           <div className="sidebar-footer">
@@ -632,7 +667,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                 <div><strong>{coverageValue}</strong><span>{coverageLabel}</span></div>
               </div>}
               <div className="map-toolbar">
-                <div className="map-filter-scroll" role="group" aria-label="Filter locations">{mapFilterOptions.map((option) => <button key={option.value} className={filter === option.value ? "active" : ""} onClick={() => setFilter(option.value)}>{option.label}{option.value !== "all" && <i style={{ background: outcomeMeta[option.value].color }} />}</button>)}</div>
+                <div className="map-filter-scroll" role="group" aria-label="Filter locations">{mapFilterOptions.map((option) => <button key={option.value} className={filter === option.value ? "active" : ""} aria-pressed={filter === option.value} onClick={() => setFilter(option.value)}>{option.label}{option.value !== "all" && <i style={{ background: outcomeMeta[option.value].color }} />}</button>)}</div>
                 <div className="map-search-wrap" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false); }}>
                   <div className={`map-search${searchOpen ? " active" : ""}`}>
                     <Search size={16} />
@@ -783,8 +818,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
 
       <nav className="mobile-nav" aria-label="Main navigation">
         <MobileNav active={view === "today"} icon={<House size={24} />} label="Home" onClick={() => navigate("today")} />
-        <MobileNav active={view === "outreach" || Boolean(fieldOuting)} icon={<Footprints size={24} />} label="Walks" onClick={() => navigate("outreach")} />
-        <MobileNav active={view === "people" || view === "followups"} icon={<Users size={24} />} label="People" onClick={() => navigate("people")} />
+        <MobileNav active={view === "outreach" || Boolean(fieldOuting)} icon={<Footprints size={24} />} label="Walks" count={walkAttentionCount} onClick={() => navigate("outreach")} />
+        <MobileNav active={view === "people" || view === "followups"} icon={<Users size={24} />} label="People" count={peopleAttentionCount} onClick={() => navigate("people")} />
         <MobileNav active={["more", "guide", "leader", "settings", "map", "recovery", "data"].includes(view) && !fieldOuting} icon={<CircleEllipsis size={24} />} label="More" onClick={() => navigate("more")} />
       </nav>
 
@@ -823,9 +858,9 @@ function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; er
         <div className="workspace-setup-mark"><Users size={22} /></div>
         <p className="eyebrow">Invitation required</p>
         <h1 id="workspace-title">Ask your leader for an invitation link.</h1>
-        <p>NeighborWalk is private to your church team. Open the one-time link from a leader, then sign in with the exact email address they invited.</p>
+        <p>NeighborWalk is private to your church team. Open the one-time link from a leader, then sign in with the verified account you want to use for this church.</p>
         <div className="workspace-account"><CircleUserRound size={17} /><span><strong>Signed in</strong>{user.email}</span></div>
-        <div className="data-note"><ShieldCheck size={16} /><span>Invitation links expire after 7 days, work once, and cannot be used by a different email.</span></div>
+        <div className="data-note"><ShieldCheck size={16} /><span>New invitation links expire after 7 days and work once. They support Apple Hide My Email or another verified sign-in; older email-bound links still require the original address.</span></div>
         {error && <p className="auth-error" role="alert">{error}</p>}
         {isMobileApp && <><MobileInvitation /><AccountDeletion /></>}
         {onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onSignOut)}>Use a different account</button>}
@@ -957,11 +992,13 @@ function TerritoryPickerModal({ data, coverageByTerritory, activeTerritoryId, ca
 }
 
 function NavButton({ active, icon, label, count, onClick }: { active: boolean; icon: React.ReactNode; label: string; count?: number; onClick: () => void }) {
-  return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined}>{icon}<span>{label}</span>{count ? <b>{count}</b> : null}</button>;
+  const accessibilityLabel = count ? `${label}, ${count} item${count === 1 ? "" : "s"} need attention` : label;
+  return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined} aria-label={accessibilityLabel}>{icon}<span>{label}</span>{count ? <b aria-hidden="true">{count}</b> : null}</button>;
 }
 
 function MobileNav({ active, icon, label, count, onClick }: { active: boolean; icon: React.ReactNode; label: string; count?: number; onClick: () => void }) {
-  return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined}><span>{icon}{count ? <b>{count}</b> : null}</span><small>{label}</small></button>;
+  const accessibilityLabel = count ? `${label}, ${count} item${count === 1 ? "" : "s"} need attention` : label;
+  return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined} aria-label={accessibilityLabel}><span>{icon}{count ? <b aria-hidden="true">{count}</b> : null}</span><small>{label}</small></button>;
 }
 
 function MoreRow({ icon, tile, label, onClick, href }: { icon: React.ReactNode; tile: string; label: React.ReactNode; onClick?: () => void; href?: string }) {

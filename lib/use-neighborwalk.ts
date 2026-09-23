@@ -75,6 +75,7 @@ import { assignFollowUp as assignTask, changeFollowUp, createFollowUp, respondTo
 import { isProductionApp, storageKey } from "./environment";
 import { walkTargetSchema, type WalkTargetInput } from "./walk-targets";
 import { assertWalkTargetDoesNotOverlap, projectWalkTargetLifecycle, replaceWalkTarget, type TargetOwner } from "./walk-target-lifecycle";
+import { effectiveConnectivity, NATIVE_CONNECTIVITY_EVENT } from "../mobile/connectivity";
 import { changeWalkTargetCrew } from "./walk-crews";
 import { changeOutingCheckIn, changeOutingRoster, respondToOutingInvitation, type OutingResponse } from "./outing-participants";
 import {
@@ -355,7 +356,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
 
   useEffect(() => {
     const update = () => {
-      const nextOnline = navigator.onLine;
+      const nextOnline = effectiveConnectivity(navigator.onLine);
       onlineRef.current = nextOnline;
       setOnline(nextOnline);
       if (nextOnline) setAutoRetryTick((current) => current + 1);
@@ -363,9 +364,11 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     update();
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
+    window.addEventListener(NATIVE_CONNECTIVITY_EVENT, update);
     return () => {
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
+      window.removeEventListener(NATIVE_CONNECTIVITY_EVENT, update);
     };
   }, []);
 
@@ -1436,7 +1439,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
   }, [authorizeRecoveryExport]);
 
   const pendingCount = data?.sync.pending.length ?? 0;
-  const pendingVersion = data?.sync.pending.at(-1)?.id ?? "none";
+  const pendingVersion = data?.sync.pending[data.sync.pending.length - 1]?.id ?? "none";
   useEffect(() => {
     if (!online || workspaceStatus !== "ready" || pendingCount === 0 || dataRef.current?.sync.legacyRecoveryRequired
       || dataRef.current?.sync.commands?.[0]?.state === "needs_review") return;

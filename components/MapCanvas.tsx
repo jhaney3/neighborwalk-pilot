@@ -83,7 +83,7 @@ type Props = {
 
 function polygonFeature(points: Coordinates[]): Feature<Polygon> | null {
   if (points.length < 3) return null;
-  const closed = points[0][0] === points.at(-1)?.[0] && points[0][1] === points.at(-1)?.[1]
+  const closed = points[0][0] === points[points.length - 1]?.[0] && points[0][1] === points[points.length - 1]?.[1]
     ? points
     : [...points, points[0]];
   return {
@@ -576,6 +576,7 @@ export function MapCanvas({
   const propertiesRef = useRef(properties);
   const mappedLocationsRef = useRef<FeatureCollection>({ type: "FeatureCollection", features: [] });
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [locationStatus, setLocationStatus] = useState<"denied" | "unavailable" | null>(null);
   const territoryLongitude = territory.center?.[0] ?? 0;
   const territoryLatitude = territory.center?.[1] ?? 0;
   const changeDrawShape = (mode: MapDrawingMode) => {
@@ -641,11 +642,14 @@ export function MapCanvas({
       mapRef.current = map;
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left");
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-      map.addControl(new maplibregl.GeolocateControl({
+      const geolocate = new maplibregl.GeolocateControl({
         positionOptions: { enableHighAccuracy: true, timeout: 10000 },
         trackUserLocation: true,
         showAccuracyCircle: true,
-      }), "bottom-right");
+      });
+      geolocate.on("geolocate", () => setLocationStatus(null));
+      geolocate.on("error", (event) => setLocationStatus(event.code === 1 ? "denied" : "unavailable"));
+      map.addControl(geolocate, "bottom-right");
       const publishViewport = () => {
         if (!map) return;
         const bounds = map.getBounds();
@@ -964,6 +968,9 @@ export function MapCanvas({
       {mapStatus === "error" && (
         <div className="map-state error"><AlertTriangle size={23} /><strong>The map is unavailable</strong><span>Your saved locations and visit records can still be used in the address list.</span>{onUseAddressList && <button className="button primary" onClick={onUseAddressList}>Use address list</button>}</div>
       )}
+      {mapStatus === "ready" && locationStatus && !addMode && !drawMode && <div className="map-location-notice" role="status"><AlertTriangle size={16} /><span>{locationStatus === "denied"
+        ? "Location access is off. Search and saved addresses still work. To change it, open iOS Settings → NeighborWalk → Location."
+        : "Your location is unavailable right now. Search and saved addresses still work."}</span></div>}
       {addMode && (
         <div className="map-mode-banner"><MapPin size={15} /><span>Tap the next dwelling or entrance</span></div>
       )}

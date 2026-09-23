@@ -143,6 +143,7 @@
 .settings-section-heading h2 { margin: 0 0 2px; font-size: var(--fs-headline); font-weight: 600; }
 .settings-section-heading p { margin: 0; color: var(--label-2); font-size: var(--fs-footnote); line-height: 1.45; }
 .settings-section-body { display: grid; gap: 14px; padding: 16px; }
+.settings-help { margin: 0; color: var(--label-2); font-size: var(--fs-footnote); line-height: 1.45; }
 .settings-route-button { margin: 0; padding: 0; border: 0; color: var(--tint); background: transparent; cursor: pointer; font-weight: 600; }
 
 .additional-followup-toggle { transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease; }

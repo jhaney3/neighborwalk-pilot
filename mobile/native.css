@@ -8,6 +8,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; t
 input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), select, textarea { font-size: 16px !important; }
 input:not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable] { caret-color: var(--blue); }
 #root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]), select:not([multiple]), textarea):focus { outline: 0; box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+#root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]), select:not([multiple]), textarea):focus-visible { outline: 3px solid var(--tint-soft-3); outline-offset: 2px; box-shadow: none; }
 #root .map-search.active { box-shadow: var(--shadow-sm); }
 #root .map-search input:focus { background: transparent; box-shadow: none; }
 .app-shell { width: 100%; height: 100%; min-height: 0; }
@@ -31,11 +32,24 @@ dialog.property-drawer .resident-card > .small-icon-button.danger { grid-column:
 .care-next-summary > .care-next-disclosure { display: flex; align-items: center; gap: 3px; color: var(--tint); font-size: var(--fs-footnote); font-weight: 600; }
 .care-next-card > .care-next-summary:active { opacity: .68; }
 .person-profile-tabs [role="tab"] { scroll-margin-top: calc(var(--shell-top) + var(--header-height) + 12px); }
+/* The bundled app is always a touch-first surface, even when an iPad also has
+   a pointer attached. Keep compact desktop controls on the website while
+   ensuring the native app's actionable targets meet the 44pt iOS minimum. */
+#root :where(button, summary, [role="button"], a.button, a.followup-contact-action) { min-height: 44px; }
+#root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]), select:not([multiple])) { min-height: 44px; }
+#root :where(.close-button, .small-icon-button, .more-danger, .territory-picker-edit, .territory-card-edit, .profile-button, .drawer-add-dwelling, .person-location-map-button, .map-search button, .maplibregl-ctrl button) { min-width: 44px; width: 44px; height: 44px; }
+#root .close-button { background: radial-gradient(circle, var(--fill-3) 0 16px, transparent 16.5px); }
+#root .close-button:hover { background: radial-gradient(circle, var(--fill-2) 0 16px, transparent 16.5px); }
+
 @media (max-width: 820px) {
   .app-shell { height: 100%; }
 }
-/* Touch devices: programmatic focus (dialog open, tab switch) must not draw a
-   keyboard focus ring. Form controls retain a subtle inset separator. */
-@media (hover: none) and (pointer: coarse) {
-  button:focus-visible, a:focus-visible, summary:focus-visible, [role="tab"]:focus-visible, [role="button"]:focus-visible, dialog:focus-visible { outline: none; }
+
+/* At iPad and iPhone-landscape widths the shared UI uses its sidebar layout.
+   Make that layout account for every safe-area edge and let notices participate
+   in flex sizing instead of pushing a fixed-height workspace offscreen. */
+@media (min-width: 821px) {
+  .app-shell { display: flex; flex-direction: column; height: 100dvh; min-height: 0; padding: var(--top-inset) var(--right-inset) var(--bottom-inset) var(--left-inset); }
+  .app-header, .demo-notice, .offline-preparation { flex: none; }
+  .app-body { flex: 1; height: auto; min-height: 0; }
 }

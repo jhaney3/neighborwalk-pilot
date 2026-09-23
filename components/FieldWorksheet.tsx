@@ -27,7 +27,7 @@ export function FieldWorksheet({ churchName, context, pages, printedAt }: {
     {pages.map((page) => <section className="field-worksheet-sheet" key={page.number}>
       <header className="field-worksheet-header">
         <div className="field-worksheet-brand"><div><strong>{churchName}</strong><span>Offline field worksheet</span></div><b>Page {page.number} of {pages.length}</b></div>
-        <div className="field-worksheet-title"><h1>{context.outingName}</h1><span>Addresses {page.rows.at(0)?.sequenceLabel}–{page.rows.at(-1)?.sequenceLabel} of {totalRows}</span></div>
+        <div className="field-worksheet-title"><h1>{context.outingName}</h1><span>Addresses {page.rows[0]?.sequenceLabel}–{page.rows[page.rows.length - 1]?.sequenceLabel} of {totalRows}</span></div>
         <dl className="field-worksheet-meta">
           <div><dt>Target</dt><dd>{context.targetName}</dd></div>
           <div><dt>Schedule</dt><dd>{schedule}</dd></div>

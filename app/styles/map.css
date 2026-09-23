@@ -32,6 +32,8 @@
 .map-engine .maplibregl-ctrl button { width: 40px; height: 40px; }
 .map-engine .maplibregl-ctrl button + button { border-top: 1px solid var(--hairline); }
 .map-engine .maplibregl-ctrl-attrib { border-radius: 8px; background: var(--glass); font-size: 10px; }
+.map-location-notice { position: absolute; z-index: 5; top: 12px; left: 12px; right: 12px; display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid var(--orange-line); border-radius: var(--radius-sm); color: var(--label); background: var(--glass-strong); box-shadow: var(--shadow-sm); backdrop-filter: var(--glass-blur); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.map-location-notice svg { flex: none; margin-top: 1px; color: var(--orange-text); }
 :root[data-theme="dark"] {
   .map-engine .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(1); }
   .map-engine .maplibregl-ctrl-attrib, .map-engine .maplibregl-ctrl-attrib a { color: var(--label-2); }

@@ -79,7 +79,7 @@ export function streetSegmentDisplayLines(feature: StreetSegmentFeature): LineSt
 
 function territoryPolygon(boundary: Coordinates[]) {
   if (boundary.length < 3) throw new Error("A mapped parent zone needs at least three boundary points.");
-  const first = boundary[0]; const last = boundary.at(-1);
+  const first = boundary[0]; const last = boundary[boundary.length - 1];
   const ring = first[0] === last?.[0] && first[1] === last?.[1] ? boundary : [...boundary, first];
   return { type: "Polygon" as const, coordinates: [ring] };
 }

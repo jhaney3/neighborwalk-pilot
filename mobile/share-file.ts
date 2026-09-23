@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import { randomUuid } from "../lib/platform";
 
 export async function shareFile(blob: Blob, filename: string) {
   if (!Capacitor.isNativePlatform()) {
@@ -10,7 +11,7 @@ export async function shareFile(blob: Blob, filename: string) {
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
     return;
   }
-  const path = `exports/${crypto.randomUUID()}/${filename.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
+  const path = `exports/${randomUuid()}/${filename.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
   const data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",")[1]);

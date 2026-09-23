@@ -36,7 +36,7 @@ export function EncounterCorrectionReview({ data, blocked, error, onRun, onActio
     if (!original || !version || data.sync.serverRevision === undefined) return;
     reset();
     const effective = reviewedEncounter(original);
-    setReview({ original: structuredClone(original), version, revision: data.sync.serverRevision });
+    setReview({ original: JSON.parse(JSON.stringify(original)) as Visit, version, revision: data.sync.serverRevision });
     setOutcome(effective.outcome); setContext(effective.context); setVoided(effective.voided);
   };
   return <section className="today-card" aria-labelledby="encounter-correction-title">

@@ -17,7 +17,7 @@ test("all primary tabs work and marketing content is excluded", async ({ page })
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await nav.getByRole("button", { name: "Walks", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Walks", exact: true })).toBeVisible();
-  await nav.getByRole("button", { name: "People", exact: true }).click();
+  await nav.getByRole("button", { name: /^People/ }).click();
   await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible();
   await nav.getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("button", { name: "Settings & device" }).click();
@@ -38,16 +38,16 @@ test("all primary tabs work and marketing content is excluded", async ({ page })
   expect(errors).toEqual([]);
 });
 
-test("dark mode can be toggled in iOS settings and persists on this device", async ({ page }) => {
+test("appearance can be set to dark in iOS settings and persists on this device", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/demo");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await nav.getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("button", { name: "Settings & device", exact: true }).click();
 
-  const darkMode = page.getByRole("checkbox", { name: /Dark mode/ });
-  await expect(darkMode).not.toBeChecked();
-  await darkMode.check();
+  const appearance = page.getByRole("combobox", { name: "Color appearance" });
+  await expect(appearance).toHaveValue("system");
+  await appearance.selectOption("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(0, 0, 0)");
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#000000");
@@ -55,7 +55,7 @@ test("dark mode can be toggled in iOS settings and persists on this device", asy
   await page.reload();
   await nav.getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("button", { name: "Settings & device", exact: true }).click();
-  await expect(page.getByRole("checkbox", { name: /Dark mode/ })).toBeChecked();
+  await expect(page.getByRole("combobox", { name: "Color appearance" })).toHaveValue("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
@@ -78,6 +78,84 @@ test("Done releases focus from single-line inputs", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(search).not.toBeFocused();
 });
+
+test("keyboard focus remains visible in the native shell", async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.goto("/demo");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await nav.getByRole("button", { name: "Home", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  const walks = nav.getByRole("button", { name: "Walks", exact: true });
+  await expect(walks).toBeFocused();
+  expect(await walks.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
+});
+
+test("map filters and visit outcomes expose their selected state", async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.goto("/demo");
+  await page.getByRole("button", { name: "View map", exact: true }).click();
+
+  const all = page.getByRole("button", { name: "All", exact: true });
+  const followUp = page.getByRole("button", { name: "Follow-up", exact: true });
+  await expect(all).toHaveAttribute("aria-pressed", "true");
+  await followUp.click();
+  await expect(followUp).toHaveAttribute("aria-pressed", "true");
+  await expect(all).toHaveAttribute("aria-pressed", "false");
+
+  await page.getByRole("button", { name: "Address list", exact: true }).click();
+  await page.getByRole("button", { name: /118 Crockett Street/ }).click();
+  const sheet = page.getByRole("dialog", { name: /Location details for 118 Crockett Street/ });
+  const talked = sheet.getByRole("button", { name: "Talked", exact: true });
+  const noAnswer = sheet.getByRole("button", { name: "No answer", exact: true });
+  await expect(talked).toHaveAttribute("aria-pressed", "true");
+  await noAnswer.click();
+  await expect(noAnswer).toHaveAttribute("aria-pressed", "true");
+  await expect(talked).toHaveAttribute("aria-pressed", "false");
+});
+
+test("native compact controls retain 44 point hit targets", async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.goto("/demo");
+  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await page.getByRole("button", { name: "Address list", exact: true }).click();
+  await page.getByRole("button", { name: /118 Crockett Street/ }).click();
+  const sheet = page.getByRole("dialog", { name: /Location details for 118 Crockett Street/ });
+  for (const control of [
+    sheet.getByRole("button", { name: "Close location details" }),
+    sheet.getByRole("tab", { name: /Record visit/ }),
+    sheet.getByRole("button", { name: "Talked", exact: true }),
+  ]) {
+    const bounds = await control.boundingBox();
+    expect(bounds?.width).toBeGreaterThanOrEqual(44);
+    expect(bounds?.height).toBeGreaterThanOrEqual(44);
+  }
+});
+
+for (const width of [834, 1024]) {
+  test(`iPad shell respects simulated safe areas at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/demo");
+    await page.locator("html").evaluate((element) => {
+      element.style.setProperty("--top-inset", "24px");
+      element.style.setProperty("--right-inset", "8px");
+      element.style.setProperty("--bottom-inset", "20px");
+      element.style.setProperty("--left-inset", "8px");
+    });
+
+    const shell = page.locator(".app-shell");
+    const header = page.locator(".app-header");
+    const body = page.locator(".app-body");
+    await expect(shell).toHaveCSS("padding-top", "24px");
+    const [headerBounds, bodyBounds] = await Promise.all([header.boundingBox(), body.boundingBox()]);
+    expect(headerBounds).not.toBeNull();
+    expect(bodyBounds).not.toBeNull();
+    expect(headerBounds!.x).toBeGreaterThanOrEqual(8);
+    expect(headerBounds!.x + headerBounds!.width).toBeLessThanOrEqual(width - 8);
+    expect(headerBounds!.y).toBeGreaterThanOrEqual(24);
+    expect(bodyBounds!.y + bodyBounds!.height).toBeLessThanOrEqual(880);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
 
 test("drawing a lasting zone uses a full-screen two-stage flow", async ({ page }) => {
   test.setTimeout(60_000);
@@ -154,7 +232,7 @@ test("a People location opens a map with a contextual return", async ({ page }) 
   await page.getByRole("button", { name: "View map", exact: true }).click();
   await expect(page.getByRole("button", { name: "Back to People" })).toHaveCount(0);
 
-  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "People", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: /^People/ }).click();
   const workspace = page.locator(".people-workspace");
   const search = workspace.getByRole("searchbox", { name: "Search", exact: true });
   await search.fill("Tasha");
@@ -162,8 +240,11 @@ test("a People location opens a map with a contextual return", async ({ page }) 
   await workspace.getByRole("combobox", { name: "Responsibility", exact: true }).selectOption("all");
   await workspace.getByRole("combobox", { name: "Status", exact: true }).selectOption("overdue");
   await page.getByRole("button", { name: "More actions", exact: true }).click();
-  const scrollTop = await workspace.evaluate((element) => { element.scrollTop = 120; return element.scrollTop; });
-  await page.getByRole("button", { name: "Location", exact: true }).first().click();
+  await workspace.evaluate((element) => { element.scrollTop = 120; });
+  const location = page.getByRole("button", { name: "Location", exact: true }).first();
+  await location.scrollIntoViewIfNeeded();
+  const scrollTop = await workspace.evaluate((element) => element.scrollTop);
+  await location.click();
   await expect(page.getByRole("button", { name: "Back to People" })).toBeVisible();
   await expect(page.getByRole("dialog", { name: /Location details/ })).toBeVisible();
 
@@ -180,7 +261,7 @@ test("a People location opens a map with a contextual return", async ({ page }) 
 test("the person Next step card opens and scrolls to their follow-ups", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/demo");
-  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "People", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: /^People/ }).click();
   await page.getByRole("tab", { name: "All people", exact: true }).click();
   await page.getByRole("button", { name: /Tasha.*215 Gaines Street/ }).click();
 

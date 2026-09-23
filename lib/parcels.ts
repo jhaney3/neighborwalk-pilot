@@ -145,7 +145,7 @@ export function territoryBoundarySignature(boundary: Coordinates[]) {
 function territoryPolygon(boundary: Coordinates[]): Polygon {
   if (boundary.length < 3) throw new Error("A territory needs at least three boundary points before parcels can load.");
   const first = boundary[0];
-  const last = boundary.at(-1);
+  const last = boundary[boundary.length - 1];
   const closed = first[0] === last?.[0] && first[1] === last?.[1]
     ? boundary
     : [...boundary, first];

@@ -103,6 +103,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 504EC3161FED79650016851F /* Build configuration list for PBXNativeTarget "App" */;
 			buildPhases = (
+				CC0000000000000000000001 /* Verify production web bundle */,
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
@@ -173,6 +174,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		CC0000000000000000000001 /* Verify production web bundle */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/App/public/build-provenance.json",
+			);
+			name = "Verify production web bundle";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$CONFIGURATION\" != \"Release\" ]; then\n  exit 0\nfi\nMARKER=\"$SRCROOT/App/public/build-provenance.json\"\nif [ ! -f \"$MARKER\" ]; then\n  echo \"error: Missing iOS build provenance. Run npm run ios:sync before a Release build.\"\n  exit 1\nfi\nif ! /usr/bin/grep -q '\"channel\":\"app-store\"' \"$MARKER\" || ! /usr/bin/grep -q '\"releaseEligible\":true' \"$MARKER\" || ! /usr/bin/grep -q '\"remotePush\":true' \"$MARKER\" || ! /usr/bin/grep -q '\"apnsEnvironment\":\"production\"' \"$MARKER\"; then\n  echo \"error: Refusing to build a sample, notification-incomplete, or unrecognized web bundle in Release. Run npm run ios:sync with the production mobile environment.\"\n  exit 1\nfi\nif [ ! -f \"$SRCROOT/App/public/index.html\" ]; then\n  echo \"error: The bundled iOS application is incomplete. Run npm run ios:sync.\"\n  exit 1\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		504EC3001FED79650016851F /* Sources */ = {

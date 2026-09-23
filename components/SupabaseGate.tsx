@@ -20,6 +20,8 @@ import { signInWithGoogleNative } from "../mobile/google-auth";
 import { AppleSignInButton } from "./AppleSignInButton";
 import { signInWithApple } from "../mobile/apple-auth";
 import { MobileInvitation } from "./MobileInvitation";
+import { cancelDeviceReminders } from "../mobile/notifications";
+import { unregisterRemotePush } from "../mobile/push-notifications";
 
 export function NeighborWalkRoot() {
   const router = useRouter();
@@ -79,6 +81,10 @@ export function NeighborWalkRoot() {
       if (active) {
         setConnectionError(error ? authErrorMessage(error) : "");
         setSession(data.session);
+        if (!data.session && isMobileApp) {
+          void cancelDeviceReminders().catch(() => {});
+          void unregisterRemotePush().catch(() => {});
+        }
         setLoading(false);
       }
     }).catch(() => { if (active) { setConnectionError("Sign-in could not be checked. Reconnect and try again. Your device records have not been cleared."); setLoading(false); } });
@@ -87,7 +93,15 @@ export function NeighborWalkRoot() {
         setSession(nextSession);
         if (nextSession) { setConnectionError(""); setOfflineCandidate(null); setOfflineUser((current) => current?.id === nextSession.user.id ? current : null); }
         if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
-        if (event === "SIGNED_OUT") { setPasswordRecovery(false); setOfflineUser(null); setOfflineCandidate(null); }
+        if (event === "SIGNED_OUT") {
+          setPasswordRecovery(false);
+          setOfflineUser(null);
+          setOfflineCandidate(null);
+          if (isMobileApp) {
+            void cancelDeviceReminders().catch(() => {});
+            void unregisterRemotePush().catch(() => {});
+          }
+        }
         setLoading(false);
       }
     });
@@ -126,6 +140,7 @@ export function NeighborWalkRoot() {
       onUpdatePassword={updatePassword}
       onSignOut={async () => {
         const client = getSupabaseBrowserClient();
+        if (isMobileApp) await unregisterRemotePush().catch(() => false);
         if (client) { const { error } = await client.auth.signOut({ scope: "local" }); if (error) throw new Error(authErrorMessage(error)); }
       }}
     />

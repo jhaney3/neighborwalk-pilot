@@ -5,6 +5,7 @@ import { apiError } from "./outreach-client";
 import type { Json } from "./database.types";
 import { getSupabaseBrowserClient } from "./supabase";
 import { finishGuideChange, pendingGuideChange, preserveGuideChange, type PendingGuideChange, type StorageScope } from "./storage";
+import { randomUuid } from "./platform";
 
 const shared = { expectedVersion: z.number().int().nonnegative(), guideId: z.string().uuid().nullable() };
 export const guideChangeInputSchema = z.discriminatedUnion("action", [
@@ -61,7 +62,7 @@ export function applyGuideReceipt(current: GuideLibraryState, request: GuideChan
 export function guideSaveInput(input: ConversationGuideInput, sortOrder: number): GuideChangeInput {
   if (!validGuideInput(input)) throw new Error("Finish each guide step before saving.");
   if (input.id && (!input.expectedVersion || !Number.isInteger(input.expectedVersion))) throw new Error("Refresh this guide and reopen the editor before saving. Its original version is unavailable.");
-  return guideChangeInputSchema.parse({ action: "save", guideId: input.id ?? crypto.randomUUID(), expectedVersion: input.id ? input.expectedVersion : 0,
+  return guideChangeInputSchema.parse({ action: "save", guideId: input.id ?? randomUuid(), expectedVersion: input.id ? input.expectedVersion : 0,
     content: { scope: input.scope, title: input.title, description: input.description, steps: normalizeGuideSteps(input.steps), sortOrder } });
 }
 

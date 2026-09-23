@@ -1506,6 +1506,18 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
+      register_apns_device: {
+        Args: {
+          target_installation_id: string
+          target_device_token: string
+          target_environment?: string
+        }
+        Returns: { device_id: string; registered_at: string }[]
+      }
+      unregister_apns_device: {
+        Args: { target_installation_id: string }
+        Returns: boolean
+      }
       accept_church_invitation: {
         Args: { invitation_token: string }
         Returns: {

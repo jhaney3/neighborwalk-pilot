@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { useAsyncAction } from "../lib/use-async-action";
+import { timeoutSignal } from "../lib/platform";
 
 const preferenceSchema = z.object({ enabled: z.boolean(), emailVerified: z.boolean(), suppressed: z.boolean().nullable(),
   lastState: z.string().nullable(), lastUpdatedAt: z.string().nullable() });
@@ -45,7 +46,7 @@ export function ReminderSettings({ churchId, timezone, online, connected }: { ch
   const save = async (enabled: boolean) => {
     const client = getSupabaseBrowserClient();
     if (!client || !online) throw new Error("Reconnect to change email reminders.");
-    const { data, error } = await client.rpc("outreach_reminder_preference", { target_church: churchId, enabled }).abortSignal(AbortSignal.timeout(10000));
+    const { data, error } = await client.rpc("outreach_reminder_preference", { target_church: churchId, enabled }).abortSignal(timeoutSignal(10000));
     if (error) throw new Error(error.code === "22023" ? error.message : "The change was not confirmed. Reload settings before retrying.");
     setPreference(preferenceSchema.parse(data));
     setMessage(enabled ? "Email reminders are on." : "Email reminders are off. A message already in flight may still arrive.");

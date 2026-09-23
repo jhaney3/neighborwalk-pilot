@@ -14,7 +14,9 @@ create function private.request_account_deletion()
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare actor uuid := auth.uid(); receipt private.account_deletion_requests;
 begin
-  if actor is null or not exists(select 1 from auth.users where id = actor and deleted_at is null) then
+  if not coalesce(private.is_real_user(), false)
+    or actor is null
+    or not exists(select 1 from auth.users where id = actor and deleted_at is null) then
     raise exception 'Sign in before requesting deletion.' using errcode = '42501';
   end if;
   insert into private.account_deletion_requests(user_id) values(actor)
