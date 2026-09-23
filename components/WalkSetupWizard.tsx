@@ -95,9 +95,12 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
   const [start, setStart] = useState(outing ? localDateTimeValue(outing.startsAt, timezone) : `${calendarDaysFromNow(1, timezone)}T09:00`);
   const [end, setEnd] = useState(outing ? localDateTimeValue(outing.endsAt, timezone) : `${calendarDaysFromNow(1, timezone)}T11:00`);
   const [selectedTimezone, setSelectedTimezone] = useState(timezone);
-  const [purpose, setPurpose] = useState(outing?.purpose ?? "");
-  const [meetingPoint, setMeetingPoint] = useState(outing?.meetingPoint ?? "");
-  const [leaderContact, setLeaderContact] = useState(outing?.leaderContact ?? "");
+  // New walks start with sensible preparation so leaders only change what differs.
+  const previousWalk = outing ? undefined : [...data.events].filter((event) => event.meetingPoint).sort((a, b) => b.startsAt.localeCompare(a.startsAt))[0];
+  const planner = data.volunteers.find((volunteer) => volunteer.id === data.preferences.activeVolunteerId);
+  const [purpose, setPurpose] = useState(outing?.purpose ?? (outing ? "" : "Meet our neighbors, listen well, and follow through on what they ask."));
+  const [meetingPoint, setMeetingPoint] = useState(outing?.meetingPoint ?? previousWalk?.meetingPoint ?? "");
+  const [leaderContact, setLeaderContact] = useState(outing?.leaderContact ?? previousWalk?.leaderContact ?? planner?.name ?? "");
   const [guideId, setGuideId] = useState(outing?.guideId ?? "");
   const [community, setCommunity] = useState(Boolean(outing && !initialTerritoryId));
   const [territoryId, setTerritoryId] = useState(initialTerritoryId);
@@ -167,7 +170,7 @@ export function WalkSetupWizard({ data, guides, outing, onClose, onComplete, onS
     });
   };
 
-  return <Modal title={outing ? "Resume walk setup" : "Plan a walk"} description="Pick up where you left off." onClose={action.busy ? () => undefined : zoneCreatorOpen ? () => setZoneCreatorOpen(false) : onClose} mobileImmersive={zoneCreatorOpen} wide>
+  return <Modal title={outing ? "Resume walk setup" : "Plan a walk"} description={outing ? "Pick up where you left off." : "Pick a time, a neighborhood and who’s coming."} onClose={action.busy ? () => undefined : zoneCreatorOpen ? () => setZoneCreatorOpen(false) : onClose} mobileImmersive={zoneCreatorOpen} wide>
     <div className="walk-setup form-stack" aria-busy={action.busy}>
       <ol className="walk-steps" aria-label="Walk setup progress">{steps.map((label, index) => <li key={label} className={index === step ? "active" : index < step ? "complete" : ""} aria-current={index === step ? "step" : undefined}><span>{index < step ? <Check size={14} /> : index + 1}</span>{label}</li>)}</ol>
 

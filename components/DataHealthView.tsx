@@ -73,7 +73,7 @@ export function DataHealthView(props: Props) {
       </section>
     </div>
     {message && <p role="status" className="inline-notice data-health-message">{message}</p>}{action.error && <p role="alert" className="inline-error data-health-message">{action.error}</p>}
-    {pending && <section className="today-card data-pending-card"><h2>An earlier request didn’t finish</h2><p>{String(pending.request.action).replaceAll("_", " ")} · saved {new Date(pending.savedAt).toLocaleString()}</p><p>A previous response may have been interrupted. Retry the same immutable request to retrieve its receipt. If the server rejected it, refresh and review the shared records before starting a revised action.</p>
+    {pending && <section className="today-card data-pending-card"><h2>An earlier request didn’t finish</h2><p>{String(pending.request.action).replaceAll("_", " ")} · saved {new Date(pending.savedAt).toLocaleString()}</p><p>The connection dropped before your church confirmed it. Try again, or mark it reviewed if the change already went through.</p>
       <div className="care-next-actions"><button className="button primary" disabled={!online || action.busy} onClick={() => void run(() => onRun(null), () => setMessage("Done. Records refreshed."))}>Try again</button>
         <button className="button quiet" disabled={!online || action.busy} onClick={() => { void confirm({ title: "Mark this request reviewed?", message: "It won’t be sent again. Changes already made on the server stay.", confirmLabel: "Mark reviewed" }).then((confirmed) => { if (confirmed) void run(onReviewPending, () => setMessage("Request marked reviewed. Nothing was sent again.")); }); }}>Mark reviewed</button></div>
     </section>}

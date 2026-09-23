@@ -527,12 +527,12 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   await page.reload();
   await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
   expect(await plannedWalkState(page, walkName, zoneName)).toEqual(firstState);
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   const readyCard = page.locator(".outing-card").filter({ hasText: walkName });
   const startWalk = readyCard.getByRole("button", { name: "Start walk", exact: true });
   await expect(startWalk).toBeVisible();
   await startWalk.click();
-  await expect(readyCard.getByText("active", { exact: true })).toBeVisible();
+  await expect(readyCard.getByText("Live", { exact: true })).toBeVisible();
   await expect(startWalk).toHaveCount(0);
   const startedState = await plannedWalkState(page, walkName, zoneName);
   expect(startedState.events[0].status).toBe("active");
@@ -546,7 +546,7 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
   await expect(readyCard).toHaveCount(0);
   await page.getByRole("checkbox", { name: "Show past walks", exact: true }).check();
   const completedCard = page.locator(".outing-card").filter({ hasText: walkName });
-  await expect(completedCard.getByText("completed", { exact: true })).toBeVisible();
+  await expect(completedCard.getByText("Done", { exact: true })).toBeVisible();
   await expect(completedCard.getByRole("button", { name: "Complete walk", exact: true })).toHaveCount(0);
   const completedState = await plannedWalkState(page, walkName, zoneName);
   expect(completedState.events[0].status).toBe("completed");
@@ -777,12 +777,12 @@ test("real Lawrence parcels support a new zone and ready whole-zone walk without
 test("a leader finishing a target below 100% also completes the walk", async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   const fixture = await installTargetFixture(page);
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   await page.locator(".outing-card").filter({ hasText: fixture.eventName }).click();
 
-  const targetChoice = page.getByRole("combobox", { name: "Choose tonight’s target", exact: true });
+  const targetChoice = page.getByRole("combobox", { name: "Route", exact: true });
   await expect(targetChoice).toBeVisible();
-  await expect(targetChoice.locator("option")).toHaveText(["Select an assigned target", fixture.firstTargetName, fixture.secondTargetName]);
+  await expect(targetChoice.locator("option")).toHaveText(["Choose a route", fixture.firstTargetName, fixture.secondTargetName]);
   const openWalk = page.getByRole("button", { name: "Open walk", exact: true });
   await expect(openWalk).toBeDisabled();
   await targetChoice.selectOption({ label: fixture.secondTargetName });
@@ -790,7 +790,7 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   await openWalk.click();
 
   await expect(page.getByText("50%", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("target covered tonight", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("of this route reached", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Loading the neighborhood map", { exact: true })).toBeHidden();
   await captureDesktopAndMobile(page, `zones-${fixture.secondTargetId}-accepted-field`);
   const display = page.getByRole("group", { name: "View as", exact: true });
@@ -830,6 +830,9 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   const finishConfirmation = page.getByRole("alertdialog", { name: `Finish ${fixture.secondTargetName}?` });
   await expect(finishConfirmation).toContainText("Other routes stay open");
   await finishConfirmation.getByRole("button", { name: "Finish route", exact: true }).click();
+  const summary = page.getByRole("dialog", { name: `${fixture.secondTargetName} is done` });
+  await expect(summary).toContainText("Homes reached");
+  await summary.getByRole("button", { name: "Done", exact: true }).click();
   const statusControls = page.getByRole("region", { name: "Walk status controls", exact: true });
   await expect(statusControls).toContainText("Live");
   await statusControls.getByRole("button", { name: "Complete walk", exact: true }).click();
@@ -837,16 +840,16 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   await expect(statusControls).toContainText("Done");
   const assignment = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });
   await expect(assignment).toContainText("Finished tonight");
-  await expect(assignment).toContainText("1 of 2 residential properties visited tonight — 50%");
+  await expect(assignment).toContainText("1 of 2 visited · 50%");
 
   await page.reload();
   await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   await page.getByRole("checkbox", { name: "Show past walks", exact: true }).check();
   await page.locator(".outing-card").filter({ hasText: fixture.eventName }).click();
   const reloaded = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });
   await expect(reloaded).toContainText("Finished tonight");
-  await expect(reloaded).toContainText("1 of 2 residential properties visited tonight — 50%");
+  await expect(reloaded).toContainText("1 of 2 visited · 50%");
   const saved = await targetFixtureState(page, fixture);
   expect(saved.event?.status).toBe("completed");
   expect(saved.assignment?.status).toBe("completed");
@@ -858,16 +861,16 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
 
 test("repeating a walk keeps preparation but requires fresh targets and acceptance", async ({ page }) => {
   const fixture = await installTargetFixture(page);
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   await page.locator(".outing-card").filter({ hasText: fixture.eventName }).click();
   await page.getByRole("button", { name: "Repeat walk", exact: true }).click();
 
   const dialog = page.getByRole("dialog", { name: "Repeat this walk", exact: true });
-  await expect(dialog).toContainText("Tonight’s targets, owners, visits and tasks are not copied.");
+  await expect(dialog).toContainText("Routes and teams start fresh.");
   await dialog.getByRole("button", { name: "Create draft", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("heading", { name: fixture.eventName, exact: true })).toBeVisible();
-  await expect(page.getByText("draft", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Draft", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".assignment-list li")).toHaveCount(0);
 
   const firstState = await targetFixtureState(page, fixture);
@@ -887,7 +890,7 @@ test("repeating a walk keeps preparation but requires fresh targets and acceptan
 test("replacing a frozen target preserves history and requires fresh acceptance", async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   const fixture = await installTargetFixture(page);
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   await page.locator(".outing-card").filter({ hasText: fixture.eventName }).click();
 
   const firstAssignment = page.locator(".assignment-list li").filter({ hasText: fixture.firstTargetName });
@@ -902,7 +905,7 @@ test("replacing a frozen target preserves history and requires fresh acceptance"
   await planner.getByRole("button", { name: "Whole zone", exact: true }).click();
   await expect(planner.locator(".walk-target-list li")).toHaveCount(1);
   await expect(planner.getByRole("button", { name: /^Remove / })).toBeEnabled();
-  await expect(dialog).toContainText("Crew carries over");
+  await expect(dialog).toContainText("Team carries over");
   await expect(dialog).toContainText("Erica");
   const confirmReplacement = dialog.getByRole("button", { name: "Confirm replacement", exact: true });
   await expect(confirmReplacement).toBeEnabled();
@@ -933,14 +936,16 @@ test("replacing a frozen target preserves history and requires fresh acceptance"
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Home", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Walk invitations", exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: `Your response for ${fixture.parentName} on ${fixture.eventName}`, exact: true })).toHaveCount(0);
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   await page.locator(".outing-card").filter({ hasText: fixture.eventName }).click();
   const openWalk = page.getByRole("button", { name: "Open walk", exact: true });
   await expect(openWalk).toBeEnabled();
   await openWalk.click();
   await expect(page.getByRole("button", { name: new RegExp(`^${fixture.parentName}`) })).toBeVisible();
   const opened = await targetFixtureState(page, fixture);
-  expect(opened.eventAssignments.find(({ id }) => id === freshAssignment?.id)?.status).toBe("assigned");
+  // Opening the walk as the route's owner is the acknowledgement that lets
+  // visits be recorded; the replacement still started out unaccepted above.
+  expect(opened.eventAssignments.find(({ id }) => id === freshAssignment?.id)?.status).toBe("accepted");
 
   await page.reload();
   await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();

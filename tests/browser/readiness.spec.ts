@@ -123,7 +123,7 @@ test("a reviewed person move follows open tasks and records its reason in histor
   const save = dialog.getByRole("button", { name: "Save person", exact: true });
   await expect(save).toBeDisabled();
   const reason = "Neighbor corrected the meeting address.";
-  await dialog.getByRole("textbox", { name: "Reason for the location change", exact: true }).fill(reason);
+  await dialog.getByRole("textbox", { name: "Why is it changing?", exact: true }).fill(reason);
   await expect(save).toBeDisabled();
   await dialog.getByRole("checkbox", { name: "I have reviewed this location change and its open next steps.", exact: true }).check();
   await save.click(); await expect(dialog).toBeHidden();
@@ -167,11 +167,11 @@ test("a reviewed encounter correction survives a lost response and preserves the
   await expect(page.locator(".person-last-contact").getByText(/^Last contact /)).toBeVisible();
   await page.goto(origin + "/app/data");
   await page.getByRole("button", { name: /^Correct records/ }).click();
-  await page.getByRole("button", { name: /^Correct an encounter/ }).click();
-  const review = page.getByRole("region", { name: "Correct an encounter after review", exact: true });
-  await review.getByRole("searchbox", { name: "Search encounter date, person, address or ID", exact: true }).fill(fixture.id);
+  await page.getByRole("button", { name: /^Correct a conversation/ }).click();
+  const review = page.getByRole("region", { name: "Correct a conversation", exact: true });
+  await review.getByRole("searchbox", { name: "Search by date, person, address or ID", exact: true }).fill(fixture.id);
   await review.getByRole("combobox", { name: "Encounter to review", exact: true }).selectOption(fixture.id);
-  await review.getByRole("button", { name: "Review original encounter", exact: true }).click();
+  await review.getByRole("button", { name: "Review original", exact: true }).click();
   await expect(review.getByText(/1 linked tasks remain unchanged/)).toBeVisible();
   const save = review.getByRole("button", { name: "Save reviewed correction", exact: true });
   await expect(save).toBeDisabled();
@@ -190,17 +190,17 @@ test("a reviewed encounter correction survives a lost response and preserves the
     } else await route.continue();
   });
   await save.click();
-  await expect(page.getByRole("heading", { name: "Preserved administration request", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Retry preserved request", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Preserved administration request", exact: true })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "An earlier request didn’t finish", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "An earlier request didn’t finish", exact: true })).toBeHidden();
   expect(lost).toBe(true);
   const aggregate = JSON.parse(execFileSync("psql", [database, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
     "select jsonb_build_object('outcome',e.outcome,'corrections',jsonb_array_length(e.corrections),'voided',e.corrections#>>'{0,voided}','tasks',(select count(*) from public.outreach_tasks t where t.encounter_id=e.id and t.status='scheduled')) from public.outreach_encounters e where e.id='" + fixture.id + "';"], { encoding: "utf8" }).trim());
   expect(aggregate).toEqual({ outcome: "follow_up", corrections: 1, voided: "true", tasks: 1 });
   await page.goto(origin + "/app/people/" + fixture.personId);
-  await expect(page.locator(".person-context-details").getByText("No recorded contact yet", { exact: true })).toBeVisible();
+  await expect(page.locator(".person-last-contact").getByText("No contact yet", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: /^Activity/ }).click();
-  await expect(page.getByText("Encounter reviewed · entered in error", { exact: true })).toBeVisible();
+  await expect(page.getByText("Conversation corrected · entered in error", { exact: true })).toBeVisible();
   await expect(page.getByText(reason + " Tasks and restrictions unchanged.", { exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "Note kind", exact: true }).selectOption("prayer");
   await page.getByRole("textbox", { name: "Care note", exact: true }).fill("Fictional requested prayer note");
@@ -278,7 +278,7 @@ test("reviewed duplicate people and locations retain history and resolve origina
   await expect(editor.locator(`option[value="${firstLocation}"]`)).toHaveCount(0);
   await editor.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.goto(origin + "/app/followups?person=" + ids[0]);
-  await expect(page.getByRole("region", { name: "Follow-up brief", exact: true }).getByRole("paragraph").filter({ hasText: "Fictional duplicate next step " + fixture })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Details", exact: true }).getByRole("paragraph").filter({ hasText: "Fictional duplicate next step " + fixture })).toBeVisible();
   const aggregate = execFileSync("psql", [database, "-X", "-A", "-t", "-c",
     `select count(*) from public.outreach_tasks t join public.discipleship_people p on p.church_id=t.church_id and p.id=t.person_id where p.property_id='${secondLocation}' and p.merged_into_id is null and t.location_id=p.property_id and t.status='scheduled';`], { encoding: "utf8" }).trim();
   expect(Number(aggregate)).toBe(1);
@@ -384,7 +384,7 @@ test("guide writes survive a lost response and reject stale editors while archiv
   await page.goto(origin + "/app/guides/" + guideId);
   await page.getByRole("button", { name: "Set as favorite", exact: true }).click();
   await page.getByRole("button", { name: "Clear personal favorite", exact: true }).click();
-  await expect(page.getByText(/Personal favorite cleared/)).toBeVisible();
+  await expect(page.getByText(/Favorite cleared/)).toBeVisible();
   await page.getByRole("button", { name: "Set as favorite", exact: true }).click();
   await page.getByRole("button", { name: "Edit guide", exact: true }).click();
   dialog = page.getByRole("dialog");
@@ -411,12 +411,12 @@ test("guide writes survive a lost response and reject stale editors while archiv
     await page.getByRole("button", { name: "Edit guide", exact: true }).click();
     dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Archive", exact: true }).click();
-    await expect(dialog.getByText(/This is not permanent erasure/)).toBeVisible();
+    await expect(dialog.getByText(/Past walks keep their link to it/)).toBeVisible();
     await dialog.getByRole("button", { name: "Archive guide", exact: true }).click();
     await expect(dialog).toBeHidden();
     expect(snapshot()).toMatchObject({ count: 1, version: 3, archived: true, words: "Fictional second device accepted edit", receipts: 1 });
     await page.goto(origin + "/app/guides/" + guideId);
-    await expect(page.getByText(/The requested guide is not available in your active library/)).toBeVisible();
+    await expect(page.getByText(/That guide isn’t available anymore/)).toBeVisible();
     await expect(page.getByRole("heading", { name: title, exact: true })).toHaveCount(0);
   } finally { await other.close(); }
 });

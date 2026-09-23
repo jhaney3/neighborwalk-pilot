@@ -47,3 +47,11 @@
 .address-list-door[data-outcome="unvisited"] { color: var(--label-3); background: var(--fill-4); }
 .address-list-outcome { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: var(--radius-pill); color: color-mix(in srgb, var(--o) 80%, var(--label)); background: color-mix(in srgb, var(--o) 13%, transparent); font-size: var(--fs-footnote); font-weight: 600; white-space: nowrap; }
 .address-list-outcome[data-outcome="unvisited"] { color: var(--label-2); background: transparent; font-weight: 500; }
+
+/* Route summary after finishing */
+.route-summary { display: grid; justify-items: center; gap: var(--space-5); padding: var(--space-2) 0; }
+.route-summary .progress-ring-number { font-size: var(--fs-title2); }
+.route-summary dl { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.route-summary dl > div { display: grid; gap: 2px; padding: 12px 8px; border-radius: 14px; background: var(--bg-grouped); text-align: center; }
+.route-summary dt { order: 2; color: var(--label-2); font-size: var(--fs-caption); }
+.route-summary dd { order: 1; margin: 0; color: var(--label); font-family: var(--font-display); font-size: var(--fs-title3); font-weight: 600; }

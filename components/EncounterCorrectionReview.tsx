@@ -40,14 +40,14 @@ export function EncounterCorrectionReview({ data, blocked, error, onRun, onActio
     setOutcome(effective.outcome); setContext(effective.context); setVoided(effective.voided);
   };
   return <section className="today-card" aria-labelledby="encounter-correction-title">
-    <h2 id="encounter-correction-title">Correct an encounter after review</h2>
+    <h2 id="encounter-correction-title">Correct a conversation</h2>
     <p>Keep the original and append a factual correction, or mark a duplicate/mistaken entry as entered in error. This needs a connected, recently signed-in leader and no pending device work.</p>
     <fieldset className="form-stack" disabled={blocked}>
       <legend>Find the encounter</legend>
-      <label>Search encounter date, person, address or ID<input type="search" value={search} onChange={(e) => { setSearch(e.target.value); setSelectedId(""); reset(); }} /></label>
+      <label>Search by date, person, address or ID<input type="search" value={search} onChange={(e) => { setSearch(e.target.value); setSelectedId(""); reset(); }} /></label>
       <label>Encounter to review<select value={selectedId} onChange={(e) => { setSelectedId(e.target.value); reset(); }}><option value="">Choose encounter</option>{matches.slice(0, 100).map((visit) => <option key={visit.id} value={visit.id}>{label(visit)}</option>)}</select></label>
       <p>{matches.length > 100 ? "Showing the 100 most recent matches. Refine the search to find older records." : `${matches.length} matching encounters.`}</p>
-      <button className="button quiet" disabled={!selectedId} onClick={preview}>Review original encounter</button>
+      <button className="button quiet" disabled={!selectedId} onClick={preview}>Review original</button>
     </fieldset>
     {review && current && <>
       <dl><div><dt>Original encounter</dt><dd>{label(review.original)}</dd></div><div><dt>Originally recorded</dt><dd>{outcomeMeta[review.original.outcome].label} · {(review.original.context ?? "door").replaceAll("_", " ")} · {new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: data.church.timezone }).format(new Date(review.original.recordedAt))}</dd></div><div><dt>Original note (retained)</dt><dd>{review.original.objectiveNote || "No shared note. Protected person notes are separate."}</dd></div></dl>

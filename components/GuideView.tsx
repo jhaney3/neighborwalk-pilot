@@ -131,7 +131,7 @@ export function GuideView({
       {routeGuideId && !guides.some((guide) => guide.id === routeGuideId) && <p className="inline-notice" role="status">That guide isn’t available anymore. Pick another below.</p>}
 
       <section className="guide-library" aria-labelledby="guide-library-title">
-        <div className="guide-library-heading"><div><p className="eyebrow">Guide shelf</p><h2 id="guide-library-title">Pick the method that fits this conversation.</h2></div><span>{guides.filter((guide) => guide.scope === "church").length} church · {guides.filter((guide) => guide.scope === "personal").length} personal</span></div>
+        <div className="guide-library-heading"><div><h2 id="guide-library-title">Your guides</h2></div><span>{guides.filter((guide) => guide.scope === "church").length} church · {guides.filter((guide) => guide.scope === "personal").length} personal</span></div>
         {guides.length ? <div className="guide-library-list">
           {guides.map((guide) => {
             const favorite = guide.id === favoriteGuideId;
@@ -148,8 +148,8 @@ export function GuideView({
       </section>
 
       {canManage && <section className="guide-group-defaults" aria-labelledby="guide-group-defaults-title">
-        <div className="guide-library-heading"><div><p className="eyebrow">Leader controls</p><h2 id="guide-group-defaults-title">Team defaults</h2></div><span>Optional</span></div>
-        <div className="guide-group-warning"><AlertTriangle size={17} /><span><strong>A team default overrides personal favorites.</strong> Members of that group will open the selected church guide at the doorstep, even if they chose another favorite. Choose “Use each volunteer’s favorite” to remove the override.</span></div>
+        <div className="guide-library-heading"><div><h2 id="guide-group-defaults-title">Team defaults</h2></div><span>Optional</span></div>
+        <div className="guide-group-warning"><AlertTriangle size={17} /><span>A team’s default replaces each member’s favorite at the door.</span></div>
         {teams.length ? <div className="guide-group-default-list">
           {teams.map((team) => <label className="guide-group-default-row" key={team.id}>
             <span><strong>{team.name}</strong><small>{team.memberIds.length} {team.memberIds.length === 1 ? "person" : "people"} · {teamStatusLabels[team.status]}</small></span>

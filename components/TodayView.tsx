@@ -8,7 +8,7 @@ import type { OutingParticipant, OutingResponse } from "../lib/outing-participan
 import { useAsyncAction } from "../lib/use-async-action";
 import { Badge, ListGroup, ListRow, ViewHeading } from "./ui";
 import { ConversationRow } from "./ConversationFeed";
-import { NeighborhoodShape, ProgressRing, avatarTone, neighborhoodProgress, outingTerritory } from "./visuals";
+import { NeighborhoodShape, ProgressRing, StreetScene, avatarTone, neighborhoodProgress, outingTerritory } from "./visuals";
 import { communityConversations } from "../lib/conversations";
 
 function greetingFor(timezone: string, now = new Date()) {
@@ -101,9 +101,15 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
         </div>
         {startAction.error && <p role="alert" className="inline-error">{startAction.error}</p>}
       </section>
-      : <ListGroup label="Walks">
-        <ListRow title="No walks planned yet" subtitle={canManage ? "Plan one when you’re ready." : "Your leader will invite you."} onClick={() => onOuting()} />
-      </ListGroup>}
+      : <section className="home-hero home-hero-empty" aria-labelledby="home-no-walk">
+        <StreetScene className="home-hero-street" />
+        <div className="home-hero-copy">
+          <p className="home-hero-label">No walks yet</p>
+          <h2 id="home-no-walk">{canManage ? "Where should your church walk next?" : "Your next walk will show up here."}</h2>
+          <p className="home-hero-meta">{canManage ? "Pick a neighborhood, a time and who’s coming." : "Your leader will invite you."}</p>
+        </div>
+        <div className="home-hero-footer"><button className="button hero-action" onClick={() => onOuting()}>{canManage ? "Plan a walk" : "See walks"}</button></div>
+      </section>}
 
     {unansweredResponseCount > 0 && <ListGroup label={<span id="home-invitations">Walk invitations</span>} className="home-invitations">{invitationRows(unansweredResponseOutings)}</ListGroup>}
     {answeredResponseCount > 0 && <section className={`home-replies${responseReviewOpen ? " is-open" : ""}`} aria-label="Saved walk responses">

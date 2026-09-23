@@ -60,7 +60,7 @@ import { LeaderView } from "../components/LeaderView";
 import { SettingsView } from "../components/SettingsView";
 import { Badge, ConfirmProvider, ListGroup, ListRow, Modal, SegmentedControl, initials, useConfirm } from "../components/ui";
 import { ParentZoneCreator } from "../components/ParentZoneCreator";
-import { BrandMark } from "../components/visuals";
+import { BrandMark, ProgressRing } from "../components/visuals";
 import {
   centerForBoundary,
   outcomeMeta,
@@ -179,6 +179,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
   const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
   const [neighborhoodCreatorOpen, setNeighborhoodCreatorOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [routeSummary, setRouteSummary] = useState<{ name: string; touched: number; total: number; conversations: number; followUps: number } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const showToast = (message: string, tone: ToastTone = "success") => setToast({ message: compactToastMessage(message), tone });
   const reminderDataRef = useRef(data);
@@ -338,7 +339,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
   const canvasTerritory: Territory = activeTerritory.center ? activeTerritory : { ...activeTerritory, center: [-98, 39], zoom: 4 };
   const coverage = fieldTarget ? { ...targetCoverage(data, fieldTarget), basis: "target" } : coverageByTerritory[activeTerritory.id]
     ?? coverageForTerritory(data, activeTerritory.id);
-  const coverageLabel = fieldTarget ? "target covered tonight" : coverage.basis === "residential_parcels" ? "residential covered" : "mapped covered";
+  const coverageLabel = fieldTarget ? "of this route reached" : coverage.basis === "residential_parcels" ? "of homes reached" : "of saved homes reached";
   const coverageValue = coverage.percent === null ? "—" : `${coverage.percent}%`;
   const candidateProperty = indexCurrentRecords(data.properties).get(propertySelection ?? "");
   const selectedProperty = candidateProperty && (!fieldOuting || candidateProperty.territoryId === activeTerritory.id) && (!fieldTarget || propertyInTarget(candidateProperty, fieldTarget)) ? candidateProperty : null;
@@ -525,6 +526,16 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
       confirmLabel: "Finish route",
     });
     if (!confirmed) return;
+    // Summarize the route before it closes, for a moment of closure.
+    const routeVisits = data.visits.filter((visit) => visit.eventId === fieldOuting.id && (fieldTarget ? visit.targetId === fieldTarget.id : visit.territoryId === fieldAssignment.territoryId));
+    const routeVisitIds = new Set(routeVisits.map((visit) => visit.id));
+    const summary = {
+      name: label,
+      touched: coverage.touched,
+      total: coverage.total,
+      conversations: routeVisits.filter((visit) => ["conversation", "follow_up"].includes(visit.outcome)).length,
+      followUps: data.followUps.filter((task) => task.sourceVisitId && routeVisitIds.has(task.sourceVisitId)).length,
+    };
     void fieldworkAction.run(async () => {
       if (fieldAssignment.targetId) await actions.finishTarget(fieldAssignment.targetId);
       else await actions.saveAssignment({
@@ -535,7 +546,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
         status: "completed",
       }, fieldAssignment.id);
     }, () => {
-      showToast("Route finished");
+      setRouteSummary(summary);
       navigate("outreach", fieldOuting.id);
     });
   };
@@ -842,6 +853,17 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
       </nav>
       <button type="button" className="tab-log-button" aria-label="Log a conversation" onClick={() => setLogOpen(true)}><Plus size={26} aria-hidden="true" /></button>
 
+      {routeSummary && <Modal title={`${routeSummary.name} is done`} description="Thank you for walking tonight." onClose={() => setRouteSummary(null)}>
+        <div className="route-summary">
+          <ProgressRing value={routeSummary.touched} total={routeSummary.total} size={108} label={`${routeSummary.touched} of ${routeSummary.total} homes reached`} />
+          <dl>
+            <div><dt>Homes reached</dt><dd>{routeSummary.touched} of {routeSummary.total}</dd></div>
+            <div><dt>Conversations</dt><dd>{routeSummary.conversations}</dd></div>
+            <div><dt>Follow-ups planned</dt><dd>{routeSummary.followUps}</dd></div>
+          </dl>
+        </div>
+        <div className="modal-actions"><button type="button" className="button primary" onClick={() => setRouteSummary(null)}>Done</button></div>
+      </Modal>}
       {logOpen && <ConversationLogger data={data} outingId={fieldOuting?.id} onSave={async (input) => { await actions.recordVisit(input); showToast("Conversation saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} onClose={() => setLogOpen(false)} />}
       {neighborhoodCreatorOpen && <Modal title="New neighborhood" wide mobileImmersive onClose={() => setNeighborhoodCreatorOpen(false)}>
         <ParentZoneCreator churchId={data.church.id} mapStyleUrl={data.preferences.mapStyleUrl} baseTerritory={activeTerritory.center ? activeTerritory : undefined} demo={data.sync.mode === "device_only"} open onOpenChange={(open) => { if (!open) setNeighborhoodCreatorOpen(false); }} onAddZone={actions.addTerritory} onCreated={(territory) => { setNeighborhoodCreatorOpen(false); void actions.selectTerritory(territory.id); setOutreachDisplay("map"); showToast("Neighborhood created"); }} />

@@ -222,9 +222,9 @@ test("People opens to follow-ups, switches to the directory, and keeps task link
   const firstTask = page.locator(".followup-card").first();
   await firstTask.getByRole("button", { name: "More actions", exact: true }).click();
   await firstTask.getByRole("button", { name: "Open follow-up", exact: true }).click();
-  await expect(page.getByText(/^This is the task from your link\./)).toBeVisible();
+  await expect(page.getByText(/^This is the follow-up from your link\./)).toBeVisible();
   await expect(navigation.getByRole("button", { name: /^People/ })).toHaveAttribute("aria-current", "page");
-  await page.getByRole("button", { name: "Open my task list", exact: true }).click();
+  await page.getByRole("button", { name: "Open my follow-ups", exact: true }).click();
   await expect(needsFollowUp).toHaveAttribute("aria-selected", "true");
 
   await allPeople.click();
@@ -232,7 +232,7 @@ test("People opens to follow-ups, switches to the directory, and keeps task link
   await expect(page.getByRole("searchbox", { name: "Search people", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add person", exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /^Elena active/ }).click();
+  await page.getByRole("button", { name: /^Elena/ }).click();
   const profileTabs = page.getByRole("tablist", { name: "Profile sections" });
   const profileFollowUps = profileTabs.getByRole("tab", { name: /Follow-ups/ });
   const profileActivity = profileTabs.getByRole("tab", { name: /Activity/ });
@@ -264,7 +264,7 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   await page.getByRole("dialog", { name: "Plan a walk" }).getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Home", exact: true }).click();
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
 
@@ -328,7 +328,7 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
 
   await page.reload();
   await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   const walkCard = page.locator(".outing-card").filter({ hasText: walkName });
   await expect(walkCard).toHaveCount(1);
   await expect(walkCard).not.toContainText("Prepare the purpose and plan together.");
@@ -337,12 +337,12 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
   dialog = page.getByRole("dialog", { name: "Resume walk setup" });
   await expect(dialog.getByRole("textbox", { name: "Walk name", exact: true })).toHaveValue(walkName);
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(dialog.getByText("Tonight’s targets are locked", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText("Routes are set", { exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("combobox", { name: "Neighborhood", exact: true })).toHaveValue(draftSnapshot.territoryIds[0]);
   const resumedPlanner = dialog.getByRole("region", { name: `Routes in ${parentName}`, exact: true });
   await expect(resumedPlanner.locator(".walk-target-list li")).toHaveCount(1);
   await expect(resumedPlanner.getByRole("button", { name: `Remove ${parentName}`, exact: true })).toBeDisabled();
-  await expect(resumedPlanner.getByText(/Saved targets cannot be removed here\..*walk detail/)).toBeVisible();
+  await expect(resumedPlanner.getByText(/Saved routes can’t be removed here\..*walk page/)).toBeVisible();
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(dialog.getByRole("heading", { name: "Who’s coming?", exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Remove Maya", exact: true }).click();
@@ -356,7 +356,7 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
   await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Home", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Walk invitations", exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: `Your response for ${parentName} on ${walkName}`, exact: true })).toHaveCount(0);
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   await page.locator(".outing-card").filter({ hasText: walkName }).click();
   const assignmentCard = page.locator(".assignment-list li").filter({ hasText: parentName });
   await expect(assignmentCard).toContainText("No team yet");
@@ -397,12 +397,12 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
 
   await page.reload();
   await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^Walks/ }).click();
   await page.locator(".outing-card").filter({ hasText: walkName }).click();
   await page.getByRole("button", { name: "Resume setup", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "Resume walk setup" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(dialog.getByText("Tonight’s targets are locked", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText("Routes are set", { exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("combobox", { name: "Neighborhood", exact: true })).toHaveValue(draftSnapshot.territoryIds[0]);
   await dialog.getByRole("button", { name: "Close dialog", exact: true }).click();
 
@@ -485,7 +485,7 @@ test("an advance invitation becomes field access only after check-in and crew as
   await page.getByRole("button", { name: "Open profile and settings", exact: true }).click();
   await page.getByRole("combobox", { name: /^Preview identity/ }).selectOption({ label: "Maya · volunteer" });
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Home", exact: true }).click();
-  const walks = page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Walks", exact: true });
+  const walks = page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: /^Walks/ });
   const response = page.getByRole("group", { name: `Your invitation for ${walkName}`, exact: true });
   await response.getByRole("button", { name: "Going", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Walk invitations", exact: true })).toHaveCount(0);
@@ -497,7 +497,7 @@ test("an advance invitation becomes field access only after check-in and crew as
 
   await page.getByRole("button", { name: "Open profile and settings", exact: true }).click();
   await page.getByRole("combobox", { name: /^Preview identity/ }).selectOption({ label: "Erica · leader" });
-  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: /^Walks/ }).click();
   await page.locator(".outing-card").filter({ hasText: walkName }).click();
   await page.getByRole("button", { name: "Edit teams", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "Teams", exact: true });
@@ -512,7 +512,7 @@ test("an advance invitation becomes field access only after check-in and crew as
 
   await page.getByRole("button", { name: "Open profile and settings", exact: true }).click();
   await page.getByRole("combobox", { name: /^Preview identity/ }).selectOption({ label: "Maya · volunteer" });
-  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: /^Walks/ }).click();
   await page.locator(".outing-card").filter({ hasText: walkName }).click();
   await expect(openWalk).toBeEnabled();
   await openWalk.click();
