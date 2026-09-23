@@ -26,3 +26,21 @@ export function installSingleLineKeyboardDismissal(documentTarget: Document = do
   documentTarget.addEventListener("keydown", dismiss);
   return () => documentTarget.removeEventListener("keydown", dismiss);
 }
+
+/** Show focus rings for keyboard navigation without leaving them on touched controls or newly opened sheets. */
+export function installMobileFocusModality(documentTarget: Document = document) {
+  const showKeyboardFocus = (event: KeyboardEvent) => {
+    if (event.key === "Tab" || event.key.startsWith("Arrow") || ["Home", "End", "PageUp", "PageDown"].includes(event.key)) {
+      documentTarget.documentElement.dataset.focusModality = "keyboard";
+    }
+  };
+  const hideKeyboardFocus = () => { delete documentTarget.documentElement.dataset.focusModality; };
+  documentTarget.addEventListener("keydown", showKeyboardFocus, true);
+  documentTarget.addEventListener("pointerdown", hideKeyboardFocus, true);
+  documentTarget.addEventListener("touchstart", hideKeyboardFocus, true);
+  return () => {
+    documentTarget.removeEventListener("keydown", showKeyboardFocus, true);
+    documentTarget.removeEventListener("pointerdown", hideKeyboardFocus, true);
+    documentTarget.removeEventListener("touchstart", hideKeyboardFocus, true);
+  };
+}

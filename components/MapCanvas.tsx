@@ -10,6 +10,7 @@ import { geometryContainsPoint, polygonAtPoint } from "../lib/geometry";
 import { groupBy } from "../lib/collections";
 import { drawingGestureIntent, drawingInstruction, moveDrawingCorner, rectangleBoundary, rectangleHasArea, type MapDrawingMode } from "../lib/map-drawing";
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
+import { isMobileApp } from "../lib/mobile";
 import { parcelKey, parcelProgress, propertyParcelKey } from "../lib/parcel-groups";
 import type { WalkTarget } from "../lib/walk-targets";
 import {
@@ -681,6 +682,12 @@ export function MapCanvas({
       map.once("load", () => {
         mapLoaded = true;
         if (loadTimeout !== undefined) window.clearTimeout(loadTimeout);
+        // MapLibre opens compact credits on first load; leave them behind the info button in the iOS app.
+        if (isMobileApp) {
+          const attribution = map?.getContainer().querySelector(".maplibregl-ctrl-attrib");
+          attribution?.classList.remove("maplibregl-compact-show");
+          attribution?.removeAttribute("open");
+        }
         setMapStatus("ready");
         publishViewport();
       });

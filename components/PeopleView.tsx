@@ -207,7 +207,7 @@ export function PeopleView({
       />}
 
       <div className="people-toolbar">
-        <div className="people-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search people" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people, notes, address, or owner" /><output aria-live="polite"><span className="sr-only">People shown: </span>{filtered.length}</output></div>
+        <div className="people-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search people" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people" /></div>
         <details className="people-filter-disclosure"><summary><SlidersHorizontal size={15} aria-hidden="true" /> Filter &amp; sort{filterCount > 0 && <span>{filterCount}</span>}</summary><div className="people-filters">
           <label>Owner<select aria-label="Filter by owner" value={owner} onChange={(event) => setOwner(event.target.value as typeof owner)}><option value="all">Every owner</option><option value="mine">My people</option></select></label>
           {data.church.pathwayEnabled && <label>Relationship stage<select aria-label="Filter by stage" value={stage} onChange={(event) => setStage(event.target.value as typeof stage)}><option value="all">Every stage</option>{discipleshipStageValues.map((value) => <option key={value} value={value}>{discipleshipStageLabels[value]}</option>)}</select></label>}

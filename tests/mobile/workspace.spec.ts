@@ -90,6 +90,31 @@ test("keyboard focus remains visible in the native shell", async ({ page }) => {
   expect(await walks.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
 });
 
+test.describe("touch focus treatment", () => {
+  test.use({ hasTouch: true });
+
+  test("touch-opened sheets and controls avoid focus rings until keyboard navigation", async ({ page }) => {
+    await page.goto("/demo");
+    await page.getByRole("button", { name: "Record a community encounter" }).tap();
+    const close = page.getByRole("button", { name: "Close dialog" });
+    await expect(close).toBeFocused();
+    await expect(close).toHaveCSS("outline-style", "none");
+
+    const details = page.getByRole("button", { name: /optional details|Add a person or note/ });
+    await details.tap();
+    await expect(details).toHaveCSS("outline-style", "none");
+
+    await page.getByRole("textbox", { name: "Brief factual note (optional)" }).tap();
+    await page.keyboard.type("A brief note");
+    await close.focus();
+    await expect(close).toHaveCSS("outline-style", "none");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(close).toBeFocused();
+    expect(await close.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
+  });
+});
+
 test("map filters and visit outcomes expose their selected state", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/demo");
@@ -118,6 +143,10 @@ test("native compact controls retain 44 point hit targets", async ({ page }) => 
   await page.goto("/demo");
   await page.getByRole("button", { name: "View map", exact: true }).click();
   await page.getByRole("button", { name: "Address list", exact: true }).click();
+  const addAddressBounds = await page.getByRole("button", { name: "Add address manually" }).boundingBox();
+  expect(addAddressBounds).not.toBeNull();
+  expect(addAddressBounds!.width).toBeGreaterThanOrEqual(44);
+  expect(Math.abs(addAddressBounds!.width - addAddressBounds!.height)).toBeLessThanOrEqual(1);
   await page.getByRole("button", { name: /118 Crockett Street/ }).click();
   const sheet = page.getByRole("dialog", { name: /Location details for 118 Crockett Street/ });
   for (const control of [

@@ -19,6 +19,17 @@ export function fieldWalkAssignment(data: NeighborWalkData, outingId: string, vo
   return assignments.length === 1 ? assignments[0] : undefined;
 }
 
+type Assignment = NonNullable<NeighborWalkData["assignments"]>[number];
+
+/** Crews formed at check-in are saved as `assigned`, but visits and finishing
+ * require `accepted`. Opening the walk is the owner's acknowledgement. */
+export function assignmentToAccept(data: NeighborWalkData, assignment: Assignment | undefined, volunteerId: string) {
+  if (assignment?.status !== "assigned") return undefined;
+  const owns = assignment.assignedVolunteerId === volunteerId
+    || data.teams.some((team) => team.id === assignment.assignedTeamId && team.memberIds.includes(volunteerId));
+  return owns ? assignment : undefined;
+}
+
 export function fieldWalkArea(data: NeighborWalkData, outingId: string, volunteerId: string, canManage: boolean, requestedArea?: string | null, requestedTarget?: string | null) {
   const assignment = fieldWalkAssignment(data, outingId, volunteerId, canManage, requestedArea, requestedTarget);
   return data.territories.find((area) => area.id === assignment?.territoryId);

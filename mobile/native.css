@@ -8,9 +8,10 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; t
 input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), select, textarea { font-size: 16px !important; }
 input:not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable] { caret-color: var(--blue); }
 #root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]), select:not([multiple]), textarea):focus { outline: 0; box-shadow: inset 0 0 0 1px var(--hairline-strong); }
-#root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]), select:not([multiple]), textarea):focus-visible { outline: 3px solid var(--tint-soft-3); outline-offset: 2px; box-shadow: none; }
+html:not([data-focus-modality="keyboard"]) #root :focus-visible { outline: 0; }
 #root .map-search.active { box-shadow: var(--shadow-sm); }
 #root .map-search input:focus { background: transparent; box-shadow: none; }
+#root .people-search { height: 44px; }
 .app-shell { width: 100%; height: 100%; min-height: 0; }
 .auth-shell, .app-loading, .workspace-setup-shell { height: 100%; min-height: 0; overflow-y: auto; }
 .content-view, .map-view, .address-list, .property-drawer, .modal-card { -webkit-overflow-scrolling: touch; }
@@ -38,6 +39,11 @@ dialog.property-drawer .resident-card > .small-icon-button.danger { grid-column:
 #root :where(button, summary, [role="button"], a.button, a.followup-contact-action) { min-height: 44px; }
 #root :where(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]), select:not([multiple])) { min-height: 44px; }
 #root :where(.close-button, .small-icon-button, .more-danger, .territory-picker-edit, .territory-card-edit, .profile-button, .drawer-add-dwelling, .person-location-map-button, .map-search button, .maplibregl-ctrl button) { min-width: 44px; width: 44px; height: 44px; }
+#root .address-list .view-heading > .button { width: 44px; height: 44px; }
+/* Keep MapLibre's attribution control at its original 24pt size, overriding
+   the native summary minimum. Prevent its icon background from tiling. */
+#root .map-engine .maplibregl-ctrl-attrib-button { min-height: 24px; width: 24px; height: 24px; background-repeat: no-repeat; }
+#root .map-engine .maplibregl-ctrl-attrib-button:focus:not(:focus-visible) { box-shadow: none; }
 #root .close-button { background: radial-gradient(circle, var(--fill-3) 0 16px, transparent 16.5px); }
 #root .close-button:hover { background: radial-gradient(circle, var(--fill-2) 0 16px, transparent 16.5px); }
 

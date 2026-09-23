@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  CircleAlert,
   CircleEllipsis,
   CircleHelp,
   CircleUserRound,
@@ -16,6 +17,7 @@ import {
   Edit3,
   Footprints,
   House,
+  Info,
   LoaderCircle,
   Lock,
   Map as MapIcon,
@@ -50,7 +52,7 @@ import { MapCanvas, type MapSearchTarget } from "../components/MapCanvas";
 import { PropertyDrawer } from "../components/PropertyDrawer";
 import { AddressList } from "../components/AddressList";
 import { PeopleWorkspace } from "../components/PeopleWorkspace";
-import { fieldWalkAssignment } from "../lib/home-walk";
+import { assignmentToAccept, fieldWalkAssignment } from "../lib/home-walk";
 import { drawingBoundaryReady, undoDrawingPoint, type MapDrawingMode } from "../lib/map-drawing";
 import { propertyInTarget, targetCoverage } from "../lib/target-coverage";
 import { parcelKey } from "../lib/walk-targets";
@@ -82,7 +84,7 @@ import { mergeParcelFeatureCollections, type MapViewport, type ParcelDetails } f
 import { coverageForTerritory, type TerritoryCoverageById } from "../lib/territory-coverage";
 import { useTerritoryParcels } from "../lib/use-territory-parcels";
 import { useVisibleParcels } from "../lib/use-visible-parcels";
-import { compactToastMessage } from "../lib/toasts";
+import { compactToastMessage, type Toast, type ToastTone } from "../lib/toasts";
 import { calendarDate } from "../lib/calendar";
 import { deviceReminderFingerprint, reconcileDeviceReminders } from "../mobile/notifications";
 import { registerRemotePush, REMOTE_PUSH_REFRESH_EVENT, remotePushConfigured } from "../mobile/push-notifications";
@@ -169,8 +171,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   const [territoryEditorOpen, setTerritoryEditorOpen] = useState(false);
   const [editingTerritoryId, setEditingTerritoryId] = useState<string | null>(null);
   const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
-  const [toast, setToast] = useState("");
-  const showToast = (message: string) => setToast(compactToastMessage(message));
+  const [toast, setToast] = useState<Toast | null>(null);
+  const showToast = (message: string, tone: ToastTone = "success") => setToast({ message: compactToastMessage(message), tone });
   const reminderDataRef = useRef(data);
   const remindersEnabled = data?.preferences.notificationsEnabled === true;
   const signedInUserId = supabaseUser?.id;
@@ -199,7 +201,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(""), 2600);
+    const timer = window.setTimeout(() => setToast(null), 2600);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
@@ -368,7 +370,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     setSelectedPropertyId(null);
     setQuery(result.label);
     focusSearchTarget(result.coordinates, result.zoom);
-    showToast(result.type === "address" ? "Address found" : "Map moved");
+    showToast(result.type === "address" ? "Address found" : "Map moved", result.type === "address" ? "success" : "info");
   };
 
   const clearAddressSearch = () => {
@@ -488,6 +490,15 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     const assignment = fieldWalkAssignment(data, id, activeVolunteer.id, canManage, territoryId, targetId);
     const area = data.territories.find((item) => item.id === assignment?.territoryId);
     if (!area) throw new Error(canManage ? "Choose an assigned target before opening the walk." : "Choose a target and accept your assignment before opening the walk.");
+    const acknowledgement = assignmentToAccept(data, assignment, activeVolunteer.id);
+    if (acknowledgement) await actions.saveAssignment({
+      eventId: acknowledgement.eventId,
+      territoryId: acknowledgement.territoryId,
+      targetId: acknowledgement.targetId,
+      assignedTeamId: acknowledgement.assignedTeamId,
+      assignedVolunteerId: acknowledgement.assignedVolunteerId,
+      status: "accepted",
+    }, acknowledgement.id);
     await actions.setPreference("activeEventId", id);
     await actions.selectTerritory(area.id);
     clearAddressSearch();
@@ -506,9 +517,11 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
   const finishFieldwork = () => {
     if (!fieldOuting || !fieldAssignment) return;
     const label = fieldTarget?.name ?? activeTerritory.name;
+    // Finishing a route never ends the walk for other teams; leaders complete
+    // the whole walk from its page.
     const confirmation = canManage
-      ? `Finish ${label} and complete ${fieldOuting.name}? This closes the current assignment and marks the whole walk complete. Visit history remains available.`
-      : `Finish ${label} for tonight? This closes your assignment, but its visit history remains available.`;
+      ? `Finish ${label}? Other routes stay open. End the whole walk from its page.`
+      : `Finish ${label}? You won’t be able to add visits to it afterward.`;
     if (!window.confirm(confirmation)) return;
     void fieldworkAction.run(async () => {
       if (fieldAssignment.targetId) await actions.finishTarget(fieldAssignment.targetId);
@@ -519,9 +532,8 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
         assignedVolunteerId: fieldAssignment.assignedVolunteerId,
         status: "completed",
       }, fieldAssignment.id);
-      if (canManage) await actions.saveOuting({ ...fieldOuting, status: "completed" }, fieldOuting.id);
     }, () => {
-      showToast(canManage ? "Walk completed" : "Walk finished");
+      showToast("Route finished");
       navigate("outreach", fieldOuting.id);
     });
   };
@@ -543,7 +555,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     setGuidedPropertyId(null);
     setPendingAdd(null);
     setAddMode(true);
-    showToast("Select dwelling");
+    showToast("Tap a spot on the map", "info");
   };
 
   const startDrawing = () => {
@@ -658,7 +670,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
               {fieldworkAction.error && <p role="alert" className="inline-error fieldwork-error">{fieldworkAction.error}</p>}
               {showAddressList ? <AddressList key={fieldTarget?.id ?? activeTerritory.id} targetName={fieldTarget?.name} targetParcels={fieldTarget ? mapParcels : undefined} printContext={fieldPrintContext} lockedTerritoryId={fieldOuting ? activeTerritory.id : undefined} data={fieldTarget ? { ...data, properties: territoryProperties } : data} onOpen={(id) => { if (fieldOuting) setSelectedPropertyId(id); else navigate("map", id); }} onOpenParcel={(parcel) => {
                 const coordinates = parcelSelectionPoint(parcel);
-                if (!coordinates || !parcel.properties.situsAddress) { showToast("Map required"); setOutreachDisplay("map"); return; }
+                if (!coordinates || !parcel.properties.situsAddress) { showToast("Use the map to add this home", "info"); setOutreachDisplay("map"); return; }
                 setSelectedPropertyId(null); setSelectedParcel(null); setGuidedPropertyId(null);
                 setPendingAdd({ coordinates, suggestedAddress: parcel.properties.situsAddress, parcel: parcel.properties });
               }} onAdd={actions.addProperty} onTerritoryChange={actions.selectTerritory} /> : <>
@@ -726,7 +738,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
               </div>
               <div className="map-stage">
                 <MapCanvas territory={canvasTerritory} target={fieldTarget} properties={territoryProperties} selectedPropertyId={selectedPropertyId} visibleOutcomes={visibleOutcomes} searchTarget={searchTarget} addMode={addMode} drawMode={drawMode} drawShape={drawShape} drawModeLabel={editingTerritoryId ? "Replacement boundary" : "New zone"} draftBoundary={draftBoundary} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} parcels={mapParcels} onViewportChange={setMapViewport} onSelectProperty={(id) => { if (!fieldOuting) navigate("map", id); setSelectedPropertyId(id); setGuidedPropertyId(null); setSelectedParcel(null); setAddMode(false); }} onAddIntent={async (intent) => {
-                  if (fieldTarget && (!intent.parcel || !fieldTarget.parcels.some((parcel) => parcelKey(parcel) === parcelKey(intent.parcel!)))) { showToast("Outside target"); return; }
+                  if (fieldTarget && (!intent.parcel || !fieldTarget.parcels.some((parcel) => parcelKey(parcel) === parcelKey(intent.parcel!)))) { showToast("That home isn’t on this route", "error"); return; }
                   if (intent.parcel) {
                     const linkedDwellings = dwellingsForParcel(territoryProperties, intent.parcel);
                     const legacyPropertyIds = intent.legacyPropertyIds ?? [];
@@ -750,10 +762,10 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                   if (intent.parcel?.situsAddress) {
                     setSelectedParcel(null);
                     setPendingAdd(intent);
-                    showToast("Parcel selected");
+                    showToast("Parcel selected", "info");
                     return;
                   }
-                  showToast("Checking location");
+                  showToast("Checking location", "info");
                   try {
                     const address = await reverseGeocode(intent.coordinates);
                     setPendingAdd(address ? { ...intent, suggestedAddress: address } : intent);
@@ -805,7 +817,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
             }}
           />}
           {view === "guide" && <GuideView key={route.id ?? "guides"} routeGuideId={route.id} onSelectGuide={(id) => navigate("guide", id)} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} effectiveGuideId={favoriteConversationGuide?.id} activeTeamId={activeGuideTeam?.id} activeTeamName={activeGuideTeam?.name} teams={data.teams} teamGuideDefaults={guideLibrary.teamGuideDefaults} canManage={canManage} allowBuiltInManagement={data.sync.mode === "device_only"} libraryError={guideLibraryError} changesDisabled={Boolean(supabaseUser && (!online || guideChanging || guidePending))} pendingRequest={Boolean(guidePending)} recovery={supabaseUser ? <GuideChangeRecovery pending={guidePending} online={online} busy={guideChanging} onRefresh={actions.refreshGuideLibrary} onRetry={actions.retryGuideChange} onReview={actions.reviewGuidePending} /> : undefined} onSave={actions.saveConversationGuide} onDelete={actions.deleteConversationGuide} onSetFavorite={actions.setFavoriteConversationGuide} onSetTeamDefault={actions.setTeamConversationGuide} />}
-          {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} onSelectTerritory={(id) => { void actions.selectTerritory(id).then(() => navigate("map")).catch(() => showToast("Selection failed")); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} onOpenOutreach={() => navigate("outreach")} onOpenToday={() => navigate("today")} onOpenSettings={() => navigate("settings")} onOpenData={() => navigate("data")} onAuthenticate={actions.reauthenticateAdmin} onAccessChanged={actions.syncNow} />}
+          {view === "leader" && canManage && <LeaderView data={data} membership={workspaceMembership} onSelectTerritory={(id) => { void actions.selectTerritory(id).then(() => navigate("map")).catch(() => showToast("Couldn’t open that area", "error")); }} onEditTerritory={openTerritoryEditor} onStartDrawing={startDrawing} onAddTeam={actions.addTeam} onUpdateTeam={actions.updateTeam} onDeleteTeam={actions.deleteTeam} onOpenOutreach={() => navigate("outreach")} onOpenToday={() => navigate("today")} onOpenSettings={() => navigate("settings")} onOpenData={() => navigate("data")} onAuthenticate={actions.reauthenticateAdmin} onAccessChanged={actions.syncNow} />}
           {view === "settings" && <SettingsView data={data} online={online} saving={saving} syncing={syncing} storageError={storageError} canManage={canManage} guides={guideLibrary.guides} favoriteGuideId={guideLibrary.favoriteGuideId} accountEmail={supabaseUser?.email} onSignOut={onSignOut ? async () => {
             if (saving || guideChanging) throw new Error("Wait for device saving and guide confirmation to finish before signing out.");
             const pendingAdministration = await actions.getAdministrationPending();
@@ -845,7 +857,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
         }
         setDraftBoundary([]); setDrawMode(false); setEditingTerritoryId(null); setTerritoryEditorOpen(false);
       }} />}
-      {toast && <div className="toast" role="status"><Check size={15} />{toast}</div>}
+      {toast && <div className={`toast ${toast.tone}`} role={toast.tone === "error" ? "alert" : "status"}>{toast.tone === "success" ? <Check size={16} aria-hidden="true" /> : toast.tone === "error" ? <CircleAlert size={16} aria-hidden="true" /> : <Info size={16} aria-hidden="true" />}{toast.message}</div>}
     </main>
   );
 }

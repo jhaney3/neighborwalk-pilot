@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSeedData } from "../lib/seed";
-import { fieldWalkArea, fieldWalkAssignment, homeWalk } from "../lib/home-walk";
+import { assignmentToAccept, fieldWalkArea, fieldWalkAssignment, homeWalk } from "../lib/home-walk";
 import type { NeighborWalkData } from "../lib/domain";
 import type { WalkTarget } from "../lib/walk-targets";
 
@@ -171,5 +171,20 @@ describe("personal Home and field context", () => {
     expect(fieldWalkAssignment(data, "mine", actor, false, territoryId, accepted.id)?.id).toBe("assignment");
     expect(fieldWalkArea(data, "mine", actor, false, territoryId, accepted.id)?.id).toBe(territoryId);
     expect(homeWalk(data, actor, false).resumable?.targetId).toBe(accepted.id);
+  });
+
+  it("acknowledges a check-in crew assignment when its member opens the walk", () => {
+    const { data, actor } = fixture();
+    const target = walkTarget(data, "crew-target");
+    data.events[1].status = "active";
+    data.outingParticipants[0].status = "checked_in";
+    data.walkTargets = [target];
+    data.teams = [{ ...data.teams[0], id: "crew", memberIds: [actor] }];
+    data.assignments = [{ id: "assignment", churchId: data.church.id, eventId: "mine", territoryId: target.territoryId, targetId: target.id, assignedTeamId: "crew", status: "assigned" }];
+
+    const assignment = fieldWalkAssignment(data, "mine", actor, false, target.territoryId, target.id);
+    expect(assignmentToAccept(data, assignment, actor)?.id).toBe("assignment");
+    expect(assignmentToAccept(data, assignment, data.volunteers[1].id)).toBeUndefined();
+    expect(assignmentToAccept(data, { ...assignment!, status: "accepted" }, actor)).toBeUndefined();
   });
 });

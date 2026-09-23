@@ -85,4 +85,6 @@ dialog.modal-card::backdrop { background: var(--scrim); -webkit-backdrop-filter:
 /* Toast — glass capsule */
 .toast { position: fixed; z-index: 120; top: calc(var(--top-inset) + 12px); left: 50%; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--radius-pill); color: var(--label); background: var(--glass-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--shadow-float); font-size: var(--fs-subhead); font-weight: 600; transform: translateX(-50%); animation: toast-in .22s cubic-bezier(.2, .8, .2, 1); }
 .toast svg { color: var(--tint); }
+.toast.info svg { color: var(--label-2); }
+.toast.error svg { color: var(--red-text); }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -10px) scale(.96); } }

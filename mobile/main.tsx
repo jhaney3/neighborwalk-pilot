@@ -9,7 +9,7 @@ import { NeighborWalkApp } from "../app/NeighborWalkApp";
 import { installNavigation, navigate, usePathname } from "./navigation";
 import { receiveAuthLink } from "./auth-links";
 import { publishNativeConnectivity } from "./connectivity";
-import { installSingleLineKeyboardDismissal } from "./keyboard";
+import { installMobileFocusModality, installSingleLineKeyboardDismissal } from "./keyboard";
 import { installMobileColorTheme } from "./theme";
 import { addDeviceReminderTapListener } from "./notifications";
 import { addRemotePushTapListener, REMOTE_PUSH_REFRESH_EVENT } from "./push-notifications";
@@ -32,6 +32,7 @@ import "./native.css";
 
 installMobileColorTheme();
 installNavigation();
+installMobileFocusModality();
 installSingleLineKeyboardDismissal();
 if (Capacitor.isNativePlatform()) {
   const printer = registerPlugin<{ print(): Promise<{ completed: boolean }> }>("NeighborWalkPrint");

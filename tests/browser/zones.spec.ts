@@ -849,11 +849,14 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
 
   const finish = page.getByRole("button", { name: "Finish for tonight", exact: true });
   page.once("dialog", (confirmation) => {
-    expect(confirmation.message()).toContain("marks the whole walk complete");
+    expect(confirmation.message()).toContain("Other routes stay open");
     void confirmation.accept();
   });
   await finish.click();
   const statusControls = page.getByRole("region", { name: "Walk status controls", exact: true });
+  await expect(statusControls).toContainText("active");
+  page.once("dialog", (confirmation) => void confirmation.accept());
+  await statusControls.getByRole("button", { name: "Complete walk", exact: true }).click();
   await expect(statusControls).toContainText("completed");
   const assignment = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });
   await expect(assignment).toContainText("finished tonight");
