@@ -15,6 +15,7 @@ import { addDeviceReminderTapListener } from "./notifications";
 import { addRemotePushTapListener, REMOTE_PUSH_REFRESH_EVENT } from "./push-notifications";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "../app/styles/foundation.css";
+import "../app/styles/primitives.css";
 import "../app/styles/map.css";
 import "../app/styles/property.css";
 import "../app/styles/views.css";

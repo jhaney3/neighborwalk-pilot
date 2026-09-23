@@ -9,7 +9,7 @@ import { EncounterCorrectionReview } from "./EncounterCorrectionReview";
 import type { PendingAdministration } from "../lib/storage";
 import { downloadBlob } from "../lib/download";
 import { useAsyncAction } from "../lib/use-async-action";
-import { ViewHeading } from "./ui";
+import { ViewHeading, useConfirm } from "./ui";
 
 type Props = {
   data: NeighborWalkData; online: boolean;
@@ -25,6 +25,7 @@ type Props = {
   onOpenLocation: (id: string) => void;
 };
 export function DataHealthView(props: Props) {
+  const confirm = useConfirm();
   const { data, online, onRun, onExport, onAuthenticate, onPending, onReviewPending, onPreviewRetention, onRefresh } = props;
   const action = useAsyncAction();
   const [pending, setPending] = useState<PendingAdministration | null>(null);
@@ -74,7 +75,7 @@ export function DataHealthView(props: Props) {
     {message && <p role="status" className="inline-notice data-health-message">{message}</p>}{action.error && <p role="alert" className="inline-error data-health-message">{action.error}</p>}
     {pending && <section className="today-card data-pending-card"><h2>Preserved administration request</h2><p>{String(pending.request.action).replaceAll("_", " ")} · saved {new Date(pending.savedAt).toLocaleString()}</p><p>A previous response may have been interrupted. Retry the same immutable request to retrieve its receipt. If the server rejected it, refresh and review the shared records before starting a revised action.</p>
       <div className="care-next-actions"><button className="button primary" disabled={!online || action.busy} onClick={() => void run(() => onRun(null), () => setMessage("The preserved request was confirmed. Records were refreshed. Export requests can now be prepared again for download."))}>Retry preserved request</button>
-        <button className="button quiet" disabled={!online || action.busy} onClick={() => { if (window.confirm("Have you reviewed the shared records and this request’s outcome? Preserve this original in device history without resubmitting it. This does not undo any server changes.")) void run(onReviewPending, () => setMessage("Original request preserved in device history. No undo or repeated action was performed.")); }}>I reviewed the outcome; preserve without resubmitting</button></div>
+        <button className="button quiet" disabled={!online || action.busy} onClick={() => { void confirm({ title: "Mark this request reviewed?", message: "It won’t be sent again. Changes already made on the server stay.", confirmLabel: "Mark reviewed" }).then((confirmed) => { if (confirmed) void run(onReviewPending, () => setMessage("Request marked reviewed. Nothing was sent again.")); }); }}>I reviewed the outcome; preserve without resubmitting</button></div>
     </section>}
     <section className="data-tool-picker" aria-labelledby="data-tool-picker-title">
       <header><p className="eyebrow">Available tools</p><h2 id="data-tool-picker-title">What do you need to do?</h2><p>Open a task to see its controls and safety checks.</p></header>

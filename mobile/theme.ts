@@ -25,7 +25,7 @@ export function applyMobileColorTheme(theme: MobileColorTheme) {
   if (typeof document === "undefined") return;
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
-  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#000000" : "#f2f2f7");
+  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#121714" : "#f1f2ec");
   if (Capacitor.isNativePlatform()) void nativeAppearance.setTheme({ theme }).catch(() => {});
 }
 

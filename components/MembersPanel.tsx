@@ -1,7 +1,7 @@
 "use client";
 import { useAsyncAction } from "../lib/use-async-action";
 import { LeaderInvitations } from "./LeaderInvitations";
-import { Modal } from "./ui";
+import { Modal, useConfirm } from "./ui";
 
 import { Check, Copy, Link2, PencilLine, Plus, RefreshCcw, ShieldCheck, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -39,6 +39,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
   onAuthenticate: (password: string) => Promise<void>;
   onAccessChanged: () => Promise<boolean>;
 }) {
+  const confirm = useConfirm();
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [email, setEmail] = useState("");
@@ -257,7 +258,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
           setEditingTeam(null);
         }}
         onDelete={editingTeam === "new" ? undefined : async () => {
-          if (window.confirm(`Archive ${editingTeam.name}? Its outing assignments will be cancelled and group links removed. Named task owners and recorded history are kept.`)) {
+          if (await confirm({ title: `Archive ${editingTeam.name}?`, message: "Its walk assignments are cancelled. People keep their follow-ups and history.", confirmLabel: "Archive team", destructive: true })) {
             await onDeleteTeam(editingTeam.id);
             setEditingTeam(null);
           }

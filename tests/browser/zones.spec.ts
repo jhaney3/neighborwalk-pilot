@@ -560,11 +560,10 @@ test("a leader can ready a whole-zone walk and start it from the card", async ({
 
   const completeWalk = readyCard.getByRole("button", { name: "Complete walk", exact: true });
   await expect(completeWalk).toBeVisible();
-  page.once("dialog", async (confirmation) => {
-    expect(confirmation.message()).toBe("Complete this walk? Encounters and follow-up responsibilities are preserved.");
-    await confirmation.accept();
-  });
   await completeWalk.click();
+  const completion = page.getByRole("alertdialog", { name: "Complete this walk?" });
+  await expect(completion).toContainText("It closes for everyone.");
+  await completion.getByRole("button", { name: "Complete walk", exact: true }).click();
   await expect(readyCard).toHaveCount(0);
   await page.getByRole("checkbox", { name: "Show past walks", exact: true }).check();
   const completedCard = page.locator(".outing-card").filter({ hasText: walkName });
@@ -847,16 +846,14 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   expect(afterVisit.targetVisits[0]).toMatchObject({ targetId: fixture.secondTargetId, targetParcel: fixture.apartmentParcel });
   await expect(page.getByText("50%", { exact: true }).first()).toBeVisible();
 
-  const finish = page.getByRole("button", { name: "Finish for tonight", exact: true });
-  page.once("dialog", (confirmation) => {
-    expect(confirmation.message()).toContain("Other routes stay open");
-    void confirmation.accept();
-  });
-  await finish.click();
+  await page.getByRole("button", { name: "Finish for tonight", exact: true }).click();
+  const finishConfirmation = page.getByRole("alertdialog", { name: `Finish ${fixture.secondTargetName}?` });
+  await expect(finishConfirmation).toContainText("Other routes stay open");
+  await finishConfirmation.getByRole("button", { name: "Finish route", exact: true }).click();
   const statusControls = page.getByRole("region", { name: "Walk status controls", exact: true });
   await expect(statusControls).toContainText("active");
-  page.once("dialog", (confirmation) => void confirmation.accept());
   await statusControls.getByRole("button", { name: "Complete walk", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Complete walk", exact: true }).click();
   await expect(statusControls).toContainText("completed");
   const assignment = page.locator(".assignment-list li").filter({ hasText: fixture.secondTargetName });
   await expect(assignment).toContainText("finished tonight");
@@ -929,8 +926,8 @@ test("replacing a frozen target preserves history and requires fresh acceptance"
   await expect(dialog).toContainText("Erica");
   const confirmReplacement = dialog.getByRole("button", { name: "Confirm replacement", exact: true });
   await expect(confirmReplacement).toBeEnabled();
-  page.once("dialog", (confirmation) => confirmation.accept());
   await confirmReplacement.click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Replace", exact: true }).click();
   await expect(dialog).toBeHidden();
 
   await expect(previousAssignment).toContainText("No crew yet");

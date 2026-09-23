@@ -52,7 +52,7 @@ import {
   type ResidentInput,
 } from "../lib/domain";
 import { MapCanvas } from "./MapCanvas";
-import { Modal, ViewHeading } from "./ui";
+import { Modal, ViewHeading, useConfirm } from "./ui";
 
 export type PeopleViewProps = {
   data: NeighborWalkData;
@@ -291,6 +291,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
   restrictionActions: RestrictionActions;
   followUps?: ReactNode;
 }) {
+  const confirm = useConfirm();
   const [noteBody, setNoteBody] = useState("");
   const [noteKind, setNoteKind] = useState<PersonNoteKind>("general");
   const [panel, setPanel] = useState<ProfilePanel>("followups");
@@ -379,7 +380,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
             {onHandoffResponse && (isHandoffRecipient
               ? <div className="handoff-panel-actions"><button disabled={action.busy || handoffQueued} className="button primary small" onClick={() => void action.run(() => onHandoffResponse("accept"))}>Accept care &amp; open tasks</button><button disabled={action.busy || handoffQueued} className="button quiet small" onClick={() => void action.run(() => onHandoffResponse("decline"))}>Decline</button></div>
               : canEdit && <div className="handoff-panel-actions"><button className="button quiet small" disabled={action.busy || handoffQueued} onClick={() => void action.run(() => onHandoffResponse("cancel"))}>Cancel request</button></div>)}</div>
-            : canEdit && <details className="care-owner-handoff"><summary>Change owner</summary><label><span>Hand off care to</span><select value="" disabled={action.busy || handoffQueued} onChange={(event) => { const id = event.target.value; if (id && window.confirm("Invite this person to take responsibility? They will see the profile to review the request. You remain responsible until they accept. Acceptance transfers your open tasks and removes historical creator-only access.")) void action.run(() => onChangeOwner(id)); }}><option value="">Choose a recipient</option>{data.volunteers.filter((v) => v.active && v.id !== resident.assignedVolunteerId).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label></details>}
+            : canEdit && <details className="care-owner-handoff"><summary>Change owner</summary><label><span>Hand off care to</span><select value="" disabled={action.busy || handoffQueued} onChange={(event) => { const id = event.target.value; if (id) void confirm({ title: "Ask them to take over?", message: "You stay responsible until they accept. Then your open follow-ups move to them.", confirmLabel: "Send request" }).then((confirmed) => { if (confirmed) void action.run(() => onChangeOwner(id)); }); }}><option value="">Choose a recipient</option>{data.volunteers.filter((v) => v.active && v.id !== resident.assignedVolunteerId).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label></details>}
           {handoffQueued && <p role="status">Handoff change saved on this device; waiting for the church to confirm.</p>}
         </section>
       </div>
@@ -407,7 +408,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
           {timeline.map((note) => {
             const author = data.volunteers.find((volunteer) => volunteer.id === note.actorId);
             const canDelete = Boolean(note.noteId) && (canManage || note.actorId === activeVolunteerId);
-            return <article className="person-timeline-entry general" key={note.id}><span className="person-timeline-mark"><MessageCircle size={14} /></span><div><div><span>{note.title}</span><time>{new Intl.DateTimeFormat("en-US", { timeZone: data.church.timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(note.at))}</time></div>{note.body && <p>{note.body}</p>}<footer><span>{author?.name ?? "Church record"}</span>{canDelete && <button onClick={() => { if (window.confirm("Archive this note from the active profile? Its audit entry remains.")) void action.run(() => onDeleteNote(note.noteId!)); }} aria-label="Archive note"><Trash2 size={12} /></button>}</footer></div></article>;
+            return <article className="person-timeline-entry general" key={note.id}><span className="person-timeline-mark"><MessageCircle size={14} /></span><div><div><span>{note.title}</span><time>{new Intl.DateTimeFormat("en-US", { timeZone: data.church.timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(note.at))}</time></div>{note.body && <p>{note.body}</p>}<footer><span>{author?.name ?? "Church record"}</span>{canDelete && <button onClick={() => { void confirm({ title: "Archive this note?", message: "It leaves the profile but stays in the church record.", confirmLabel: "Archive", destructive: true }).then((confirmed) => { if (confirmed) void action.run(() => onDeleteNote(note.noteId!)); }); }} aria-label="Archive note"><Trash2 size={12} /></button>}</footer></div></article>;
           })}
           {!timeline.length && <div className="person-timeline-empty"><NotebookPen size={22} /><strong>No activity yet</strong><span>Add the first note above. Notes follow your church’s retention and archival policy.</span></div>}
         </div>
@@ -450,6 +451,7 @@ function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onD
   resident?: Resident; data: NeighborWalkData; activeVolunteerId: string; onCancel: () => void;
   onSave: (propertyId: string | undefined, input: ResidentInput) => Promise<unknown>; onDelete?: () => Promise<unknown>;
 }) {
+  const confirm = useConfirm();
   const propertySelectId = useId();
   const [propertyId, setPropertyId] = useState(resident?.propertyId ?? "");
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
@@ -497,7 +499,7 @@ function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onD
     </details>
     {!contactValid && <p className="inline-error">Enter the phone number or email for the selected contact method.</p>}
     {action.error && <p className="inline-error" role="alert">{action.error}</p>}
-    <div className="modal-actions split"><div>{onDelete && <button type="button" className="button danger" disabled={action.busy} onClick={() => { if (window.confirm("Archive this person and their care records? Open tasks will be cancelled. The server preserves history and restrictions; this is not permanent erasure.")) void action.run(onDelete); }}>Archive person &amp; care records</button>}</div><div><button type="button" className="button quiet" disabled={action.busy} onClick={onCancel}>Cancel</button><button className="button primary" disabled={action.busy || !contactValid || (moving && (!reviewedMove || moveReason.trim().length < 3))}>{action.busy ? "Saving to device…" : "Save person"}</button></div></div>
+    <div className="modal-actions split"><div>{onDelete && <button type="button" className="button danger" disabled={action.busy} onClick={() => { void confirm({ title: "Archive this person?", message: "Their open follow-ups are cancelled. Their history stays in the church record.", confirmLabel: "Archive", destructive: true }).then((confirmed) => { if (confirmed) void action.run(onDelete); }); }}>Archive person &amp; care records</button>}</div><div><button type="button" className="button quiet" disabled={action.busy} onClick={onCancel}>Cancel</button><button className="button primary" disabled={action.busy || !contactValid || (moving && (!reviewedMove || moveReason.trim().length < 3))}>{action.busy ? "Saving to device…" : "Save person"}</button></div></div>
   </form>{locationPickerOpen && <PersonLocationPicker data={data} propertyId={propertyId} onClose={() => setLocationPickerOpen(false)} onSelect={(id) => { setPropertyId(id); setReviewedMove(false); setLocationPickerOpen(false); }} />}</>;
 }
 

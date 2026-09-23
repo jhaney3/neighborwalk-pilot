@@ -20,7 +20,7 @@ test("all primary tabs work and marketing content is excluded", async ({ page })
   await nav.getByRole("button", { name: /^People/ }).click();
   await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible();
   await nav.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("button", { name: "Settings & device" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Install app", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Return to website" })).toHaveCount(0);
@@ -43,18 +43,18 @@ test("appearance can be set to dark in iOS settings and persists on this device"
   await page.goto("/demo");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await nav.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("button", { name: "Settings & device", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
 
   const appearance = page.getByRole("combobox", { name: "Color appearance" });
   await expect(appearance).toHaveValue("system");
   await appearance.selectOption("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(0, 0, 0)");
-  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#000000");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(18, 23, 20)");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#121714");
 
   await page.reload();
   await nav.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("button", { name: "Settings & device", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Color appearance" })).toHaveValue("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
@@ -63,7 +63,7 @@ test("Done releases focus from single-line inputs", async ({ page }) => {
   await page.goto("/demo");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await nav.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("button", { name: "Settings & device" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
 
   const churchName = page.getByRole("textbox", { name: "Church name", exact: true });
   await churchName.focus();

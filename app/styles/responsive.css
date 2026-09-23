@@ -83,13 +83,12 @@
   .mobile-nav button.active { color: var(--tint); background: var(--fill-3); }
   .mobile-nav button > span { position: relative; display: grid; place-items: center; }
   .mobile-nav button svg { width: 24px; height: 24px; stroke-width: 1.8; }
-  .mobile-nav button.active svg { stroke-width: 2.4; }
+  .mobile-nav button.active svg { stroke-width: 2.1; }
   .mobile-nav small { font-size: 10px; font-weight: 600; letter-spacing: .01em; line-height: 1; }
   .mobile-nav b { position: absolute; right: -10px; top: -6px; min-width: 17px; height: 17px; display: grid; place-items: center; padding: 0 4px; border-radius: var(--radius-pill); color: #fff; background: var(--red); font-size: 10px; font-weight: 700; line-height: 1; }
 
   .toast { top: calc(var(--shell-top) + var(--header-height) + 10px); }
   .view-heading { margin-bottom: 18px; }
-  .view-heading h1 { font-size: var(--fs-large-title); line-height: var(--lh-large-title); }
   .view-heading > div:first-child > p:last-child { font-size: var(--fs-subhead); }
   .view-heading > .button { min-height: 36px; padding-inline: 14px; font-size: var(--fs-subhead); }
   .heading-count { display: none; }

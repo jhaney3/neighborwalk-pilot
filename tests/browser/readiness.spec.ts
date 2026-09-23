@@ -405,8 +405,8 @@ test("guide writes survive a lost response and reject stale editors while archiv
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.getByRole("button", { name: "Refresh guides", exact: true }).click();
     await expect(page.getByText("“Fictional second device accepted edit”", { exact: true })).toBeVisible();
-    page.once("dialog", (confirmation) => confirmation.accept());
     await page.getByRole("button", { name: "Preserve request as reviewed", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Stop retrying", exact: true }).click();
     await expect(page.getByRole("heading", { name: "A guide request needs confirmation", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Edit guide", exact: true }).click();
     dialog = page.getByRole("dialog");
@@ -594,8 +594,8 @@ test("actual session revocation and account switching preserve authored work wit
     await expect(page.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
     expect(await queued(page)).toBe(1);
     await setDisconnected(context, false);
-    page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Sign out or use a different account", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Pick up where care left off." })).toBeVisible();
     await signIn(page, "leader");
     const otherAccount = await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-auth:sandbox:http://127.0.0.1:54321")!).user.id as string);

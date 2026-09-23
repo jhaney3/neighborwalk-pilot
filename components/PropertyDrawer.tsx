@@ -1,4 +1,5 @@
 "use client";
+import { useConfirm } from "./ui";
 import { reviewedEncounter } from "../lib/encounter-history";
 import { calendarDaysFromNow } from "../lib/calendar";
 
@@ -110,6 +111,7 @@ export function PropertyDrawer({
   onUpsertResident: (propertyId: string, input: ResidentInput, residentId?: string) => Promise<string>;
   onDeleteResident: (residentId: string) => Promise<unknown>;
 }) {
+  const confirm = useConfirm();
   const drawer = useRef<HTMLDialogElement>(null);
   const action = useAsyncAction();
   useEffect(() => {
@@ -193,10 +195,9 @@ export function PropertyDrawer({
         residentId: ["conversation", "follow_up"].includes(outcome) ? linkedResidentId || undefined : undefined });
     }, onClose);
   };
-  const markDoNotVisit = () => {
-    if (window.confirm("Record a do-not-revisit request? Open visit tasks will be cancelled, and only a leader can lift the restriction with a reason.")) {
-      void action.run(() => onRecordVisit({ propertyId: property.id, outcome: "do_not_visit" }), onClose);
-    }
+  const markDoNotVisit = async () => {
+    const confirmed = await confirm({ title: "Don’t knock here again?", message: "Open return visits are cancelled. Only a leader can lift this.", confirmLabel: "Don’t knock", destructive: true });
+    if (confirmed) void action.run(() => onRecordVisit({ propertyId: property.id, outcome: "do_not_visit" }), onClose);
   };
 
   return (
@@ -364,9 +365,9 @@ export function PropertyDrawer({
 
           {canManage && property.visitCount === 0 && property.source !== "seed" && residents.length === 0 && (
             <button className="delete-location" onClick={() => {
-              if (window.confirm("Remove this unvisited location from the territory?")) {
-                void action.run(() => onDeleteProperty(property.id), onClose);
-              }
+              void confirm({ title: "Remove this home?", message: "It hasn’t been visited, so nothing else is lost.", confirmLabel: "Remove", destructive: true }).then((confirmed) => {
+                if (confirmed) void action.run(() => onDeleteProperty(property.id), onClose);
+              });
             }}><Trash2 size={14} /> Remove unvisited location</button>
           )}
             </>
@@ -416,7 +417,7 @@ export function PropertyDrawer({
                     </div>
                     {(canManage || resident.assignedVolunteerId === activeVolunteerId) && <button className="button quiet small" onClick={() => setEditingResident(resident)}>Edit</button>}
                     {(canManage || resident.assignedVolunteerId === activeVolunteerId) && <button className="small-icon-button danger" aria-label={`Delete ${resident.name || "person record"}`} onClick={() => {
-                      if (window.confirm("Archive this person and their care records? History and restrictions are preserved on the server.")) void action.run(() => onDeleteResident(resident.id));
+                      void confirm({ title: "Archive this person?", message: "Their open follow-ups are cancelled. Their history stays in the church record.", confirmLabel: "Archive", destructive: true }).then((confirmed) => { if (confirmed) void action.run(() => onDeleteResident(resident.id)); });
                     }}><Trash2 size={14} /></button>}
                   </article>
                 ))}

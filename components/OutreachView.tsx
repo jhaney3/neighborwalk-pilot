@@ -13,14 +13,14 @@ import { targetCrewMemberIds } from "../lib/walk-crews";
 import { EncounterComposer } from "./EncounterComposer";
 import { OutingInvitationRoster } from "./OutingInvitationRoster";
 import type { NewParentZoneInput } from "./ParentZoneCreator";
-import { EmptyState, Modal, ViewHeading } from "./ui";
+import { EmptyState, Modal, ViewHeading, useConfirm, type ConfirmOptions } from "./ui";
 import { WalkSetupWizard } from "./WalkSetupWizard";
 import { WalkCrewBoard, type WalkCrews } from "./WalkCrewBoard";
 import { WalkTargetPlanner, type WalkTargetDraft } from "./WalkTargetPlanner";
 
 type Assignment = NonNullable<NeighborWalkData["assignments"]>[number];
 type LoadedPlanningInventory = { boundarySignature: string; result: PlanningParcelResult };
-const completeWalkConfirmation = "Complete this walk? Encounters and follow-up responsibilities are preserved.";
+const completeWalkConfirmation: ConfirmOptions = { title: "Complete this walk?", message: "It closes for everyone. Conversations and follow-ups stay.", confirmLabel: "Complete walk" };
 
 export function isCommunityOuting(eventId: string, assignments: readonly { eventId: string; status?: string }[], targets: readonly { eventId: string }[]) {
   return !assignments.some((assignment) => assignment.eventId === eventId)
@@ -80,6 +80,7 @@ type Props = {
 
 export function OutreachView(props: Props) {
   const { data, canManage, selectedId, onSelect, onSave, onRepeat } = props;
+  const confirm = useConfirm();
   const [wizard, setWizard] = useState<"new" | OutreachEvent | null>(props.initialCreate ? "new" : null);
   const [editor, setEditor] = useState<OutreachEvent | null>(null);
   const [repeat, setRepeat] = useState<OutreachEvent | null>(null);
@@ -88,8 +89,8 @@ export function OutreachView(props: Props) {
   const listAction = useAsyncAction();
   const selected = data.events.find((e) => e.id === selectedId);
   const outings = data.events.filter((e) => showArchived || !["archived", "cancelled", "completed"].includes(e.status)).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const transitionFromCard = (outing: OutreachEvent, status: OutreachEvent["status"]) => {
-    if (status === "completed" && !window.confirm(completeWalkConfirmation)) return;
+  const transitionFromCard = async (outing: OutreachEvent, status: OutreachEvent["status"]) => {
+    if (status === "completed" && !await confirm(completeWalkConfirmation)) return;
     setPendingCardId(outing.id);
     void listAction.run(async () => {
       try { await onSave({ ...outing, status }, outing.id); }
@@ -162,6 +163,7 @@ function ParentZoneCoveragePanel({ data, territoryIds, eventId }: { data: Neighb
 function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { outing: OutreachEvent; onEdit: () => void; onRepeatRequest: () => void }) {
   const { data, canManage, activeVolunteerId, onAssign, onSave, onStart, onOpenGuide, onRecordEncounter, onCreatePerson } = props;
   const action = useAsyncAction();
+  const confirm = useConfirm();
   const [fieldAssignmentId, setFieldAssignmentId] = useState("");
   const [replacementAssignmentId, setReplacementAssignmentId] = useState("");
   const [crewEditorOpen, setCrewEditorOpen] = useState(false);
@@ -235,7 +237,7 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
         const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length;
         buttons[next]?.focus();
       }
-    }}>{outing.status === "completed" && <button role="menuitem" className="button quiet small" disabled={action.busy} onClick={() => { closeStatusMenu(); void transition("archived"); }}>Archive walk</button>}{!closed && <button role="menuitem" className="button danger small" disabled={action.busy} onClick={() => { closeStatusMenu(); if (window.confirm("Cancel this walk? Encounters and follow-up responsibilities are preserved.")) void transition("cancelled"); }}>Cancel walk</button>}</div></>}</div>}{["draft", "scheduled"].includes(outing.status) && <button className="button primary" disabled={action.busy} onClick={() => void transition("ready")}>Mark ready</button>}{outing.status === "ready" && <button className="button primary" disabled={action.busy} onClick={() => void transition("active")}>Start walk</button>}{outing.status === "active" && <button className="button primary" disabled={action.busy} onClick={() => { if (window.confirm(completeWalkConfirmation)) void transition("completed"); }}>Complete walk</button>}</div></section>}
+    }}>{outing.status === "completed" && <button role="menuitem" className="button quiet small" disabled={action.busy} onClick={() => { closeStatusMenu(); void transition("archived"); }}>Archive walk</button>}{!closed && <button role="menuitem" className="button danger small" disabled={action.busy} onClick={() => { closeStatusMenu(); void confirm({ title: "Cancel this walk?", message: "Conversations and follow-ups stay.", confirmLabel: "Cancel walk", cancelLabel: "Keep walk", destructive: true }).then((confirmed) => { if (confirmed) void transition("cancelled"); }); }}>Cancel walk</button>}</div></>}</div>}{["draft", "scheduled"].includes(outing.status) && <button className="button primary" disabled={action.busy} onClick={() => void transition("ready")}>Mark ready</button>}{outing.status === "ready" && <button className="button primary" disabled={action.busy} onClick={() => void transition("active")}>Start walk</button>}{outing.status === "active" && <button className="button primary" disabled={action.busy} onClick={() => { void confirm(completeWalkConfirmation).then((confirmed) => { if (confirmed) void transition("completed"); }); }}>Complete walk</button>}</div></section>}
     <header className="outing-hero">
       <div className="outing-hero-main"><div><div className="outing-hero-kicker"><span className="status-badge">{outing.status}</span></div><h2>{outing.name}</h2>{outing.purpose && <p>{outing.purpose}</p>}</div>
         {!closed && !communityOuting && <div className="outing-fieldwork-entry">
@@ -362,9 +364,10 @@ function TargetReplacementModal({ data, outing, assignment, target, territory, o
   const currentCrewIds = assignment.assignedVolunteerId ? [assignment.assignedVolunteerId] : data.teams.find((team) => team.id === assignment.assignedTeamId)?.memberIds ?? [];
   const currentCrew = currentCrewIds.map((id) => data.volunteers.find((volunteer) => volunteer.id === id)?.name ?? "Unavailable member").join(", ");
   const visitedParcelKeys = useMemo(() => parentZoneTouchedParcelKeys(data, territory.id), [data, territory.id]);
-  const save = () => {
+  const confirm = useConfirm();
+  const save = async () => {
     if (!replacement || !canReplace) return;
-    if (!window.confirm(`Replace ${target.name}? Its assignment will be cancelled, but the old target and encounter history will remain available.`)) return;
+    if (!await confirm({ title: `Replace ${target.name}?`, message: "Its assignment is cancelled. Past visits stay on record.", confirmLabel: "Replace" })) return;
     const input = { ...replacement };
     delete (input as Partial<WalkTargetDraft>).clientId;
     void action.run(() => onReplace(assignment.id, input, {

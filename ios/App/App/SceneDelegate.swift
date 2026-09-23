@@ -27,11 +27,17 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneWillResignActive(_ scene: UIScene) {
         guard let window = window, privacyCover == nil else { return }
         let cover = UIView(frame: window.bounds)
-        cover.backgroundColor = .systemGroupedBackground
+        // Matches the app's paper background (--bg-grouped) in both appearances.
+        cover.backgroundColor = UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 18 / 255, green: 23 / 255, blue: 20 / 255, alpha: 1)
+                : UIColor(red: 241 / 255, green: 242 / 255, blue: 236 / 255, alpha: 1)
+        }
         cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         let title = UILabel()
         title.text = "NeighborWalk"
-        title.font = .systemFont(ofSize: 28, weight: .semibold)
+        let titleFont = UIFont.systemFont(ofSize: 28, weight: .semibold)
+        title.font = titleFont.fontDescriptor.withDesign(.serif).map { UIFont(descriptor: $0, size: 28) } ?? titleFont
         title.textColor = .label
         title.translatesAutoresizingMaskIntoConstraints = false
         cover.addSubview(title)

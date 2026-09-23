@@ -1,4 +1,5 @@
 "use client";
+import { useConfirm } from "./ui";
 
 import { RefreshCcw } from "lucide-react";
 import type { PendingGuideChange } from "../lib/storage";
@@ -8,6 +9,7 @@ export function GuideChangeRecovery({ pending, online, busy, onRefresh, onRetry,
   pending: PendingGuideChange | null; online: boolean; busy: boolean;
   onRefresh: () => Promise<void>; onRetry: () => Promise<unknown>; onReview: () => Promise<void>;
 }) {
+  const confirm = useConfirm();
   const action = useAsyncAction();
   const disabled = !online || busy || action.busy;
   return <section className={pending ? "today-card guide-change-recovery" : "guide-recovery-tools"} aria-label="Guide refresh and recovery">
@@ -22,7 +24,7 @@ export function GuideChangeRecovery({ pending, online, busy, onRefresh, onRetry,
       {pending && <>
         <button className="button primary" disabled={disabled} onClick={() => void action.run(async () => { await onRetry(); })}>Retry original guide request</button>
         <button className="button quiet" disabled={disabled} onClick={() => {
-          if (window.confirm("Preserve this exact request in this account’s recovery history and stop retrying it? This will not undo a guide change that already reached the church. Review the shared library before starting another edit.")) void action.run(onReview);
+          void confirm({ title: "Stop retrying this guide change?", message: "It won’t be sent again. If it already reached the church, it stays.", confirmLabel: "Stop retrying" }).then((confirmed) => { if (confirmed) void action.run(onReview); });
         }}>Preserve request as reviewed</button>
       </>}
     </div>

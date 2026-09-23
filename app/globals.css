@@ -1,6 +1,7 @@
 /* Cascade contract: stable shell first, feature modules next, responsive
    adaptations after them, and the shared native-control treatment last. */
 @import "./styles/foundation.css";
+@import "./styles/primitives.css";
 @import "./styles/map.css";
 @import "./styles/property.css";
 @import "./styles/views.css";

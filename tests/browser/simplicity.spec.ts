@@ -407,7 +407,7 @@ test("recording no answer never asks for a person", async ({ page }) => {
   await openDemo(page);
   const navigation = page.getByRole("navigation", { name: "Main sections" });
   await navigation.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("button", { name: "Locations & address lists", exact: true }).click();
+  await page.getByRole("button", { name: "Map & address lists", exact: true }).click();
   await page.getByRole("group", { name: "Outreach display" }).getByRole("button", { name: "Address list", exact: true }).click();
   await page.getByRole("button", { name: /^118 Crockett Street/ }).click();
 

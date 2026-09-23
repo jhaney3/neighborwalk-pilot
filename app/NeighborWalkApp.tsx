@@ -61,7 +61,7 @@ import { GuideView } from "../components/GuideView";
 import { GuideChangeRecovery } from "../components/GuideChangeRecovery";
 import { LeaderView } from "../components/LeaderView";
 import { SettingsView } from "../components/SettingsView";
-import { Modal } from "../components/ui";
+import { Badge, ConfirmProvider, ListGroup, ListRow, Modal, initials, useConfirm } from "../components/ui";
 import {
   centerForBoundary,
   outcomeMeta,
@@ -132,7 +132,14 @@ const mapFilterOptions: { value: "all" | Outcome; label: string }[] = [
   { value: "do_not_visit", label: "Skip" },
 ];
 
-export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: { supabaseUser?: SupabaseUser | null; onSignOut?: () => Promise<void>; onUpdatePassword?: (password: string) => Promise<void> } = {}) {
+type NeighborWalkAppProps = { supabaseUser?: SupabaseUser | null; onSignOut?: () => Promise<void>; onUpdatePassword?: (password: string) => Promise<void> };
+
+export function NeighborWalkApp(props: NeighborWalkAppProps = {}) {
+  return <ConfirmProvider><NeighborWalkWorkspace {...props} /></ConfirmProvider>;
+}
+
+function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: NeighborWalkAppProps) {
+  const confirm = useConfirm();
   const { data, loading, storageError, online, saving, syncing, offlineShell, workspaceStatus, workspaceMembership, guideLibrary, guideLibraryError, guidePending, guideChanging, activeTerritory: currentTerritory, activeVolunteer, actions } = useNeighborWalk(supabaseUser);
   const fieldworkAction = useAsyncAction();
   const pathname = usePathname();
@@ -514,15 +521,17 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     else setDemoRoute({ view: "map", fieldOutingId: id });
   };
 
-  const finishFieldwork = () => {
+  const finishFieldwork = async () => {
     if (!fieldOuting || !fieldAssignment) return;
     const label = fieldTarget?.name ?? activeTerritory.name;
     // Finishing a route never ends the walk for other teams; leaders complete
     // the whole walk from its page.
-    const confirmation = canManage
-      ? `Finish ${label}? Other routes stay open. End the whole walk from its page.`
-      : `Finish ${label}? You won’t be able to add visits to it afterward.`;
-    if (!window.confirm(confirmation)) return;
+    const confirmed = await confirm({
+      title: `Finish ${label}?`,
+      message: canManage ? "Other routes stay open. End the whole walk from its page." : "You won’t be able to add visits to it afterward.",
+      confirmLabel: "Finish route",
+    });
+    if (!confirmed) return;
     void fieldworkAction.run(async () => {
       if (fieldAssignment.targetId) await actions.finishTarget(fieldAssignment.targetId);
       else await actions.saveAssignment({
@@ -643,19 +652,21 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
           {view === "recovery" && <RecoveryView data={data} online={online} onPreview={actions.previewRecovery} onResolve={actions.resolveRecovery} onExport={actions.downloadDeviceRecovery} onAuthoredExport={actions.downloadAuthoredDeviceRecovery} onArchives={actions.listDeviceArchives} onDownloadArchive={actions.downloadDeviceArchive} onSync={actions.syncNow} />}
           {view === "today" && <TodayView data={data} activeVolunteerId={activeVolunteer.id} canManage={canManage} onFollowUps={(id, scope = "mine") => { setFollowUpPersonId(null); setDemoTaskScope(scope); if (pathname.startsWith("/app")) window.history.pushState(null, "", followUpsHref(id, undefined, scope)); else setDemoRoute({ view: "followups", id }); }} onPerson={(id) => navigate("people", id)} onOuting={(id) => navigate("outreach", id)} onReviewSync={() => navigate("recovery")} onPeople={openPeopleDirectory} onViewMap={viewMap} onStart={startWalk} onWalkResponse={async (participant, status) => { await actions.saveOutingResponse(participant.id, status); showToast(status === "going" ? "You’re going" : "Response saved"); }} additionalAction={<EncounterComposer data={data} onSave={async (input) => { await actions.recordVisit(input); showToast("Encounter saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} />} />}
           {view === "outreach" && <OutreachView data={data} canManage={canManage} activeVolunteerId={activeVolunteer.id} guides={guideLibrary.guides} selectedId={route.id} onRecordEncounter={async (input) => { await actions.recordVisit(input); showToast("Encounter saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} initialCreate={pathname.startsWith("/app") ? searchParams.get("plan") === "1" : demoPlanWalk} onCreateClosed={() => { setDemoPlanWalk(false); if (pathname.startsWith("/app") && searchParams.has("plan")) window.history.replaceState(null, "", appHref("outreach", route.id)); }} onSelect={(id) => navigate("outreach", id)} onStart={startWalk} onSave={actions.saveOuting} onRepeat={actions.repeatOuting} onAssign={actions.saveAssignment} onSaveRoster={actions.saveOutingRoster} onSaveCrews={actions.saveWalkCrews} onAddZone={actions.addTerritory} onSaveTarget={actions.saveTarget} onReplaceTarget={actions.replaceTarget} onOpenGuide={(id) => navigate("guide", id)} />}
-          {view === "more" && <section className="content-view more-view"><h1>More</h1><p>Resources and tools for your church team.</p>
-            <div className="more-grid">
-              <MoreRow icon={<BookOpenText />} tile="var(--indigo)" label={<>Conversation guides</>} onClick={() => navigate("guide")} />
-              <MoreRow icon={<MapIcon />} tile="var(--blue)" label={<>Locations &amp; address lists</>} onClick={viewMap} />
-              {canManage && <MoreRow icon={<UsersRound />} tile="var(--teal)" label={<>Groups &amp; members</>} onClick={() => navigate("leader")} />}
-              {canManage && data.sync.mode === "connected" && <MoreRow icon={<Database />} tile="var(--purple)" label={<>Data &amp; health</>} onClick={() => navigate("data")} />}
-              <MoreRow icon={<Settings2 />} tile="var(--gray)" label={<>Settings &amp; device</>} onClick={() => navigate("settings")} />
-              <MoreRow icon={<CloudOff />} tile={deviceNeedsAttention ? "var(--orange)" : "var(--tint)"} label={<>Device status {deviceNeedsAttention && <strong>Needs attention</strong>}</>} onClick={() => navigate("recovery")} />
-            </div>
-            <div className="more-grid">
-              <MoreRow icon={<CircleHelp />} tile="var(--blue)" label={<>Help &amp; field guide</>} href="/help" />
-              <MoreRow icon={<Lock />} tile="var(--gray)" label={<>Privacy &amp; trust</>} href="/trust" />
-            </div>
+          {view === "more" && <section className="content-view more-view"><h1>More</h1>
+            <ListGroup label="Your church">
+              <ListRow icon={<BookOpenText />} title="Conversation guides" onClick={() => navigate("guide")} />
+              <ListRow icon={<MapIcon />} title="Map & address lists" onClick={viewMap} />
+              {canManage && <ListRow icon={<UsersRound />} title="Team & invitations" onClick={() => navigate("leader")} />}
+              {canManage && data.sync.mode === "connected" && <ListRow icon={<Database />} title="Data & health" onClick={() => navigate("data")} />}
+            </ListGroup>
+            <ListGroup label="This phone">
+              <ListRow icon={<Settings2 />} title="Settings" onClick={() => navigate("settings")} />
+              <ListRow icon={<CloudOff />} title="Sync" value={deviceNeedsAttention ? <Badge tone="accent">Needs attention</Badge> : undefined} onClick={() => navigate("recovery")} />
+            </ListGroup>
+            <ListGroup label="Help">
+              <ListRow icon={<CircleHelp />} title="Help & field guide" href="/help" />
+              <ListRow icon={<Lock />} title="Privacy & trust" href="/trust" />
+            </ListGroup>
           </section>}
           {view === "map" && (!route.fieldOutingId || fieldArea ? (
             <section className="map-view">
@@ -664,7 +675,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
                 <div className="field-context">
                   <button className="field-context-back" onClick={() => navigate("outreach", fieldOuting.id)}><span className="field-context-back-icon" aria-hidden="true"><ArrowLeft size={18} /></span><span className="field-context-back-copy"><strong>{fieldTarget?.name ?? fieldOuting.name}</strong><span>{fieldTarget ? `${fieldOuting.name} · ${coverage.touched} of ${coverage.total} reached · ${coverageValue}` : "Encounters here are linked to this outing."}</span></span></button>
                 </div>
-                <div className="fieldwork-header-actions">{outreachDisplaySwitch}<button className="button quiet fieldwork-finish-button" disabled={fieldworkAction.busy} onClick={finishFieldwork}><CheckCircle2 size={16} /> {fieldworkAction.busy ? "Finishing…" : "Finish for tonight"}</button></div>
+                <div className="fieldwork-header-actions">{outreachDisplaySwitch}<button className="button quiet fieldwork-finish-button" disabled={fieldworkAction.busy} onClick={() => void finishFieldwork()}><CheckCircle2 size={16} /> {fieldworkAction.busy ? "Finishing…" : "Finish for tonight"}</button></div>
               </header>}
               {!fieldOuting && <div className="map-view-controls">{outreachDisplaySwitch}{canManage && <button type="button" className="button primary map-plan-walk-button" onClick={planWalk} aria-label="Plan a walk"><Plus size={16} aria-hidden="true" /><span>Plan a walk</span></button>}</div>}
               {fieldworkAction.error && <p role="alert" className="inline-error fieldwork-error">{fieldworkAction.error}</p>}
@@ -822,7 +833,7 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
             if (saving || guideChanging) throw new Error("Wait for device saving and guide confirmation to finish before signing out.");
             const pendingAdministration = await actions.getAdministrationPending();
             const pendingGuide = await actions.getGuidePending();
-            if ((pendingChanges || data.sync.legacyRecoveryRequired || pendingAdministration || pendingGuide) && !window.confirm("This device has fieldwork, administration or a guide request awaiting confirmation. It will remain here for this same account; another account cannot recover it. Review recovery and Guides first if needed. Sign out anyway?")) return;
+            if ((pendingChanges || data.sync.legacyRecoveryRequired || pendingAdministration || pendingGuide) && !await confirm({ title: "Sign out with unsent work?", message: "Some changes haven’t reached the church yet. They stay on this phone and will send when you sign back in with this account.", confirmLabel: "Sign out", destructive: true })) return;
             await onSignOut();
           } : undefined} onUpdatePassword={onUpdatePassword} onUpdateChurch={actions.updateChurch} onSetPreference={actions.setPreference} onSetFavoriteGuide={actions.setFavoriteConversationGuide} onExport={actions.downloadBackup} onImport={actions.importBackup} onPurge={actions.purgeExpired} onClearOutreach={actions.clearOutreachData} onSync={actions.syncNow} onOpenRecovery={() => navigate("recovery")} />}
         </section>
@@ -1013,23 +1024,14 @@ function MobileNav({ active, icon, label, count, onClick }: { active: boolean; i
   return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined} aria-label={accessibilityLabel}><span>{icon}{count ? <b aria-hidden="true">{count}</b> : null}</span><small>{label}</small></button>;
 }
 
-function MoreRow({ icon, tile, label, onClick, href }: { icon: React.ReactNode; tile: string; label: React.ReactNode; onClick?: () => void; href?: string }) {
-  const body = <><span className="more-icon" style={{ "--tile": tile } as React.CSSProperties} aria-hidden="true">{icon}</span><span>{label}</span><ChevronRight size={18} aria-hidden="true" /></>;
-  return href ? <Link href={href}>{body}</Link> : <button type="button" onClick={onClick}>{body}</button>;
-}
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] ?? "?").slice(0, 2)).toUpperCase();
-}
-
 function AppLoading() {
   return <main className="app-loading"><div className="loading-mark"><Navigation size={23} /></div><h1>Preparing your workspace</h1><span role="status" aria-live="polite">Loading your church workspace and saved records…</span></main>;
 }
 
 function AppFailure({ error, onSignOut, onRecovery }: { error: string; onSignOut?: () => Promise<void>; onRecovery?: () => Promise<void> }) {
   const action = useAsyncAction();
+  const confirm = useConfirm();
   let hasInvitation = false;
   try { hasInvitation = typeof window !== "undefined" && Boolean(pendingInvitation(window.sessionStorage)); } catch { /* Leave a blocked browser's state intact. */ }
-  return <main className="app-loading error"><div className="loading-mark"><X size={23} /></div><h1>Workspace access needs attention</h1><p>{error}</p><p>Your original device records have not been cleared. Reconnect or ask your church leader to review access. Do not clear browser storage to resolve this.</p><button className="button primary" onClick={() => location.reload()}>Try again</button>{hasInvitation && <button className="button quiet" disabled={action.busy} onClick={() => { if (window.confirm("Dismiss only this invitation and try your existing account membership? The invitation is not revoked and church records are not changed.")) void action.run(async () => { clearPendingInvitation(); window.location.reload(); }); }}>Dismiss this invitation; use my existing workspace</button>}{onRecovery && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onRecovery)}>Download only my authored work</button>}{onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => { if (window.confirm("Unconfirmed work stays on this device for this same account. Another account cannot recover it. Sign out without clearing it?")) void action.run(onSignOut); }}>Sign out or use a different account</button>}<Link href="/help">Recovery & sign-in help</Link>{action.error && <p role="alert">{action.error}</p>}</main>;
+  return <main className="app-loading error"><div className="loading-mark"><X size={23} /></div><h1>Workspace access needs attention</h1><p>{error}</p><p>Your original device records have not been cleared. Reconnect or ask your church leader to review access. Do not clear browser storage to resolve this.</p><button className="button primary" onClick={() => location.reload()}>Try again</button>{hasInvitation && <button className="button quiet" disabled={action.busy} onClick={() => { void confirm({ title: "Use your existing church instead?", message: "This skips the invitation on this phone. The invitation itself still works.", confirmLabel: "Skip invitation" }).then((confirmed) => { if (confirmed) void action.run(async () => { clearPendingInvitation(); window.location.reload(); }); }); }}>Dismiss this invitation; use my existing workspace</button>}{onRecovery && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onRecovery)}>Download only my authored work</button>}{onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => { void confirm({ title: "Sign out?", message: "Unsent work stays on this phone and sends when you sign back in with this account.", confirmLabel: "Sign out", destructive: true }).then((confirmed) => { if (confirmed) void action.run(onSignOut); }); }}>Sign out or use a different account</button>}<Link href="/help">Recovery & sign-in help</Link>{action.error && <p role="alert">{action.error}</p>}</main>;
 }

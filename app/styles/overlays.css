@@ -63,7 +63,7 @@ dialog.modal-card::backdrop { background: var(--scrim); -webkit-backdrop-filter:
 .parcel-existing-note span, .parcel-existing-note strong { display: block; }
 .parcel-existing-note span, .parcel-meaning span { font-size: var(--fs-footnote); line-height: 1.45; }
 .parcel-existing-note strong { margin-bottom: 2px; color: var(--label); font-size: var(--fs-subhead); font-weight: 600; }
-.parcel-tally { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 16px; margin-bottom: 14px; padding: 16px; border-radius: var(--radius-md); color: #fff; background: var(--tint-gradient); }
+.parcel-tally { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 16px; margin-bottom: 14px; padding: 16px; border-radius: var(--radius-md); color: var(--on-hero); background: var(--hero-bg); }
 .parcel-tally > div:first-child { padding-right: 16px; border-right: 1px solid rgba(255, 255, 255, .22); }
 .parcel-tally span, .parcel-tally strong { display: block; }
 .parcel-tally span { color: rgba(255, 255, 255, .75); font-size: var(--fs-footnote); font-weight: 500; line-height: 1.3; }

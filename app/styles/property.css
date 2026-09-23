@@ -4,7 +4,7 @@
 .drawer-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; }
 .property-symbol { width: 40px; height: 40px; display: grid; place-items: center; margin-top: 2px; border-radius: 12px; color: var(--tint); background: var(--tint-soft); }
 .drawer-address { min-width: 0; }
-.status-label { display: block; margin: 0 0 2px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 600; text-transform: uppercase; letter-spacing: .01em; }
+.status-label { display: block; margin: 0 0 2px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 600; }
 .status-label[data-outcome="follow_up"] { color: var(--orange-text); }
 .status-label[data-outcome="conversation"] { color: var(--tint); }
 .status-label[data-outcome="do_not_visit"] { color: var(--red-text); }
@@ -32,7 +32,7 @@
 .workflow-notice { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border-radius: var(--radius-sm); color: var(--tint); background: var(--tint-soft); font-size: var(--fs-footnote); font-weight: 500; line-height: 1.4; }
 .guided-entry-card { width: 100%; min-height: 60px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-bottom: 14px; padding: 10px 12px; border-radius: var(--radius-md); color: var(--label); background: var(--bg-grouped-3); text-align: left; }
 .guided-entry-card:hover { background: var(--fill-3); }
-.guided-entry-card > span:first-child { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; color: #fff; background: var(--tint-gradient); }
+.guided-entry-card > span:first-child { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; color: var(--on-hero); background: var(--hero-bg); }
 .guided-entry-card > span:nth-child(2), .guided-entry-card strong, .guided-entry-card small { min-width: 0; display: block; }
 .guided-entry-card strong { color: var(--label); font-size: var(--fs-subhead); font-weight: 600; }
 .guided-entry-card small { margin-top: 2px; color: var(--label-2); font-size: var(--fs-footnote); line-height: 1.35; }
@@ -42,7 +42,7 @@
 .doorstep-guide { display: grid; gap: 14px; }
 .doorstep-guide-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .doorstep-guide-heading p, .doorstep-guide-heading h2 { margin: 0; }
-.doorstep-guide-heading p { margin-bottom: 2px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 600; text-transform: uppercase; }
+.doorstep-guide-heading p { margin-bottom: 2px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 600; }
 .doorstep-guide-heading h2 { font-size: var(--fs-title3); line-height: var(--lh-title3); font-weight: 700; }
 .doorstep-without-guide { flex: none; }
 .doorstep-progress { display: flex; align-items: center; }
@@ -52,15 +52,15 @@
 .doorstep-progress span { position: relative; z-index: 1; width: 24px; height: 24px; display: grid; place-items: center; margin: 0 auto; border-radius: 50%; color: var(--label-2); background: var(--fill-2); font-size: var(--fs-caption); font-weight: 600; }
 .doorstep-progress button.active span { color: var(--on-tint); background: var(--tint); box-shadow: 0 0 0 4px var(--tint-soft-2); }
 .doorstep-progress button.complete span { color: var(--on-tint); background: var(--tint); }
-.doorstep-script-card { position: relative; overflow: hidden; padding: 18px; border-radius: var(--radius-md); color: #fff; background: var(--tint-gradient); }
-.doorstep-script-card > span { position: relative; z-index: 1; display: flex; align-items: center; gap: 6px; color: rgba(255, 255, 255, .78); font-size: var(--fs-footnote); font-weight: 600; text-transform: uppercase; }
+.doorstep-script-card { position: relative; overflow: hidden; padding: 18px; border-radius: var(--radius-md); color: var(--on-hero); background: var(--hero-bg); }
+.doorstep-script-card > span { position: relative; z-index: 1; display: flex; align-items: center; gap: 6px; color: rgba(255, 255, 255, .78); font-size: var(--fs-footnote); font-weight: 600; }
 .doorstep-script-card blockquote { position: relative; z-index: 1; margin: 10px 0 0; font-size: var(--fs-body); font-weight: 500; line-height: 1.45; }
 .skip-to-wrap, .name-prompt-back { justify-self: center; min-height: 36px; padding: 0 6px; color: var(--tint); font-size: var(--fs-subhead); font-weight: 600; }
 .doorstep-guide-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .doorstep-guide-actions .button { width: 100%; }
 .name-prompt { display: grid; justify-items: center; padding: 8px 6px 2px; text-align: center; }
 .name-prompt-mark { width: 56px; height: 56px; display: grid; place-items: center; margin-bottom: 12px; border-radius: 50%; color: var(--tint); background: var(--tint-soft); }
-.name-prompt > p { margin: 0 0 4px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 600; text-transform: uppercase; }
+.name-prompt > p { margin: 0 0 4px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 600; }
 .name-prompt h2 { max-width: 330px; margin: 0; font-size: var(--fs-title3); line-height: var(--lh-title3); font-weight: 700; }
 .name-prompt blockquote { width: 100%; margin: 16px 0 10px; padding: 14px; border-radius: var(--radius-sm); color: var(--label); background: var(--bg-grouped-3); font-size: var(--fs-subhead); font-weight: 500; line-height: 1.45; }
 .name-prompt > span { max-width: 330px; color: var(--label-2); font-size: var(--fs-footnote); line-height: 1.5; }

@@ -1,0 +1,48 @@
+/* Shared primitives from components/ui.tsx. Screens compose these instead of
+   defining their own card, row, badge and back-button treatments. */
+
+/* Inset grouped list */
+.list-group { display: grid; gap: var(--space-2); margin: 0; }
+.list-group + .list-group { margin-top: var(--space-6); }
+.list-group-label { margin: 0 var(--space-4); color: var(--label-2); font-family: var(--font-sans); font-size: var(--fs-footnote); font-weight: 500; line-height: var(--lh-footnote); }
+.list-group-rows { overflow: hidden; border-radius: var(--radius-md); background: var(--bg-grouped-2); box-shadow: var(--shadow-sm); }
+.list-group-footer { margin: 0 var(--space-4); color: var(--label-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+
+.list-row { position: relative; width: 100%; min-height: 52px; display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-4); color: var(--label); background: transparent; font-size: var(--fs-body); line-height: var(--lh-body); text-align: left; text-decoration: none; }
+.list-row + .list-row::before { content: ""; position: absolute; top: 0; right: 0; left: var(--space-4); height: 1px; background: var(--hairline); }
+.list-row:has(.list-row-icon) + .list-row::before, .list-row + .list-row:has(.list-row-icon)::before { left: 56px; }
+:is(button, a).list-row:active { background: var(--fill-4); }
+@media (hover: hover) { :is(button, a).list-row:hover { background: var(--fill-4); } }
+.list-row-icon { width: 28px; height: 28px; flex: none; display: grid; place-items: center; color: var(--tint); }
+.list-row-icon svg { width: 22px; height: 22px; }
+.list-row-text { min-width: 0; flex: 1; display: grid; gap: 1px; }
+.list-row-title { overflow-wrap: anywhere; }
+.list-row-subtitle { color: var(--label-2); font-size: var(--fs-subhead); line-height: var(--lh-subhead); overflow-wrap: anywhere; }
+.list-row-value { flex: none; max-width: 45%; color: var(--label-2); font-size: var(--fs-subhead); text-align: right; }
+.list-row-chevron { flex: none; margin-right: -4px; color: var(--label-3); }
+.list-row.danger, .list-row.danger .list-row-icon { color: var(--red-text); }
+
+/* Status badge — human words only, never raw status values */
+.badge { width: fit-content; display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: var(--radius-pill); color: var(--label-2); background: var(--fill-3); font-size: var(--fs-footnote); font-weight: 500; line-height: 18px; white-space: nowrap; }
+.badge.tint { color: var(--tint); background: var(--tint-soft); }
+.badge.accent { color: var(--accent-text); background: var(--accent-soft); }
+.badge.danger { color: var(--red-text); background: var(--red-soft); }
+
+/* Segmented control */
+.segmented-control { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 2px; padding: 2px; border-radius: 10px; background: var(--fill-3); }
+.segmented-control button { min-height: 32px; padding: 0 var(--space-3); border-radius: 8px; color: var(--label); font-size: var(--fs-subhead); font-weight: 500; }
+.segmented-control button[aria-pressed="true"] { background: var(--bg-grouped-2); box-shadow: var(--shadow-sm), 0 0 0 .5px var(--hairline); font-weight: 600; }
+
+/* Back button — iOS navigation-bar style */
+.back-button { min-height: 44px; display: inline-flex; align-items: center; gap: 0; margin-left: -10px; padding: 0 8px 0 2px; color: var(--tint); font-size: var(--fs-body); font-weight: 400; }
+.back-button:active { opacity: .6; }
+
+/* Avatar */
+.avatar { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--avatar-ink); background: var(--avatar-bg); font-size: var(--fs-footnote); font-weight: 600; letter-spacing: .02em; }
+.avatar.small { width: 28px; height: 28px; font-size: var(--fs-caption2); }
+.avatar.large { width: 56px; height: 56px; font-size: var(--fs-title3); }
+
+/* Confirmation sheet */
+.confirm-actions { display: grid; grid-template-columns: 1fr 1fr; }
+.confirm-actions .button { width: 100%; }
+dialog[role="alertdialog"].modal-card { width: min(400px, 100%); }
