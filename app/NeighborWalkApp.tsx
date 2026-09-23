@@ -1000,7 +1000,6 @@ function TerritoryModal({ territory, territories, boundaryChanged, onClose, onRe
         <label className="form-field"><span>{editing ? "Neighborhood name" : "Zone name"}</span><input maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: Oakwood North" /></label>
         <div className="territory-form-row">
           <label className="form-field"><span>Map color</span><input className="territory-color-input" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
-          
         </div>
         <div className={`territory-boundary-summary${boundaryChanged ? " changed" : ""}`}>
           <span><MapPinned size={18} /></span>
