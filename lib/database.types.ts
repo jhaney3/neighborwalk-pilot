@@ -707,11 +707,13 @@ export type Database = {
           id: string
           legacy_links: Json
           location_id: string | null
+          needs: string[]
           objective_note: string | null
           occurred_at: string
           outcome: string
           outing_id: string | null
           person_id: string | null
+          place_label: string | null
           received_at: string
           territory_id: string | null
           version: number
@@ -727,11 +729,13 @@ export type Database = {
           id: string
           legacy_links?: Json
           location_id?: string | null
+          needs?: string[]
           objective_note?: string | null
           occurred_at: string
           outcome: string
           outing_id?: string | null
           person_id?: string | null
+          place_label?: string | null
           received_at?: string
           territory_id?: string | null
           version?: number
@@ -747,11 +751,13 @@ export type Database = {
           id?: string
           legacy_links?: Json
           location_id?: string | null
+          needs?: string[]
           objective_note?: string | null
           occurred_at?: string
           outcome?: string
           outing_id?: string | null
           person_id?: string | null
+          place_label?: string | null
           received_at?: string
           territory_id?: string | null
           version?: number

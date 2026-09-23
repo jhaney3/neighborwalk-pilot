@@ -47,8 +47,7 @@ async function signIn(page: Page, account = "leader") {
 async function encounter(page: Page, note: string) {
   await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Add a person or note", exact: true }).click();
-  await dialog.getByRole("textbox", { name: "Brief factual note (optional)" }).fill(note);
+  await dialog.getByRole("textbox", { name: "Note (optional)" }).fill(note);
   await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
 }
@@ -153,9 +152,10 @@ test("a reviewed encounter correction survives a lost response and preserves the
   await page.goto(origin + "/app/today");
   await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox", { name: "What happened?", exact: true }).selectOption("follow_up");
-  await dialog.getByRole("combobox", { name: "Person (optional)", exact: true }).selectOption({ label });
-  await dialog.getByRole("textbox", { name: "Requested next step", exact: true }).fill("Fictional promised next step survives correction");
+  await dialog.getByRole("group", { name: "What happened" }).getByRole("button", { name: "Wants a follow-up", exact: true }).click();
+  await dialog.getByRole("combobox", { name: "Find or add a person" }).fill(label);
+  await dialog.getByRole("option").getByRole("button", { name: label, exact: true }).click();
+  await dialog.getByRole("textbox", { name: "Note (optional)" }).fill("Fictional promised next step survives correction");
   await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
@@ -521,11 +521,10 @@ test("quota failure retains the form and never claims a persisted encounter", as
   await page.evaluate(() => sessionStorage.setItem("fictional-quota-test", "on"));
   await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Add a person or note", exact: true }).click();
-  await dialog.getByRole("textbox", { name: "Brief factual note (optional)" }).fill(prefix + " quota /one");
+  await dialog.getByRole("textbox", { name: "Note (optional)" }).fill(prefix + " quota /one");
   await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
-  await expect(dialog.getByRole("textbox")).toHaveValue(prefix + " quota /one");
+  await expect(dialog.getByRole("textbox", { name: "Note (optional)" })).toHaveValue(prefix + " quota /one");
   expect(recorded(prefix + " quota")).toBe(0);
   await page.evaluate(() => sessionStorage.removeItem("fictional-quota-test"));
   await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
@@ -715,8 +714,8 @@ test("a reassigned next step requires the responsible volunteer to accept before
   await isolate(context); await signIn(page);
   await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox", { name: "What happened?" }).selectOption("follow_up");
-  await dialog.getByRole("textbox", { name: "Requested next step" }).fill(prefix + " task /one");
+  await dialog.getByRole("group", { name: "What happened" }).getByRole("button", { name: "Wants a follow-up", exact: true }).click();
+  await dialog.getByRole("textbox", { name: "What should happen next?" }).fill(prefix + " task /one");
   await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => queued(page)).toBe(0);
@@ -725,10 +724,10 @@ test("a reassigned next step requires the responsible volunteer to accept before
   const id = taskState().id;
   await page.goto(origin + "/app/followups/" + id);
   await expect(page.getByRole("heading", { name: "Name not known", exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "All people", exact: true }).click();
+  await page.getByRole("tab", { name: "Everyone", exact: true }).click();
   await expect(page).toHaveURL(origin + "/app/people?view=all");
   await page.reload();
-  await expect(page.getByRole("tab", { name: "All people", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Everyone", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.goBack();
   await expect(page).toHaveURL(origin + "/app/followups/" + id);
   await page.getByText("More actions", { exact: true }).click();

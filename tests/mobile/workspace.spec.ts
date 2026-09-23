@@ -106,11 +106,11 @@ test.describe("touch focus treatment", () => {
     await expect(close).toBeFocused();
     await expect(close).toHaveCSS("outline-style", "none");
 
-    const details = page.getByRole("button", { name: /optional details|Add a person or note/ });
-    await details.tap();
-    await expect(details).toHaveCSS("outline-style", "none");
+    const talked = page.getByRole("group", { name: "What happened" }).getByRole("button", { name: "Talked", exact: true });
+    await talked.tap();
+    await expect(talked).toHaveCSS("outline-style", "none");
 
-    await page.getByRole("textbox", { name: "Brief factual note (optional)" }).tap();
+    await page.getByRole("textbox", { name: "Note (optional)" }).tap();
     await page.keyboard.type("A brief note");
     await close.focus();
     await expect(close).toHaveCSS("outline-style", "none");
@@ -119,6 +119,30 @@ test.describe("touch focus treatment", () => {
     await expect(close).toBeFocused();
     expect(await close.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
   });
+});
+
+test("a conversation can include several people, needs and a place", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: "Log a conversation" });
+  await sheet.getByRole("group", { name: "Where" }).getByRole("button", { name: "Service day", exact: true }).click();
+  await sheet.getByRole("textbox", { name: "Place name (optional)" }).fill("Saturday yard cleanup");
+  const search = sheet.getByRole("combobox", { name: "Find or add a person" });
+  await search.fill("Tasha");
+  await sheet.getByRole("option").getByRole("button", { name: "Tasha", exact: true }).click();
+  await search.fill("Mobile Neighbor Friend");
+  await sheet.getByRole("button", { name: "Add “Mobile Neighbor Friend” as someone new" }).click();
+  await expect(sheet.getByRole("list", { name: "People in this conversation" }).getByRole("listitem")).toHaveCount(2);
+  await sheet.getByRole("group", { name: "Needs" }).getByRole("button", { name: "Food", exact: true }).click();
+  await sheet.getByRole("button", { name: "Save conversation", exact: true }).click();
+  await expect(sheet).toBeHidden();
+
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await nav.getByRole("button", { name: /^People/ }).click();
+  await page.getByRole("tab", { name: "Conversations", exact: true }).click();
+  const today = page.getByRole("region", { name: "Today" });
+  await expect(today.getByRole("button", { name: /Tasha.*Saturday yard cleanup/ })).toBeVisible();
+  await expect(today.getByRole("button", { name: /Mobile Neighbor Friend.*Food/ })).toBeVisible();
 });
 
 test("map filters and visit outcomes expose their selected state", async ({ page }) => {
@@ -286,7 +310,7 @@ test("a People location opens a map with a contextual return", async ({ page }) 
   await expect(page.getByRole("dialog", { name: /Home details/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Back to People" }).click();
-  await expect(page.getByRole("tab", { name: "Needs follow-up", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Follow-ups", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(search).toHaveValue("Tasha");
   await expect(workspace.getByRole("combobox", { name: "Responsibility", exact: true })).toHaveValue("all");
   await expect(workspace.getByRole("combobox", { name: "Status", exact: true })).toHaveValue("overdue");
@@ -299,7 +323,7 @@ test("the person Next step card opens and scrolls to their follow-ups", async ({
   await page.setViewportSize({ width: 393, height: 852 });
   await page.goto("/demo");
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: /^People/ }).click();
-  await page.getByRole("tab", { name: "All people", exact: true }).click();
+  await page.getByRole("tab", { name: "Everyone", exact: true }).click();
   await page.getByRole("button", { name: /Tasha.*215 Gaines Street/ }).click();
 
   const workspace = page.locator(".people-workspace");

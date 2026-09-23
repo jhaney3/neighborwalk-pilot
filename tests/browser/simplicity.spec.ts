@@ -204,8 +204,8 @@ test("People opens to follow-ups, switches to the directory, and keeps task link
   const navigation = page.getByRole("navigation", { name: "Main sections" });
   await navigation.getByRole("button", { name: "People", exact: true }).click();
 
-  const needsFollowUp = page.getByRole("tab", { name: "Needs follow-up", exact: true });
-  const allPeople = page.getByRole("tab", { name: "All people", exact: true });
+  const needsFollowUp = page.getByRole("tab", { name: "Follow-ups", exact: true });
+  const allPeople = page.getByRole("tab", { name: "Everyone", exact: true });
   await expect(needsFollowUp).toHaveAttribute("aria-selected", "true");
   await expect(allPeople).toHaveAttribute("aria-selected", "false");
   await needsFollowUp.focus();

@@ -20,6 +20,21 @@ export type Outcome = (typeof outcomeValues)[number];
 export type Role = Volunteer["role"];
 export type Coordinates = [longitude: number, latitude: number];
 
+/** Categories people share in a conversation; never free text or identifying. */
+export const conversationNeedValues = ["food", "housing", "transport", "health", "work", "prayer", "other"] as const;
+export type ConversationNeed = (typeof conversationNeedValues)[number];
+export const conversationNeedLabels: Record<ConversationNeed, string> = {
+  food: "Food", housing: "Housing", transport: "Rides", health: "Health", work: "Work", prayer: "Prayer", other: "Something else",
+};
+
+export const conversationContextLabels = {
+  door: "At the door",
+  community_meal: "Community meal",
+  service: "Service day",
+  referral: "Referral",
+  other: "Somewhere else",
+} as const;
+
 export const outcomeMeta: Record<
   Outcome,
   { label: string; short: string; color: string; description: string }
@@ -374,6 +389,8 @@ export const neighborWalkDataSchema = z.object({
     volunteerId: z.string().min(1),
     outcome: outcomeSchema.exclude(["unvisited"]),
     objectiveNote: z.string().max(2000).optional(),
+    placeLabel: z.string().trim().min(1).max(120).optional(),
+    needs: z.array(z.enum(conversationNeedValues)).max(7).optional(),
     recordedAt: z.string().datetime(),
     deviceId: z.string().min(1),
     corrections: z.array(z.object({

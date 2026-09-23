@@ -41,7 +41,7 @@ import { MobileInvitation } from "../components/MobileInvitation";
 import { AccountDeletion } from "../components/AccountDeletion";
 import { appHref, appRoute, type AppView } from "../lib/app-routes";
 import { TodayView } from "../components/TodayView";
-import { EncounterForm } from "../components/EncounterComposer";
+import { ConversationLogger } from "../components/ConversationLogger";
 import { OutreachView } from "../components/OutreachView";
 import { RecoveryView } from "../components/RecoveryView";
 import { DataHealthView } from "../components/DataHealthView";
@@ -291,7 +291,8 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
 
   const pendingChanges = data.sync.commands?.length ?? data.sync.pending.length;
   const needsReview = data.sync.legacyRecoveryRequired || data.sync.commands?.some((q) => q.state === "needs_review");
-  const deviceNeedsAttention = Boolean(data.sync.legacyRecoveryRequired || pendingChanges || data.sync.lastError || (data.sync.mode === "connected" && !online));
+  // Practice mode never sends anything, so queued sample changes are not a problem to flag.
+  const deviceNeedsAttention = data.sync.mode === "connected" && Boolean(data.sync.legacyRecoveryRequired || pendingChanges || data.sync.lastError || !online);
   const syncStatusLabel = saving ? "Saving…"
     : needsReview ? "Needs review"
     : data.sync.mode === "device_only" ? "Practice mode"
@@ -300,7 +301,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
     : pendingChanges ? `${pendingChanges} waiting to send`
     : data.sync.lastError ? "Couldn’t refresh"
     : data.sync.lastSyncedAt ? "Updated " + new Date(data.sync.lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Up to date";
-  const syncStatusTone = data.sync.lastError || needsReview ? "error" : !online ? "offline" : saving || syncing || pendingChanges ? "pending" : "online";
+  const syncStatusTone = data.sync.lastError || needsReview ? "error" : data.sync.mode === "device_only" ? "online" : !online ? "offline" : saving || syncing || pendingChanges ? "pending" : "online";
   const canManage = workspaceMembership ? workspaceMembership.role === "leader" : activeVolunteer.role === "leader";
   const openOutingIds = new Set(data.events.filter((event) => ["draft", "scheduled", "ready", "active"].includes(event.status)).map((event) => event.id));
   const walkAttentionCount = data.outingParticipants.filter((participant) => participant.volunteerId === activeVolunteer.id
@@ -840,7 +841,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
       </nav>
       <button type="button" className="tab-log-button" aria-label="Log a conversation" onClick={() => setLogOpen(true)}><Plus size={26} aria-hidden="true" /></button>
 
-      {logOpen && <EncounterForm data={data} outingId={fieldOuting?.id} onSave={async (input) => { await actions.recordVisit(input); showToast("Conversation saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} onClose={() => setLogOpen(false)} />}
+      {logOpen && <ConversationLogger data={data} outingId={fieldOuting?.id} onSave={async (input) => { await actions.recordVisit(input); showToast("Conversation saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} onClose={() => setLogOpen(false)} />}
       {neighborhoodCreatorOpen && <Modal title="New neighborhood" wide mobileImmersive onClose={() => setNeighborhoodCreatorOpen(false)}>
         <ParentZoneCreator churchId={data.church.id} mapStyleUrl={data.preferences.mapStyleUrl} baseTerritory={activeTerritory.center ? activeTerritory : undefined} demo={data.sync.mode === "device_only"} open onOpenChange={(open) => { if (!open) setNeighborhoodCreatorOpen(false); }} onAddZone={actions.addTerritory} onCreated={(territory) => { setNeighborhoodCreatorOpen(false); void actions.selectTerritory(territory.id); setOutreachDisplay("map"); showToast("Neighborhood created"); }} />
       </Modal>}

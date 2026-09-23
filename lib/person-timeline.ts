@@ -1,4 +1,4 @@
-import { outcomeMeta, personNoteKindLabels, type NeighborWalkData } from "./domain";
+import { conversationContextLabels, conversationNeedLabels, outcomeMeta, personNoteKindLabels, type NeighborWalkData } from "./domain";
 import { formatCalendarDate, calendarDate } from "./calendar";
 import { recordFamilyIds } from "./record-aliases";
 import { reviewedEncounter } from "./encounter-history";
@@ -12,8 +12,8 @@ export function personTimeline(data: NeighborWalkData, personId: string): Person
   const encounters = data.visits.filter((v) => Boolean(v.residentId && family.has(v.residentId))).flatMap((v) => {
     const current = reviewedEncounter(v);
     return [{ id: "encounter:" + v.id, at: v.recordedAt,
-      title: (current.voided ? "Entered in error · " : "") + outcomeMeta[current.outcome].label + " · " + current.context.replaceAll("_", " "),
-      body: [v.objectiveNote, v.corrections?.length ? "Original: " + outcomeMeta[v.outcome].label + " · " + (v.context ?? "door").replaceAll("_", " ") + ". Original links, notes and date retained." : undefined].filter(Boolean).join("\n") || undefined, actorId: v.volunteerId },
+      title: (current.voided ? "Entered in error · " : "") + outcomeMeta[current.outcome].label + " · " + (v.placeLabel ?? conversationContextLabels[current.context]),
+      body: [v.objectiveNote, v.needs?.length ? "Shared a need: " + v.needs.map((need) => conversationNeedLabels[need]).join(", ") : undefined, v.corrections?.length ? "Original: " + outcomeMeta[v.outcome].label + " · " + (v.context ?? "door").replaceAll("_", " ") + ". Original links, notes and date retained." : undefined].filter(Boolean).join("\n") || undefined, actorId: v.volunteerId },
       ...(v.corrections ?? []).map((correction) => ({ id: "encounter-correction:" + v.id + ":" + correction.id, at: correction.createdAt,
         title: "Conversation corrected · " + (correction.voided ? "entered in error" : outcomeMeta[correction.outcome].label + " · " + correction.context.replaceAll("_", " ")),
         body: correction.reason + " Tasks and restrictions unchanged.", actorId: correction.actorId }))];

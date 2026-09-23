@@ -137,10 +137,14 @@ async function seed(rehearsal = false) {
   add("territory", data.territories);
   add("property", data.properties);
   add("resident", data.residents.map((p) => ({ ...p, name: p.name || "Fictional sample person" })));
-  add("visit", data.visits.map((v) => ({ ...v, objectiveNote: v.residentId ? undefined : v.objectiveNote })));
+  // Demo walk routes are device-only fixtures; the sandbox seeds plain
+  // assignments and visits so no record references a route it never created.
+  add("visit", data.visits.map((v) => ({ ...v, targetId: undefined, targetParcel: undefined, objectiveNote: v.residentId ? undefined : v.objectiveNote })));
   add("person_note", data.personNotes);
   add("follow_up", data.followUps.map((t) => ({ ...t, dueAt: calendarDate(t.dueAt, data.church.timezone) })));
-  add("assignment", (data.assignments ?? []).map((a) => ({ ...a, status: "assigned" })));
+  add("assignment", (data.assignments ?? [])
+    .filter((a, index, all) => all.findIndex((other) => other.eventId === a.eventId && other.territoryId === a.territoryId) === index)
+    .map((a) => ({ ...a, targetId: undefined, status: "assigned" })));
   // A short-lived synthetic session is local-only and removed in the same
   // transaction after seeding; do not weaken production authorization for fixtures.
   const seedSessionId = crypto.randomUUID();

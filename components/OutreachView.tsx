@@ -10,10 +10,12 @@ import type { SaveTarget, WalkTarget } from "../lib/walk-targets";
 import { useAsyncAction } from "../lib/use-async-action";
 import { reviewedEncounter } from "../lib/encounter-history";
 import { targetCrewMemberIds } from "../lib/walk-crews";
-import { EncounterComposer } from "./EncounterComposer";
+import { ConversationLauncher } from "./ConversationLogger";
+import { ConversationRow } from "./ConversationFeed";
+import { communityConversations } from "../lib/conversations";
 import { OutingInvitationRoster } from "./OutingInvitationRoster";
 import type { NewParentZoneInput } from "./ParentZoneCreator";
-import { Badge, EmptyState, Modal, ViewHeading, useConfirm, type ConfirmOptions } from "./ui";
+import { Badge, EmptyState, ListGroup, Modal, ViewHeading, useConfirm, type ConfirmOptions } from "./ui";
 import { assignmentStatusLabels, walkStatusLabels } from "../lib/status-labels";
 import { WalkSetupWizard } from "./WalkSetupWizard";
 import { WalkCrewBoard, type WalkCrews } from "./WalkCrewBoard";
@@ -193,6 +195,7 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
     .filter((assignment) => !assignment.targetId || data.walkTargets.some((target) => target.id === assignment.targetId && !target.finishedAt));
   const openTasks = data.followUps.filter((t) => t.eventId === outing.id && t.status === "scheduled");
   const encounters = data.visits.filter((v) => v.eventId === outing.id && !reviewedEncounter(v).voided);
+  const walkConversations = communityConversations(data, { eventId: outing.id });
   const guide = props.guides.find((g) => g.id === outing.guideId);
   const closed = ["completed", "archived", "cancelled"].includes(outing.status);
   const parentTerritoryIds = [...new Set([...outingTargets.map((target) => target.territoryId), ...activeAssignments.map((assignment) => assignment.territoryId)])];
@@ -260,7 +263,7 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
       <div className="outing-support-actions">{canManage && <><button className="button quiet" onClick={onEdit}>{outing.status === "draft" ? "Resume setup" : "Edit walk"}</button><button className="button quiet" onClick={onRepeatRequest}><Repeat2 size={16} /> Repeat walk</button></>}
         {guide ? <button className="button quiet" onClick={() => onOpenGuide(guide.id)}>Open {guide.title}</button> : <span>Conversation guide is optional.</span>}
       </div>
-      {!closed && communityOuting && <div className="outing-community-entry"><div><strong>Gathering</strong><span>Log conversations from a meal, service day or other gathering.</span></div><EncounterComposer data={data} outingId={outing.id} onSave={onRecordEncounter} onCreatePerson={onCreatePerson} /></div>}
+      {!closed && communityOuting && <div className="outing-community-entry"><div><strong>Gathering</strong><span>Log conversations from a meal, service day or other gathering.</span></div><ConversationLauncher data={data} outingId={outing.id} onSave={onRecordEncounter} onCreatePerson={onCreatePerson} /></div>}
     </header>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
     {canManage && parentTerritoryIds.length > 0 && <ParentZoneCoveragePanel data={data} territoryIds={parentTerritoryIds} eventId={outing.id} />}
@@ -303,7 +306,7 @@ function OutingDetail({ outing, onEdit, onRepeatRequest, ...props }: Props & { o
       })}</ul>
       {!crewItems.length && <div className="outing-empty-assignment"><MapPin size={20} /><div><strong>No routes yet</strong><p>Finish setup to add routes.</p></div></div>}
     </section>
-    <details className="outing-panel outing-context-details outing-debrief-panel"><summary>Debrief</summary><div className="outing-section-heading"><span><MessageCircle size={20} /></span><div><h3>Debrief</h3></div></div><div className="outing-debrief-summary"><span>{encounters.length} conversations</span><span>{openTasks.length} open follow-ups</span><span className={openTasks.some((task) => !task.assignedVolunteerId) ? "needs-attention" : ""}>{openTasks.filter((task) => !task.assignedVolunteerId).length} without an owner</span></div>{canManage ? <form className="form-stack outing-debrief-form" onSubmit={(e) => { e.preventDefault(); void action.run(() => onSave({ ...outing, debrief }, outing.id)); }}><label>What should the next team know?<textarea value={debrief} maxLength={2000} rows={4} onChange={(e) => setDebrief(e.target.value)} placeholder="Logistics, what worked, what to bring next time." /></label><button className="button quiet" disabled={action.busy}><Check size={16} /> Save debrief</button></form> : <p>{outing.debrief || "The leader’s debrief will appear here."}</p>}</details>
+    <details className="outing-panel outing-context-details outing-debrief-panel"><summary>Debrief</summary><div className="outing-section-heading"><span><MessageCircle size={20} /></span><div><h3>Debrief</h3></div></div><div className="outing-debrief-summary"><span>{encounters.length} logged</span><span>{openTasks.length} open follow-ups</span><span className={openTasks.some((task) => !task.assignedVolunteerId) ? "needs-attention" : ""}>{openTasks.filter((task) => !task.assignedVolunteerId).length} without an owner</span></div>{walkConversations.length > 0 && <ListGroup label="Conversations away from doors">{walkConversations.map((entry) => <ConversationRow key={entry.visit.id} entry={entry} />)}</ListGroup>}{canManage ? <form className="form-stack outing-debrief-form" onSubmit={(e) => { e.preventDefault(); void action.run(() => onSave({ ...outing, debrief }, outing.id)); }}><label>What should the next team know?<textarea value={debrief} maxLength={2000} rows={4} onChange={(e) => setDebrief(e.target.value)} placeholder="Logistics, what worked, what to bring next time." /></label><button className="button quiet" disabled={action.busy}><Check size={16} /> Save debrief</button></form> : <p>{outing.debrief || "The leader’s debrief will appear here."}</p>}</details>
     {replacementAssignment && replacementTarget && replacementTerritory && <TargetReplacementModal data={data} outing={outing} assignment={replacementAssignment} target={replacementTarget} territory={replacementTerritory} onClose={() => setReplacementAssignmentId("")} onReplace={props.onReplaceTarget} />}
     {rosterEditorOpen && <OutingRosterModal data={data} outing={outing} onClose={() => setRosterEditorOpen(false)} onSave={props.onSaveRoster} />}
     {crewEditorOpen && <WalkCrewModal data={data} outing={outing} targets={openTargets} onClose={() => setCrewEditorOpen(false)} onSave={props.onSaveCrews} />}

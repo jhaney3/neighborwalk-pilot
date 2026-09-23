@@ -7,6 +7,8 @@ import { homeWalk } from "../lib/home-walk";
 import type { OutingParticipant, OutingResponse } from "../lib/outing-participants";
 import { useAsyncAction } from "../lib/use-async-action";
 import { Badge, ListGroup, ListRow, ViewHeading } from "./ui";
+import { ConversationRow } from "./ConversationFeed";
+import { communityConversations } from "../lib/conversations";
 
 function greetingFor(timezone: string, now = new Date()) {
   const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: timezone }).format(now));
@@ -43,6 +45,7 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
   const answeredResponseCount = answeredResponseOutings.length;
   const when = (event: OutreachEvent) => new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: event.timezone ?? timezone }).format(new Date(event.startsAt));
   const shownFollowUps = (due.length ? due : mine).slice(0, 3);
+  const recentConversations = communityConversations(data, { limit: 3 });
   const leaderAttention = canManage && (unowned.length > 0 || declined.length > 0 || waiting.length > 0 || Boolean(data.migrationIssues?.length));
 
   const invitationRows = (groups: typeof responseOutings) => groups.map(({ outing: invited, participant }) => {
@@ -107,6 +110,10 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
       {!shownFollowUps.length && <ListRow title="Nothing due" subtitle="New follow-ups will show up here." />}
       <ListRow className="list-row-link" title="All follow-ups" onClick={() => onFollowUps()} />
     </ListGroup>
+
+    {recentConversations.length > 0 && <ListGroup label="Recent conversations">
+      {recentConversations.map((entry) => <ConversationRow key={entry.visit.id} entry={entry} onOpenPerson={onPerson} />)}
+    </ListGroup>}
 
     {handoffs.length > 0 && <ListGroup label="Asked to take over">
       {handoffs.map((person) => <ListRow key={person.id} icon={<HeartHandshake />} title={person.name || "Someone"} subtitle="Review before you accept" onClick={() => onPerson(person.id)} />)}

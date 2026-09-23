@@ -29,6 +29,7 @@ import "../app/styles/controls.css";
 import "../app/styles/readiness.css";
 import "../app/styles/home.css";
 import "../app/styles/shell.css";
+import "../app/styles/conversations.css";
 import "../app/styles/walk-setup.css";
 import "../app/styles/walk-target-planner.css";
 import "./native.css";

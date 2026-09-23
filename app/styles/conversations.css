@@ -1,0 +1,31 @@
+/* Conversation logger and the conversations feed. */
+.conversation-logger { display: grid; gap: var(--space-5); }
+.conversation-logger fieldset { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.conversation-logger legend { margin-bottom: var(--space-2); padding: 0; color: var(--label); font-size: var(--fs-headline); font-weight: 600; }
+.conversation-field { display: grid; gap: 6px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 500; }
+.conversation-field :is(input, textarea) { width: 100%; color: var(--label); font-weight: 400; }
+.conversation-field textarea { min-height: 76px; resize: vertical; }
+.conversation-hint { margin-top: calc(var(--space-2) * -1); color: var(--label-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.conversation-subhead { margin-top: var(--space-1); color: var(--label-2); font-size: var(--fs-footnote); font-weight: 500; }
+.conversation-more { justify-self: start; min-height: 36px; font-size: var(--fs-subhead); }
+
+.chip-group { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip { min-height: 36px; padding: 0 14px; border-radius: var(--radius-pill); color: var(--label); background: var(--fill-3); font-size: var(--fs-subhead); font-weight: 500; }
+.chip[aria-pressed="true"] { color: var(--on-tint); background: var(--tint); }
+
+.person-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.person-chips li { display: inline-flex; align-items: center; gap: 2px; min-height: 36px; padding-left: 12px; border-radius: var(--radius-pill); color: var(--tint); background: var(--tint-soft-2); font-size: var(--fs-subhead); font-weight: 500; }
+.person-chips button { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; color: inherit; }
+
+.conversation-search { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 0 12px; border-radius: var(--radius-sm); color: var(--label-2); background: var(--fill-3); }
+.conversation-search input { flex: 1; min-width: 0; min-height: 44px; padding: 0; background: transparent; }
+.conversation-search input:focus-visible { box-shadow: none; }
+.conversation-results { display: grid; margin: calc(var(--space-2) * -1) 0 0; padding: 4px 0; list-style: none; border-radius: var(--radius-sm); background: var(--bg-grouped-2); box-shadow: var(--shadow-md); }
+.conversation-results button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); color: var(--label); text-align: left; }
+.conversation-results li:last-child button:has(svg) { color: var(--tint); font-weight: 500; }
+.conversation-results button:active { background: var(--fill-4); }
+
+/* Conversations feed */
+.conversation-feed-day + .conversation-feed-day { margin-top: var(--space-6); }
+.conversation-needs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.conversation-note { display: block; margin-top: 2px; color: var(--label); }

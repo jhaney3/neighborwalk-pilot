@@ -33,8 +33,9 @@ export function EmptyState({ icon, title, copy }: { icon: React.ReactNode; title
 
 /** An inset grouped list, the default container for anything row-shaped. */
 export function ListGroup({ label, footer, className, children }: { label?: React.ReactNode; footer?: React.ReactNode; className?: string; children: React.ReactNode }) {
-  return <section className={`list-group${className ? ` ${className}` : ""}`}>
-    {label && <h2 className="list-group-label">{label}</h2>}
+  const labelId = useId();
+  return <section className={`list-group${className ? ` ${className}` : ""}`} aria-labelledby={label ? labelId : undefined}>
+    {label && <h2 className="list-group-label" id={labelId}>{label}</h2>}
     <div className="list-group-rows">{children}</div>
     {footer && <p className="list-group-footer">{footer}</p>}
   </section>;

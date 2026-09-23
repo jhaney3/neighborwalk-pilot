@@ -96,6 +96,7 @@ export function mapOutreachWorkspace(info: z.infer<typeof infoSchema>, pages: Re
     visits: rows("visit").map((r) => ({ ...common(r), eventId: string(r, "outing_id"), territoryId: string(r, "territory_id"), targetId: string(r, "target_id"),
       targetParcel: string(r, "target_county_fips") && string(r, "target_gislink") ? { countyFips: string(r, "target_county_fips")!, gislink: string(r, "target_gislink")! } : undefined, propertyId: string(r, "location_id"),
       residentId: string(r, "person_id"), volunteerId: r.actor_key, context: r.context, outcome: r.outcome, objectiveNote: string(r, "objective_note"),
+      placeLabel: string(r, "place_label"), needs: Array.isArray(r.needs) && r.needs.length ? r.needs : undefined,
       recordedAt: iso(r, "occurred_at"), deviceId: r.device_id,
       corrections: Array.isArray(r.corrections) ? r.corrections.map((item) => { const correction = rowSchema.parse(item); return { ...correction, createdAt: iso(correction, "createdAt") }; }) : undefined })),
     residents: rows("resident").map((r) => ({ ...common(r), propertyId: string(r, "property_id"), name: string(r, "name"), faithStatus: r.faith_status,
