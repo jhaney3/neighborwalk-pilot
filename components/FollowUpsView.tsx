@@ -1,7 +1,6 @@
 "use client";
 
-import { CalendarClock, Check, ChevronDown, CircleX, ClipboardCheck, ClipboardList, Mail, MapPin, MessageCircle, Phone, Search, SlidersHorizontal, UserRound } from "lucide-react";
-import { avatarTone } from "./visuals";
+import { CalendarClock, Check, ChevronDown, CircleX, ClipboardCheck, ClipboardList, Mail, MapPin, MessageCircle, Phone, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import { calendarDate, calendarDaysFromNow, formatCalendarDate } from "../lib/calendar";
 import { dateInputValue, type FollowUp, type FollowUpCompletionInput, type NeighborWalkData } from "../lib/domain";
@@ -69,9 +68,9 @@ export function FollowUpsView(props: FollowUpsViewProps) {
     {initialPersonId && !props.profileMode && <div className="followup-person-focus"><UserRound size={18} /> Follow-ups for {people.get(initialPersonId)?.name ?? "this person"}<button onClick={onClearPersonFocus}>Show all</button></div>}
     {!props.focusedTaskId && !initialPersonId && canManage && unassigned > 0 && <div className="inline-notice followup-unowned-notice"><span>{unassigned} {unassigned === 1 ? "follow-up has" : "follow-ups have"} no owner.</span><button className="button quiet small" onClick={() => { setOwner("unowned"); setFilter("open"); }}>Review ones without an owner</button></div>}
     {!props.focusedTaskId && <div className="list-toolbar followup-toolbar">
-      <label className="followup-search-field"><span className="sr-only">Search</span><Search size={16} aria-hidden="true" /><input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search follow-ups" /></label>
+      <label className="followup-search-field">Search<input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Person, address, or next step" /></label>
       <details className="followup-filter-disclosure">
-        <summary><SlidersHorizontal size={15} aria-hidden="true" /><span className="sr-only">Filters</span> <span>{initialPersonId || props.profileMode ? filterLabel : `${scopeLabels[owner]} · ${filterLabel}`}</span></summary>
+        <summary>Filters <span>{initialPersonId || props.profileMode ? filterLabel : `${scopeLabels[owner]} · ${filterLabel}`}</span></summary>
         <div className="followup-filter-fields">
           {!props.profileMode && <label>Whose<select value={owner} onChange={(e) => setOwner(e.target.value as FollowUpScope)} disabled={Boolean(initialPersonId)}><option value="mine">Mine</option><option value="team">My team’s</option><option value="all">All I can access</option>{canManage && <><option value="unowned">Without an owner</option><option value="declined">Declined</option></>}</select></label>}
           <label>Status<select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>{(["open", "overdue", "today", "upcoming", "completed", "cancelled"] as const).map((value) => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}</select></label>
@@ -80,7 +79,7 @@ export function FollowUpsView(props: FollowUpsViewProps) {
     </div>}
     {groups.length ? <div className="followup-person-groups">{groups.map((group) => <section className="followup-person-group" key={group.key} aria-label={props.profileMode ? group.label : undefined} aria-labelledby={props.profileMode ? undefined : `followup-group-${group.key.replace(":", "-")}`}>
       <header className="followup-person-group-header" hidden={props.profileMode}>
-        <span className={`followup-person-avatar avatar ${avatarTone(group.person?.id ?? group.key)}`} aria-hidden="true">{group.person?.name ? group.person.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() : "?"}</span>
+        <span className="followup-person-avatar" aria-hidden="true">{group.person?.name ? group.person.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() : "?"}</span>
         <div><h2 id={`followup-group-${group.key.replace(":", "-")}`}>{group.label}</h2><p><MapPin size={13} /> {group.address ?? "Address not recorded"}</p></div>
         <span>{group.tasks.length} {group.tasks.length === 1 ? "follow-up" : "follow-ups"}</span>
         {group.person && !props.profileMode && <button className="button quiet small" onClick={() => props.onOpenPerson(group.person!.id)}>View profile</button>}

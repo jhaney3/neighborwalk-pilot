@@ -22,6 +22,7 @@ import {
   Lock,
   MapPin,
   MapPinned,
+  Navigation,
   Plus,
   Search,
   Settings2,
@@ -60,7 +61,6 @@ import { LeaderView } from "../components/LeaderView";
 import { SettingsView } from "../components/SettingsView";
 import { Badge, ConfirmProvider, ListGroup, ListRow, Modal, SegmentedControl, initials, useConfirm } from "../components/ui";
 import { ParentZoneCreator } from "../components/ParentZoneCreator";
-import { BrandMark, ProgressRing } from "../components/visuals";
 import {
   centerForBoundary,
   outcomeMeta,
@@ -179,7 +179,6 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
   const [territoryPickerOpen, setTerritoryPickerOpen] = useState(false);
   const [neighborhoodCreatorOpen, setNeighborhoodCreatorOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
-  const [routeSummary, setRouteSummary] = useState<{ name: string; touched: number; total: number; conversations: number; followUps: number } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const showToast = (message: string, tone: ToastTone = "success") => setToast({ message: compactToastMessage(message), tone });
   const reminderDataRef = useRef(data);
@@ -526,16 +525,6 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
       confirmLabel: "Finish route",
     });
     if (!confirmed) return;
-    // Summarize the route before it closes, for a moment of closure.
-    const routeVisits = data.visits.filter((visit) => visit.eventId === fieldOuting.id && (fieldTarget ? visit.targetId === fieldTarget.id : visit.territoryId === fieldAssignment.territoryId));
-    const routeVisitIds = new Set(routeVisits.map((visit) => visit.id));
-    const summary = {
-      name: label,
-      touched: coverage.touched,
-      total: coverage.total,
-      conversations: routeVisits.filter((visit) => ["conversation", "follow_up"].includes(visit.outcome)).length,
-      followUps: data.followUps.filter((task) => task.sourceVisitId && routeVisitIds.has(task.sourceVisitId)).length,
-    };
     void fieldworkAction.run(async () => {
       if (fieldAssignment.targetId) await actions.finishTarget(fieldAssignment.targetId);
       else await actions.saveAssignment({
@@ -546,7 +535,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
         status: "completed",
       }, fieldAssignment.id);
     }, () => {
-      setRouteSummary(summary);
+      showToast("Route finished");
       navigate("outreach", fieldOuting.id);
     });
   };
@@ -624,7 +613,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
       {data.sync.mode === "device_only" && <div className="demo-notice" role="status"><span>Practice with a sample church. Nothing here is shared.</span> <Link href={isMobileApp ? "/login" : "/"}>{isMobileApp ? "Sign in" : "Return to website"}</Link></div>}
       <header className="app-header">
         <button className="brand" onClick={() => navigate("today")} aria-label="Open NeighborWalk Home">
-          <span className="brand-mark" aria-hidden="true"><BrandMark size={20} /></span>
+          <span className="brand-mark" aria-hidden="true"><Navigation size={18} /></span>
           <span><strong>{data.church.name}</strong><small><i className={`status-dot ${syncStatusTone}`} aria-hidden="true" /><span>{syncStatusLabel}</span></small></span>
         </button>
         <div className="header-status">
@@ -678,8 +667,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
               {!fieldOuting && peopleMapReturn && !selectedProperty && <div className="map-people-return"><button type="button" onClick={returnFromPeopleMap} aria-label="Back to People"><ArrowLeft size={20} aria-hidden="true" /><span>People</span></button></div>}
               {fieldOuting && <header className="fieldwork-header">
                 <div className="field-context">
-                  <button className="field-context-back" onClick={() => navigate("outreach", fieldOuting.id)}><span className="field-context-back-icon" aria-hidden="true"><ArrowLeft size={18} /></span><span className="field-context-back-copy"><strong>{fieldTarget?.name ?? fieldOuting.name}</strong><span>{fieldTarget ? fieldOuting.name : "Conversations here are saved to this walk."}</span></span></button>
-                  {fieldTarget && <div className="field-progress" aria-label={`${coverage.touched} of ${coverage.total} homes reached`}><span className="field-progress-track"><i style={{ width: `${coverage.percent ?? 0}%` }} /></span><span className="field-progress-count">{coverage.touched} of {coverage.total} homes</span><strong>{coverageValue}</strong></div>}
+                  <button className="field-context-back" onClick={() => navigate("outreach", fieldOuting.id)}><span className="field-context-back-icon" aria-hidden="true"><ArrowLeft size={18} /></span><span className="field-context-back-copy"><strong>{fieldTarget?.name ?? fieldOuting.name}</strong><span>{fieldTarget ? `${fieldOuting.name} · ${coverage.touched} of ${coverage.total} reached · ${coverageValue}` : "Conversations here are saved to this walk."}</span></span></button>
                 </div>
                 <div className="fieldwork-header-actions">{outreachDisplaySwitch}<button className="button quiet fieldwork-finish-button" disabled={fieldworkAction.busy} onClick={() => void finishFieldwork()}><CheckCircle2 size={16} /> {fieldworkAction.busy ? "Finishing…" : "Finish for tonight"}</button></div>
               </header>}
@@ -853,17 +841,6 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
       </nav>
       <button type="button" className="tab-log-button" aria-label="Log a conversation" onClick={() => setLogOpen(true)}><Plus size={26} aria-hidden="true" /></button>
 
-      {routeSummary && <Modal title={`${routeSummary.name} is done`} description="Thank you for walking tonight." onClose={() => setRouteSummary(null)}>
-        <div className="route-summary">
-          <ProgressRing value={routeSummary.touched} total={routeSummary.total} size={108} label={`${routeSummary.touched} of ${routeSummary.total} homes reached`} />
-          <dl>
-            <div><dt>Homes reached</dt><dd>{routeSummary.touched} of {routeSummary.total}</dd></div>
-            <div><dt>Conversations</dt><dd>{routeSummary.conversations}</dd></div>
-            <div><dt>Follow-ups planned</dt><dd>{routeSummary.followUps}</dd></div>
-          </dl>
-        </div>
-        <div className="modal-actions"><button type="button" className="button primary" onClick={() => setRouteSummary(null)}>Done</button></div>
-      </Modal>}
       {logOpen && <ConversationLogger data={data} outingId={fieldOuting?.id} onSave={async (input) => { await actions.recordVisit(input); showToast("Conversation saved"); }} onCreatePerson={(input) => actions.upsertResident(undefined, input)} onClose={() => setLogOpen(false)} />}
       {neighborhoodCreatorOpen && <Modal title="New neighborhood" wide mobileImmersive onClose={() => setNeighborhoodCreatorOpen(false)}>
         <ParentZoneCreator churchId={data.church.id} mapStyleUrl={data.preferences.mapStyleUrl} baseTerritory={activeTerritory.center ? activeTerritory : undefined} demo={data.sync.mode === "device_only"} open onOpenChange={(open) => { if (!open) setNeighborhoodCreatorOpen(false); }} onAddZone={actions.addTerritory} onCreated={(territory) => { setNeighborhoodCreatorOpen(false); void actions.selectTerritory(territory.id); setOutreachDisplay("map"); showToast("Neighborhood created"); }} />
@@ -1046,7 +1023,7 @@ function MobileNav({ active, icon, label, count, attention = false, onClick }: {
 }
 
 function AppLoading() {
-  return <main className="app-loading"><div className="loading-mark"><BrandMark size={30} /></div><h1>Getting things ready</h1><span role="status" aria-live="polite">Loading your church…</span></main>;
+  return <main className="app-loading"><div className="loading-mark"><Navigation size={23} /></div><h1>Getting things ready</h1><span role="status" aria-live="polite">Loading your church…</span></main>;
 }
 
 function AppFailure({ error, onSignOut, onRecovery }: { error: string; onSignOut?: () => Promise<void>; onRecovery?: () => Promise<void> }) {

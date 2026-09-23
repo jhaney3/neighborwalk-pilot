@@ -1,6 +1,6 @@
 "use client";
 
-import { Edit3, History, MapPinned, Plus, ShieldCheck } from "lucide-react";
+import { ArrowRight, Edit3, History, MapPinned, Plus, ShieldCheck } from "lucide-react";
 import type { NeighborWalkData, TeamUpdate } from "../lib/domain";
 import type { WorkspaceMembership } from "../lib/use-neighborwalk";
 import { MembersPanel } from "./MembersPanel";
@@ -25,6 +25,7 @@ type Props = {
 
 export function LeaderView(props: Props) {
   const { data, membership } = props;
+  const activeOutings = data.events.filter((outing) => ["draft", "ready", "active"].includes(outing.status));
   return <section className="content-view leader-view">
     <ViewHeading title="Team & invitations" />
 
@@ -34,11 +35,11 @@ export function LeaderView(props: Props) {
         <p>Start small. Practice with sample records before adding real neighbors.</p>
       </header>
       <ol className="leader-setup-steps">
-        <li className="has-action"><span className="leader-step-number" aria-hidden="true">01</span><div><strong>Confirm the basics</strong><p>Check your church name and timezone.</p></div><button className="button quiet leader-setup-action" onClick={props.onOpenSettings}>Review settings</button></li>
+        <li className="has-action"><span className="leader-step-number" aria-hidden="true">01</span><div><strong>Confirm the basics</strong><p>Check your church name and timezone.</p></div><button className="button quiet leader-setup-action" onClick={props.onOpenSettings}>Review settings <ArrowRight size={15} /></button></li>
         <li><span className="leader-step-number" aria-hidden="true">02</span><div><strong>Bring the team</strong><p>Invite your volunteers.</p></div></li>
-        <li className="has-action"><span className="leader-step-number" aria-hidden="true">03</span><div><strong>Plan a walk</strong><p>Pick a neighborhood, a time and who’s coming.</p></div><button className="button quiet leader-setup-action" onClick={props.onOpenOutreach}>Open Walks</button></li>
+        <li className="has-action"><span className="leader-step-number" aria-hidden="true">03</span><div><strong>Plan a walk</strong><p>Pick a neighborhood, a time and who’s coming.</p></div><button className="button quiet leader-setup-action" onClick={props.onOpenOutreach}>Open Walks ({activeOutings.length}) <ArrowRight size={15} /></button></li>
         <li><span className="leader-step-number" aria-hidden="true">04</span><div><strong>Try it out</strong><p>Have a volunteer open the walk and log a knock.</p></div></li>
-        <li className="has-action"><span className="leader-step-number" aria-hidden="true">05</span><div><strong>Close the loop</strong><p>Make sure every follow-up has an owner.</p></div><button className="button quiet leader-setup-action" onClick={props.onOpenToday}>Open Home</button></li>
+        <li className="has-action"><span className="leader-step-number" aria-hidden="true">05</span><div><strong>Close the loop</strong><p>Make sure every follow-up has an owner.</p></div><button className="button quiet leader-setup-action" onClick={props.onOpenToday}>Open Home <ArrowRight size={15} /></button></li>
       </ol>
     </section>
 

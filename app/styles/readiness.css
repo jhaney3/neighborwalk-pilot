@@ -658,7 +658,7 @@ dialog.property-drawer .contact-restrictions { margin-top: 20px; padding: 16px; 
 .outing-roster-list li { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; border: 0; border-radius: 0; background: transparent; }
 .outing-roster-list li + li::before { content: ""; position: absolute; left: 60px; right: 0; top: 0; height: 1px; background: var(--hairline); }
 .outing-roster-list li > i { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--avatar-ink); background: var(--avatar-bg); font-size: var(--fs-caption); font-style: normal; font-weight: 600; }
-.outing-roster-list li.checked_in > i, .outing-roster-list li:has(.outing-participant-status.checked_in) > i { background: var(--tint); }
+.outing-roster-list li.checked_in > i, .outing-roster-list li:has(.outing-participant-status.checked_in) > i { color: var(--on-tint); background: var(--tint); }
 .outing-roster-list strong { min-width: 0; overflow: hidden; font-size: var(--fs-body); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .outing-participant-status { padding: 0; border-radius: 0; color: var(--label-2); background: transparent; font-size: var(--fs-subhead); font-weight: 400; }
 .outing-participant-status.checked_in { color: var(--label-2); }

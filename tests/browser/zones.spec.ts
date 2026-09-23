@@ -827,9 +827,6 @@ test("a leader finishing a target below 100% also completes the walk", async ({ 
   const finishConfirmation = page.getByRole("alertdialog", { name: `Finish ${fixture.secondTargetName}?` });
   await expect(finishConfirmation).toContainText("Other routes stay open");
   await finishConfirmation.getByRole("button", { name: "Finish route", exact: true }).click();
-  const summary = page.getByRole("dialog", { name: `${fixture.secondTargetName} is done` });
-  await expect(summary).toContainText("Homes reached");
-  await summary.getByRole("button", { name: "Done", exact: true }).click();
   const statusControls = page.getByRole("region", { name: "Walk status controls", exact: true });
   await expect(statusControls).toContainText("Live");
   await statusControls.getByRole("button", { name: "Complete walk", exact: true }).click();

@@ -4,9 +4,6 @@ import { reviewedEncounter } from "../lib/encounter-history";
 import { calendarDaysFromNow } from "../lib/calendar";
 
 import {
-  Ban,
-  DoorClosed,
-  Hand,
   AlertOctagon,
   ArrowLeft,
   ArrowRight,
@@ -19,6 +16,7 @@ import {
   ClipboardList,
   Clock3,
   History,
+  MapPin,
   MessageCircle,
   PencilLine,
   Phone,
@@ -60,10 +58,6 @@ type VisitInput = {
   followUpDate?: string;
   assignedTeamId?: string;
   residentId?: string;
-};
-
-const outcomeIcons: Record<Exclude<Outcome, "unvisited" | "do_not_visit">, typeof DoorClosed> = {
-  no_answer: DoorClosed, conversation: MessageCircle, follow_up: CalendarClock, declined: Hand, inaccessible: Ban,
 };
 
 const recordableOutcomes: Exclude<Outcome, "unvisited">[] = [
@@ -225,7 +219,7 @@ export function PropertyDrawer({
       <div className="drawer-handle" aria-hidden="true" />
       {onBack && <button type="button" className="drawer-people-return" disabled={action.busy} onClick={onBack} aria-label="Back to People"><ArrowLeft size={20} aria-hidden="true" /><span>People</span></button>}
       <div className="drawer-heading">
-        <div className="property-symbol" data-outcome={property.currentOutcome}><DoorClosed size={20} aria-hidden="true" /></div>
+        <div className="property-symbol"><MapPin size={19} /></div>
         <div className="drawer-address">
           <span className="status-label" data-outcome={property.currentOutcome}>{outcomeMeta[property.currentOutcome].label}</span>
           {editingAddress ? (
@@ -302,7 +296,6 @@ export function PropertyDrawer({
                   key={value}
                   className={outcome === value ? "active" : ""}
                   data-outcome={value}
-                  aria-label={outcomeMeta[value].short}
                   aria-pressed={outcome === value}
                   onClick={() => {
                     if (value === "no_answer") { saveNoAnswer(); return; }
@@ -310,9 +303,8 @@ export function PropertyDrawer({
                     if (value === "follow_up") setDetailsOpen(true);
                   }}
                 >
-                  {(() => { const Icon = outcomeIcons[value as keyof typeof outcomeIcons] ?? DoorClosed; return <i aria-hidden="true"><Icon size={18} /></i>; })()}
+                  <i />
                   <span>{outcomeMeta[value].short}</span>
-                  {value === "no_answer" && <small aria-hidden="true">Saves now</small>}
                 </button>
               ))}
             </div>
@@ -376,7 +368,7 @@ export function PropertyDrawer({
           </div>}
 
           <div className="drawer-actions">
-            {property.currentOutcome !== "do_not_visit" && <button className="text-danger" onClick={markDoNotVisit}><AlertOctagon size={14} /> Don’t knock here</button>}
+            {property.currentOutcome !== "do_not_visit" && <button className="text-danger" onClick={markDoNotVisit}><AlertOctagon size={14} /> Do not revisit</button>}
             <button className="button primary" onClick={saveVisit} disabled={!canSave}><Save size={16} /> Save visit</button>
           </div>
 

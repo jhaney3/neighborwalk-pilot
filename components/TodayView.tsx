@@ -8,7 +8,6 @@ import type { OutingParticipant, OutingResponse } from "../lib/outing-participan
 import { useAsyncAction } from "../lib/use-async-action";
 import { Badge, ListGroup, ListRow, ViewHeading } from "./ui";
 import { ConversationRow } from "./ConversationFeed";
-import { NeighborhoodShape, ProgressRing, StreetScene, avatarTone, neighborhoodProgress, outingTerritory } from "./visuals";
 import { communityConversations } from "../lib/conversations";
 
 function greetingFor(timezone: string, now = new Date()) {
@@ -47,9 +46,6 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
   const when = (event: OutreachEvent) => new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: event.timezone ?? timezone }).format(new Date(event.startsAt));
   const shownFollowUps = (due.length ? due : mine).slice(0, 3);
   const recentConversations = communityConversations(data, { limit: 3 });
-  const heroTerritory = outingTerritory(data, outing?.id);
-  const heroProgress = heroTerritory ? neighborhoodProgress(data, heroTerritory.id) : undefined;
-  const dueToday = due.length;
   const leaderAttention = canManage && (unowned.length > 0 || declined.length > 0 || waiting.length > 0 || Boolean(data.migrationIssues?.length));
 
   const invitationRows = (groups: typeof responseOutings) => groups.map(({ outing: invited, participant }) => {
@@ -85,31 +81,16 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
     <ViewHeading eyebrow={formatCalendarDate(today, { weekday: "long", month: "long", day: "numeric" })} title={`${greetingFor(timezone)}, ${name}`} />
 
     {outing
-      ? <section className={`home-hero${outing.status === "active" ? " is-live" : ""}`} aria-labelledby="home-next-walk">
-        {heroTerritory && <NeighborhoodShape territory={heroTerritory} data={data} size={220} tone="hero" className="home-hero-shape" />}
-        <div className="home-hero-copy">
-          <p className="home-hero-label">{outing.status === "active" ? <><i className="live-dot" aria-hidden="true" /> Happening now</> : "Your next walk"}</p>
-          <h2 id="home-next-walk">{outing.name}</h2>
-          <p className="home-hero-meta">{when(outing)}{outing.meetingPoint && <><br />{outing.meetingPoint}</>}</p>
-        </div>
-        <div className="home-hero-footer">
-          <button className="button hero-action" disabled={startAction.busy} onClick={() => resumable ? void startAction.run(() => onStart(outing.id, resumable.territoryId, resumable.targetId)) : onOuting(outing.id)}>{resumable ? "Resume walk" : "View walk"}</button>
-          {heroTerritory && heroProgress && heroProgress.total > 0 && <div className="home-hero-progress">
-            <ProgressRing value={heroProgress.touched} total={heroProgress.total} size={52} tone="hero" label={`${heroProgress.touched} of ${heroProgress.total} homes reached in ${heroTerritory.name}`} />
-            <span><strong>{heroProgress.touched} of {heroProgress.total} homes</strong><span className="home-hero-place">{heroTerritory.name}</span></span>
-          </div>}
-        </div>
+      ? <section className="home-hero" aria-labelledby="home-next-walk">
+        <p className="home-hero-label">{outing.status === "active" ? "Happening now" : "Your next walk"}</p>
+        <h2 id="home-next-walk">{outing.name}</h2>
+        <p className="home-hero-meta">{when(outing)}{outing.meetingPoint && <><br />{outing.meetingPoint}</>}</p>
+        <button className="button hero-action" disabled={startAction.busy} onClick={() => resumable ? void startAction.run(() => onStart(outing.id, resumable.territoryId, resumable.targetId)) : onOuting(outing.id)}>{resumable ? "Resume walk" : "View walk"}</button>
         {startAction.error && <p role="alert" className="inline-error">{startAction.error}</p>}
       </section>
-      : <section className="home-hero home-hero-empty" aria-labelledby="home-no-walk">
-        <StreetScene className="home-hero-street" />
-        <div className="home-hero-copy">
-          <p className="home-hero-label">No walks yet</p>
-          <h2 id="home-no-walk">{canManage ? "Where should your church walk next?" : "Your next walk will show up here."}</h2>
-          <p className="home-hero-meta">{canManage ? "Pick a neighborhood, a time and who’s coming." : "Your leader will invite you."}</p>
-        </div>
-        <div className="home-hero-footer"><button className="button hero-action" onClick={() => onOuting()}>{canManage ? "Plan a walk" : "See walks"}</button></div>
-      </section>}
+      : <ListGroup label="Walks">
+        <ListRow title="No walks planned yet" subtitle={canManage ? "Plan one when you’re ready." : "Your leader will invite you."} onClick={() => onOuting()} />
+      </ListGroup>}
 
     {unansweredResponseCount > 0 && <ListGroup label={<span id="home-invitations">Walk invitations</span>} className="home-invitations">{invitationRows(unansweredResponseOutings)}</ListGroup>}
     {answeredResponseCount > 0 && <section className={`home-replies${responseReviewOpen ? " is-open" : ""}`} aria-label="Saved walk responses">
@@ -118,14 +99,6 @@ export function TodayView({ data, activeVolunteerId, canManage, onFollowUps, onP
     </section>}
     {responseAction.error && <p role="alert" className="inline-error">{responseAction.error}</p>}
 
-    {shownFollowUps.length > 0 && <div className="home-people-strip" aria-hidden="true">
-      <span className="home-face-pile">{shownFollowUps.map((task) => {
-        const person = data.residents.find((resident) => resident.id === task.residentId);
-        const name = person?.name || "?";
-        return <span key={task.id} className={`avatar small ${avatarTone(person?.id ?? task.id)}`}>{name.slice(0, 1).toUpperCase()}</span>;
-      })}</span>
-      <span>{dueToday ? `${dueToday} ${dueToday === 1 ? "person is" : "people are"} waiting on you today` : "Coming up this week"}</span>
-    </div>}
     <ListGroup label="Follow up">
       {shownFollowUps.map((task) => {
         const person = data.residents.find((resident) => resident.id === task.residentId);

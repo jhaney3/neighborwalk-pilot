@@ -52,7 +52,6 @@ import {
 } from "../lib/domain";
 import { MapCanvas } from "./MapCanvas";
 import { Modal, useConfirm } from "./ui";
-import { avatarTone } from "./visuals";
 
 export type PeopleViewProps = {
   data: NeighborWalkData;
@@ -206,7 +205,7 @@ export function PeopleView({
           <label>Status<select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option><option value="all">Any status</option></select></label>
           <label>Sort by<select aria-label="Sort people" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}><option value="next_step">Follow-up date</option><option value="recent">Recently updated</option><option value="name">Name</option></select></label>
         </div></details>
-        {!embedded && <button className="button primary people-new-button" onClick={() => setEditor("new")}><Plus size={15} /> Add person</button>}
+        <button className="button primary people-new-button" onClick={() => setEditor("new")}><Plus size={15} /> Add person</button>
       </div>
 
       <div className={`people-workbench${selectedId ? " has-profile" : ""}`}>
@@ -221,9 +220,9 @@ export function PeopleView({
               const isSelected = selected?.id === resident.id;
               return (
                 <button aria-pressed={isSelected} className={`person-list-card${isSelected ? " active" : ""}`} key={resident.id} onClick={() => setSelectedId(resident.id)}>
-                  <span className={`person-list-avatar avatar ${avatarTone(resident.id)}`} aria-hidden="true">{personInitials(resident.name)}</span>
+                  <span className="person-list-avatar" aria-hidden="true">{personInitials(resident.name)}</span>
                   <span className="person-list-copy">
-                    <span className="person-list-heading"><span><strong>{resident.name || "Name not provided"}</strong>{resident.status !== "active" && <em className={`person-status-dot ${resident.status}`} title={resident.status} aria-label={resident.status} />}</span>{nextFollowUp && <span className={`person-next-date ${nextStepState}`}><Clock3 size={11} /> {nextStepState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "short", day: "numeric" })}</span>}</span>
+                    <span className="person-list-heading"><span><strong>{resident.name || "Name not provided"}</strong><em className={`person-status-dot ${resident.status}`} title={resident.status} aria-label={resident.status} /></span>{nextFollowUp && <span className={`person-next-date ${nextStepState}`}><Clock3 size={11} /> {nextStepState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "short", day: "numeric" })}</span>}</span>
                     <span className="person-list-address"><MapPin size={12} /> {property?.address ?? "No address provided"}</span>
                     {isSelected && <span className="person-list-selected-detail"><span><UserRound size={12} /> {ownerRecord?.name ?? "Unknown owner"}</span><p>{nextFollowUp?.note || "No open follow-up planned."}</p></span>}
                   </span>
@@ -335,7 +334,7 @@ function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, o
       <header className="person-profile-header">
         <button className="person-profile-back" onClick={onBack}><ArrowLeft size={16} /> People</button>
         <div className="person-profile-identity">
-          <span className={`person-profile-avatar avatar ${avatarTone(resident.id)}`} aria-hidden="true">{personInitials(resident.name)}</span>
+          <span className="person-profile-avatar" aria-hidden="true">{personInitials(resident.name)}</span>
           <div className="person-profile-heading-copy"><div className="person-profile-heading-line"><h2>{resident.name || "Name not provided"}</h2>{resident.status !== "active" && <span className={`person-profile-status ${resident.status}`}>{resident.status === "paused" ? "Paused" : "Archived"}</span>}</div><small className="person-privacy-summary"><LockKeyhole size={12} /> {accessSummary}</small></div>
           {canEdit && <button className="button quiet small person-profile-edit" aria-label="Edit profile" onClick={onEdit}><Edit3 size={14} /><span>Edit profile</span></button>}
         </div>

@@ -52,13 +52,14 @@ export function PeopleWorkspace({ peopleProps, followUpProps, initialPanel = "fo
   };
 
   return <section hidden={hidden} className={`content-view people-workspace${panel === "directory" && selectedResidentId ? " has-selected-person" : ""}`}>
-    <ViewHeading title="People" aside={<button type="button" className="button primary icon-button" aria-label="Add person" onClick={() => { setConversationsOpen(false); setSelectedResidentId(null); setAddPersonRequested(true); setPanel("directory"); }}><Plus size={20} aria-hidden="true" /></button>} />
+    <ViewHeading title="People" />
     <div className="people-workspace-switcher">
       <div className="people-workspace-tabs" role="tablist" tabIndex={-1} aria-orientation="horizontal" aria-label="People views" onKeyDown={(event) => navigateTabs(event, selectPanel)}>
         <button id="people-followups-tab" type="button" role="tab" aria-controls="people-workspace-panel" aria-selected={!conversationsOpen && panel === "followups"} tabIndex={!conversationsOpen && panel === "followups" ? 0 : -1} className={!conversationsOpen && panel === "followups" ? "active" : ""} onClick={() => selectPanel(0)} onFocus={() => selectPanel(0, false)}><ClipboardCheck size={16} /> Follow-ups</button>
         <button id="people-directory-tab" type="button" role="tab" aria-controls="people-workspace-panel" aria-selected={!conversationsOpen && panel === "directory"} tabIndex={!conversationsOpen && panel === "directory" ? 0 : -1} className={!conversationsOpen && panel === "directory" ? "active" : ""} onClick={() => selectPanel(1)} onFocus={() => selectPanel(1, false)}><Users size={16} /> Everyone</button>
         <button id="people-conversations-tab" type="button" role="tab" aria-controls="people-workspace-panel" aria-selected={conversationsOpen} tabIndex={conversationsOpen ? 0 : -1} className={conversationsOpen ? "active" : ""} onClick={() => selectPanel(2)}><MessageCircle size={16} aria-hidden="true" /> Conversations</button>
       </div>
+      {!conversationsOpen && panel === "followups" && <button type="button" className="button primary people-workspace-add" onClick={() => { setSelectedResidentId(null); setAddPersonRequested(true); setPanel("directory"); }}><Plus size={15} /> Add person</button>}
     </div>
     <div id="people-workspace-panel" role="tabpanel" aria-labelledby={conversationsOpen ? "people-conversations-tab" : panel === "followups" ? "people-followups-tab" : "people-directory-tab"} className="people-workspace-panel">
       {conversationsOpen
