@@ -16,6 +16,7 @@ import { addRemotePushTapListener, REMOTE_PUSH_REFRESH_EVENT } from "./push-noti
 import "maplibre-gl/dist/maplibre-gl.css";
 import "../app/styles/foundation.css";
 import "../app/styles/primitives.css";
+import "../app/styles/visuals.css";
 import "../app/styles/map.css";
 import "../app/styles/property.css";
 import "../app/styles/views.css";
@@ -30,8 +31,11 @@ import "../app/styles/readiness.css";
 import "../app/styles/home.css";
 import "../app/styles/shell.css";
 import "../app/styles/conversations.css";
+import "../app/styles/walks.css";
+import "../app/styles/fieldwork.css";
 import "../app/styles/walk-setup.css";
 import "../app/styles/walk-target-planner.css";
+import "../app/styles/polish.css";
 import "./native.css";
 
 installMobileColorTheme();

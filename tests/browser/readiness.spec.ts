@@ -106,7 +106,7 @@ test("a reviewed person move follows open tasks and records its reason in histor
   let dialog = page.getByRole("dialog");
   const label = prefix + " moving person";
   await dialog.getByRole("textbox", { name: "Name", exact: true }).fill(label);
-  const place = dialog.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true });
+  const place = dialog.getByRole("combobox", { name: "Home or place to meet (optional)", exact: true });
   const options = await place.locator("option").evaluateAll((items) => items.map((item) => (item as HTMLOptionElement).value).filter(Boolean));
   expect(options.length).toBeGreaterThan(1);
   await place.selectOption(options[0]);
@@ -118,7 +118,7 @@ test("a reviewed person move follows open tasks and records its reason in histor
   await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
   await page.getByRole("button", { name: "Edit profile", exact: true }).click();
   dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true }).selectOption(options[1]);
+  await dialog.getByRole("combobox", { name: "Home or place to meet (optional)", exact: true }).selectOption(options[1]);
   await expect(dialog.getByText(/1 open next step follows/)).toBeVisible();
   const save = dialog.getByRole("button", { name: "Save person", exact: true });
   await expect(save).toBeDisabled();
@@ -164,7 +164,7 @@ test("a reviewed encounter correction survives a lost response and preserves the
     "select jsonb_build_object('id',e.id,'personId',p.id) from public.outreach_encounters e join public.discipleship_people p on p.id=e.person_id and p.church_id=e.church_id where p.name='" + label + "';"], { encoding: "utf8" }).trim());
   if (!/^[a-zA-Z0-9_-]+$/.test(fixture.id) || !/^[a-zA-Z0-9_-]+$/.test(fixture.personId)) throw new Error("Invalid fixture identifiers");
   await page.goto(origin + "/app/people/" + fixture.personId);
-  await expect(page.locator(".person-context-details").getByText(/^Last contact /)).toBeVisible();
+  await expect(page.locator(".person-last-contact").getByText(/^Last contact /)).toBeVisible();
   await page.goto(origin + "/app/data");
   await page.getByRole("button", { name: /^Correct records/ }).click();
   await page.getByRole("button", { name: /^Correct an encounter/ }).click();
@@ -226,7 +226,7 @@ test("reviewed duplicate people and locations retain history and resolve origina
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("textbox", { name: "Name", exact: true }).fill(label);
     await dialog.getByRole("textbox", { name: "Phone (optional)", exact: true }).fill(phone);
-    await dialog.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true }).selectOption(firstLocation);
+    await dialog.getByRole("combobox", { name: "Home or place to meet (optional)", exact: true }).selectOption(firstLocation);
     await dialog.getByRole("button", { name: "Save person", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL(/\/app\/people\/[^/]+$/);
@@ -274,7 +274,7 @@ test("reviewed duplicate people and locations retain history and resolve origina
   await page.getByRole("button", { name: "Edit profile", exact: true }).click();
   const editor = page.getByRole("dialog");
   await expect(editor.getByRole("textbox", { name: "Phone (optional)", exact: true })).toHaveValue("555-0102");
-  await expect(editor.getByRole("combobox", { name: "Home or meeting location (optional)", exact: true })).toHaveValue(secondLocation);
+  await expect(editor.getByRole("combobox", { name: "Home or place to meet (optional)", exact: true })).toHaveValue(secondLocation);
   await expect(editor.locator(`option[value="${firstLocation}"]`)).toHaveCount(0);
   await editor.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.goto(origin + "/app/followups?person=" + ids[0]);
@@ -325,7 +325,7 @@ test("guide words reach fieldwork with keyboard-accessible steps and location ta
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   }
   await page.getByRole("button", { name: "Set as favorite", exact: true }).click();
-  await expect(page.getByText(/Favorite guide saved\./)).toBeVisible();
+  await expect(page.getByText(/Favorite saved\./)).toBeVisible();
   await page.goto(origin + "/app/locations/" + locationId);
   const drawer = page.getByRole("dialog");
   const record = drawer.getByRole("tab", { name: "Record visit", exact: true });
@@ -365,7 +365,7 @@ test("guide writes survive a lost response and reject stale editors while archiv
   await dialog.getByRole("textbox", { name: "Step title", exact: true }).fill("Fictional guide journal step");
   await dialog.getByRole("textbox", { name: /Words or testimony notes/ }).fill("Fictional original words");
   await dialog.getByRole("button", { name: "Save private guide", exact: true }).click();
-  await expect(dialog.getByText(/This submission is preserved exactly/)).toBeVisible();
+  await expect(dialog.getByText(/This change hasn’t finished sending/)).toBeVisible();
   await expect(dialog.getByRole("textbox", { name: "Guide name", exact: true })).toBeDisabled();
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   expect(snapshot()).toMatchObject({ count: 1, version: 1, archived: false, receipts: 1 });
@@ -595,7 +595,7 @@ test("actual session revocation and account switching preserve authored work wit
     await setDisconnected(context, false);
     await page.getByRole("button", { name: "Sign out or use a different account", exact: true }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Sign out", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Pick up where care left off." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
     await signIn(page, "leader");
     const otherAccount = await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-auth:sandbox:http://127.0.0.1:54321")!).user.id as string);
     expect(otherAccount).not.toBe(session.user);
@@ -607,7 +607,7 @@ test("actual session revocation and account switching preserve authored work wit
     await expect(page.getByText(prefix + " revoked /one", { exact: false })).toHaveCount(0);
     await page.goto(origin + "/app/settings");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Pick up where care left off." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
     await signIn(page, "volunteer");
     await expect.poll(() => queued(page, session.user), { timeout: 60_000 }).toBe(0);
     expect(recorded(prefix + " revoked")).toBe(1);
@@ -678,11 +678,11 @@ test("cross-tab session removal hides offline records without clearing authored 
   await encounter(page, prefix + " signout /one");
   expect(await queued(page)).toBe(1);
   await second.evaluate(() => localStorage.removeItem("neighborwalk-auth:sandbox:http://127.0.0.1:54321"));
-  await expect(page.getByRole("heading", { name: "Pick up where care left off." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
   expect(await queued(page)).toBe(1);
   expect(recorded(prefix + " signout")).toBe(0);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Pick up where care left off." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
 });
 
@@ -738,17 +738,15 @@ test("a reassigned next step requires the responsible volunteer to accept before
     await isolate(other);
     const volunteer = await other.newPage(); await signIn(volunteer, "volunteer");
     await volunteer.goto(origin + "/app/followups/" + id);
-    await expect(volunteer.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
-    await expect(volunteer.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
+    // A handed-over follow-up can be declined; the owner's own "Mark done" accepts it.
+    const cardActions = volunteer.locator(".followup-actions-outcome");
     await volunteer.getByRole("button", { name: "Decline", exact: true }).click();
     await expect.poll(() => taskState().acceptance).toBe("declined");
-    await expect(volunteer.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
-    await volunteer.getByRole("button", { name: "Accept", exact: true }).click();
-    await expect.poll(() => taskState().acceptance).toBe("accepted");
-    await volunteer.getByRole("button", { name: "Complete", exact: true }).click();
+    await cardActions.getByRole("button", { name: "Mark done", exact: true }).click();
     await volunteer.getByRole("dialog").getByRole("textbox", { name: "What happened? (optional)" }).fill("Fictional follow-through completed.");
     await volunteer.getByRole("dialog").getByRole("button", { name: "Mark done", exact: true }).click();
     await expect.poll(() => taskState().status).toBe("completed");
-    await expect(volunteer.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
+    expect(taskState().acceptance).toBe("accepted");
+    await expect(cardActions.getByRole("button", { name: "Mark done", exact: true })).toHaveCount(0);
   } finally { await other.close(); }
 });

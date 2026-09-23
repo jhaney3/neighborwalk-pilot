@@ -430,3 +430,10 @@
 
 .person-last-contact { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 12px 16px 0; color: var(--label-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .person-last-contact small { flex-basis: 100%; display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-caption); }
+
+/* Follow-ups toolbar: one search field with an icon and a compact filter chip */
+.followup-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.followup-search-field { position: relative; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border-radius: var(--radius-sm); color: var(--label-2); background: var(--fill-3); }
+.followup-search-field input { flex: 1; min-width: 0; padding: 0; background: transparent; }
+.followup-filter-disclosure > summary { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: var(--radius-sm); color: var(--tint); background: var(--fill-3); font-size: var(--fs-footnote); font-weight: 600; }
+.followup-filter-disclosure > summary span:not(.sr-only) { color: var(--label-2); font-weight: 500; }

@@ -2,6 +2,7 @@
    adaptations after them, and the shared native-control treatment last. */
 @import "./styles/foundation.css";
 @import "./styles/primitives.css";
+@import "./styles/visuals.css";
 @import "./styles/map.css";
 @import "./styles/property.css";
 @import "./styles/views.css";
@@ -16,9 +17,12 @@
 @import "./styles/home.css";
 @import "./styles/shell.css";
 @import "./styles/conversations.css";
+@import "./styles/walks.css";
+@import "./styles/fieldwork.css";
 @import "./styles/website.css";
 @import "./styles/walk-setup.css";
 @import "./styles/walk-target-planner.css";
+@import "./styles/polish.css";
 
 .sandbox-banner {
   position: fixed;

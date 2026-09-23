@@ -26,9 +26,14 @@ type FollowUpChange =
   | { action: "rescheduled"; dueAt: string; note?: string }
   | { action: "completed" | "cancelled"; note?: string };
 
-export function changeFollowUp(task: FollowUp, change: FollowUpChange, actorId: string, now: string): FollowUp {
-  if (task.status !== "scheduled") return task;
-  if (change.action !== "cancelled" && task.acceptance !== "accepted") throw new Error("The responsible person must accept this task before it can be completed or rescheduled.");
+export function changeFollowUp(original: FollowUp, change: FollowUpChange, actorId: string, now: string): FollowUp {
+  if (original.status !== "scheduled") return original;
+  let task = original;
+  if (change.action !== "cancelled" && task.acceptance !== "accepted") {
+    // Acting on your own follow-up is acceptance; there is no separate step.
+    if (task.assignedVolunteerId !== actorId) throw new Error("The responsible person must accept this follow-up before it can be completed or rescheduled.");
+    task = { ...task, acceptance: "accepted", history: [...task.history, activity("accepted", actorId, now)] };
+  }
   const dueAt = change.action === "rescheduled" ? change.dueAt : undefined;
   return {
     ...task,

@@ -55,7 +55,8 @@ async function exerciseNavigation(page: Page, navigation: Locator) {
   await expect(navigation.getByRole("button")).toHaveCount(destinations.length);
 
   for (const destination of destinations) {
-    const button = navigation.getByRole("button", { name: destination, exact: true });
+    // Destinations may carry an attention count in their accessible name.
+    const button = navigation.getByRole("button", { name: new RegExp(`^${destination}`) });
     await button.click();
     await expect(button).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", {
@@ -202,7 +203,7 @@ test("the same four primary destinations work on desktop and mobile", async ({ p
 test("People opens to follow-ups, switches to the directory, and keeps task links in People", async ({ page }) => {
   await openDemo(page);
   const navigation = page.getByRole("navigation", { name: "Main sections" });
-  await navigation.getByRole("button", { name: "People", exact: true }).click();
+  await navigation.getByRole("button", { name: /^People/ }).click();
 
   const needsFollowUp = page.getByRole("tab", { name: "Follow-ups", exact: true });
   const allPeople = page.getByRole("tab", { name: "Everyone", exact: true });
@@ -216,13 +217,13 @@ test("People opens to follow-ups, switches to the directory, and keeps task link
   await expect(needsFollowUp).toBeFocused();
   await expect(needsFollowUp).toHaveAttribute("aria-selected", "true");
   await page.locator(".followup-filter-disclosure > summary").click();
-  await expect(page.getByRole("combobox", { name: "Responsibility", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Whose", exact: true })).toBeVisible();
 
   const firstTask = page.locator(".followup-card").first();
   await firstTask.getByRole("button", { name: "More actions", exact: true }).click();
   await firstTask.getByRole("button", { name: "Open follow-up", exact: true }).click();
   await expect(page.getByText(/^This is the task from your link\./)).toBeVisible();
-  await expect(navigation.getByRole("button", { name: "People", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(navigation.getByRole("button", { name: /^People/ })).toHaveAttribute("aria-current", "page");
   await page.getByRole("button", { name: "Open my task list", exact: true }).click();
   await expect(needsFollowUp).toHaveAttribute("aria-selected", "true");
 
@@ -246,7 +247,7 @@ test("People opens to follow-ups, switches to the directory, and keeps task link
   await expect(page.getByRole("combobox", { name: "Status" })).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator(".person-profile").getByRole("button", { name: "People", exact: true })).toBeVisible();
+  await expect(page.locator(".person-profile").getByRole("button", { name: /^People/ })).toBeVisible();
   await expect(page.getByRole("searchbox", { name: "Search people", exact: true })).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
@@ -297,8 +298,8 @@ test("map-first walk setup resumes assigned drafts and keeps leader responses ou
   await expect(dialog.getByRole("heading", { name: "Review the plan", exact: true })).toBeVisible();
   await expect(dialog.getByText(walkName, { exact: true })).toBeVisible();
   await expect(dialog.getByText(parentName, { exact: true }).first()).toBeVisible();
-  await expect(dialog.locator(".walk-review-list")).toContainText(/\d+ residential properties/);
-  const reviewedPlan = dialog.getByRole("region", { name: "Reviewed target plan", exact: true });
+  await expect(dialog.locator(".walk-review-list")).toContainText(/\d+ homes/);
+  const reviewedPlan = dialog.getByRole("region", { name: "Routes", exact: true });
   await expect(reviewedPlan).toContainText(parentName);
   await expect(reviewedPlan).toContainText("Staff at check-in");
   await expect(dialog.locator(".walk-review-list")).toContainText("7 people");
@@ -422,11 +423,6 @@ test("recording no answer never asks for a person", async ({ page }) => {
   await drawer.getByRole("button", { name: "Add a person or note", exact: true }).click();
   await expect(drawer.getByRole("combobox", { name: /^Person/ })).toBeVisible();
   await drawer.locator(".outcome-options").getByRole("button", { name: "No answer", exact: true }).click();
-  await expect(drawer.getByRole("combobox", { name: /^Person/ })).toHaveCount(0);
-  await expect(drawer.getByRole("textbox")).toHaveCount(0);
-  const save = drawer.getByRole("button", { name: "Save visit", exact: true });
-  await expect(save).toBeEnabled();
-  await save.click();
   await expect(drawer).toBeHidden();
   await expect(page.getByText("No answer saved", { exact: true })).toBeVisible();
 
@@ -449,16 +445,16 @@ test("recording no answer never asks for a person", async ({ page }) => {
 
 test("a person’s follow-up can be completed in their profile", async ({ page }) => {
   await openDemo(page);
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "People", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^People/ }).click();
   await page.getByRole("button", { name: "View profile", exact: true }).first().click();
   const followUps = page.getByRole("region", { name: "Tasha", exact: true });
-  await followUps.getByRole("button", { name: "Complete", exact: true }).click();
+  await followUps.locator(".followup-actions-outcome").getByRole("button", { name: "Mark done", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Mark done", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.getByRole("heading", { name: "Tasha", exact: true })).toBeVisible();
-  await expect(followUps.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
+  await expect(followUps.locator(".followup-actions-outcome").getByRole("button", { name: "Mark done", exact: true })).toHaveCount(0);
   await page.reload();
-  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: "People", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^People/ }).click();
   await expect(page.getByRole("button", { name: "View profile", exact: true })).toHaveCount(0);
 });
 

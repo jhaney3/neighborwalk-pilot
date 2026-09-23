@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { MapPin, Plus, Printer } from "lucide-react";
+import { DoorClosed, Plus, Printer } from "lucide-react";
 import { outcomeMeta, type NeighborWalkData } from "../lib/domain";
 import type { ParcelFeature, ParcelFeatureCollection } from "../lib/parcels";
 import { buildAddressWorksheet, targetAddressEntries } from "../lib/target-address-list";
@@ -48,7 +48,7 @@ export function AddressList({ data, onOpen, onOpenParcel, onAdd, onTerritoryChan
     <ol className="address-rows">{entries.map((entry) => {
       const outcome = entry.kind === "saved" ? entry.property.currentOutcome : "unvisited";
       const unavailable = entry.kind === "parcel" && !entry.parcel.properties.situsAddress;
-      return <li key={entry.key}><button type="button" disabled={unavailable} onClick={() => entry.kind === "saved" ? onOpen(entry.property.id) : onOpenParcel?.(entry.parcel)}>{printContext && <span className="address-list-sequence">{worksheetRows.get(entry.key)?.sequenceLabel}</span>}<MapPin size={20} /><span><strong>{entry.address}{entry.unit ? " · " + entry.unit : ""}</strong><small>{targetName ?? (entry.kind === "saved" ? data.territories.find((item) => item.id === entry.property.territoryId)?.name : undefined) ?? "No neighborhood"}</small></span><strong className={outcome === "do_not_visit" ? "restriction-label" : ""} aria-label={outcomeMeta[outcome].label}>{outcomeMeta[outcome].short}</strong></button></li>;
+      return <li key={entry.key}><button type="button" disabled={unavailable} onClick={() => entry.kind === "saved" ? onOpen(entry.property.id) : onOpenParcel?.(entry.parcel)}>{printContext && <span className="address-list-sequence">{worksheetRows.get(entry.key)?.sequenceLabel}</span>}<span className="address-list-door" data-outcome={outcome} aria-hidden="true"><DoorClosed size={18} /></span><span><strong>{entry.address}{entry.unit ? " · " + entry.unit : ""}</strong><small>{targetName ?? (entry.kind === "saved" ? data.territories.find((item) => item.id === entry.property.territoryId)?.name : undefined) ?? "No neighborhood"}</small></span><strong className={`address-list-outcome${outcome === "do_not_visit" ? " restriction-label" : ""}`} data-outcome={outcome} aria-label={outcomeMeta[outcome].label}>{outcomeMeta[outcome].short}</strong></button></li>;
     })}</ol>
     {!entries.length && <p>{targetName ? "No homes on this route match." : "No saved addresses match. Add one below."}</p>}
     {adding && <Modal title="Add an address" description="Just the street address is enough." onClose={action.busy ? () => undefined : () => setAdding(false)}><form className="form-stack" onSubmit={(e) => { e.preventDefault(); void action.run(() => onAdd({ address: address.trim(), unit: unit.trim() || undefined, territoryId: territory || null }), () => { setAddress(""); setUnit(""); setAdding(false); }); }}>

@@ -4,6 +4,9 @@ import { reviewedEncounter } from "../lib/encounter-history";
 import { calendarDaysFromNow } from "../lib/calendar";
 
 import {
+  Ban,
+  DoorClosed,
+  Hand,
   AlertOctagon,
   ArrowLeft,
   ArrowRight,
@@ -16,7 +19,6 @@ import {
   ClipboardList,
   Clock3,
   History,
-  MapPin,
   MessageCircle,
   PencilLine,
   Phone,
@@ -58,6 +60,10 @@ type VisitInput = {
   followUpDate?: string;
   assignedTeamId?: string;
   residentId?: string;
+};
+
+const outcomeIcons: Record<Exclude<Outcome, "unvisited" | "do_not_visit">, typeof DoorClosed> = {
+  no_answer: DoorClosed, conversation: MessageCircle, follow_up: CalendarClock, declined: Hand, inaccessible: Ban,
 };
 
 const recordableOutcomes: Exclude<Outcome, "unvisited">[] = [
@@ -134,7 +140,9 @@ export function PropertyDrawer({
   const [guidedPersonEntry, setGuidedPersonEntry] = useState(false);
   const [visitPersonEntry, setVisitPersonEntry] = useState(false);
   const [workflowNotice, setWorkflowNotice] = useState("");
-  const [outcome, setOutcome] = useState<Exclude<Outcome, "unvisited">>("conversation");
+  // No outcome is preselected; "No answer" saves in one tap.
+  const [outcome, setOutcome] = useState<Exclude<Outcome, "unvisited"> | null>(startGuided && guideSteps.length ? "conversation" : null);
+  const choice = outcome ?? "conversation";
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [note, setNote] = useState("");
   const [followUpDate, setFollowUpDate] = useState(dateInputValue(dueDateFromNow(data.church.defaultFollowUpDays, data.church.timezone)));
@@ -150,7 +158,8 @@ export function PropertyDrawer({
     && contactRestricted(data, selectedResident?.id, "visit", property.id);
 
   const noteRemaining = data.church.noteCharacterLimit - note.length;
-  const canSave = !action.busy && property.currentOutcome !== "do_not_visit" && address.trim().length > 2
+  const canRecord = !action.busy && property.currentOutcome !== "do_not_visit" && address.trim().length > 2;
+  const canSave = canRecord && outcome !== null
     && noteRemaining >= 0
     && !followUpRestricted
     && (outcome !== "follow_up" || Boolean(followUpDate));
@@ -158,6 +167,7 @@ export function PropertyDrawer({
   const volunteerNames = useMemo(() => new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer.name])), [data.volunteers]);
 
   const beginGuide = () => {
+    setOutcome((current) => current ?? "conversation");
     setGuideIndex(0);
     setWorkflowNotice("");
     setWorkflowStage("guide");
@@ -185,8 +195,17 @@ export function PropertyDrawer({
     setTab("record");
   };
 
+  const saveNoAnswer = () => {
+    if (!canRecord) return;
+    setOutcome("no_answer");
+    void action.run(async () => {
+      if (address.trim() !== property.address || unit.trim() !== (property.unit ?? "")) await onUpdateProperty(property.id, { address, unit });
+      await onRecordVisit({ propertyId: property.id, outcome: "no_answer" });
+    }, onClose);
+  };
+
   const saveVisit = () => {
-    if (!canSave) return;
+    if (!canSave || !outcome) return;
     void action.run(async () => {
       if (address.trim() !== property.address || unit.trim() !== (property.unit ?? "")) await onUpdateProperty(property.id, { address, unit });
       await onRecordVisit({ propertyId: property.id, outcome, objectiveNote: outcome === "no_answer" ? undefined : note,
@@ -206,7 +225,7 @@ export function PropertyDrawer({
       <div className="drawer-handle" aria-hidden="true" />
       {onBack && <button type="button" className="drawer-people-return" disabled={action.busy} onClick={onBack} aria-label="Back to People"><ArrowLeft size={20} aria-hidden="true" /><span>People</span></button>}
       <div className="drawer-heading">
-        <div className="property-symbol"><MapPin size={19} /></div>
+        <div className="property-symbol" data-outcome={property.currentOutcome}><DoorClosed size={20} aria-hidden="true" /></div>
         <div className="drawer-address">
           <span className="status-label" data-outcome={property.currentOutcome}>{outcomeMeta[property.currentOutcome].label}</span>
           {editingAddress ? (
@@ -283,25 +302,24 @@ export function PropertyDrawer({
                   key={value}
                   className={outcome === value ? "active" : ""}
                   data-outcome={value}
+                  aria-label={outcomeMeta[value].short}
                   aria-pressed={outcome === value}
                   onClick={() => {
+                    if (value === "no_answer") { saveNoAnswer(); return; }
                     setOutcome(value);
-                    if (value === "no_answer") {
-                      setNote("");
-                      setLinkedResidentId("");
-                      setDetailsOpen(false);
-                    } else if (value === "follow_up") setDetailsOpen(true);
+                    if (value === "follow_up") setDetailsOpen(true);
                   }}
                 >
-                  <i />
+                  {(() => { const Icon = outcomeIcons[value as keyof typeof outcomeIcons] ?? DoorClosed; return <i aria-hidden="true"><Icon size={18} /></i>; })()}
                   <span>{outcomeMeta[value].short}</span>
+                  {value === "no_answer" && <small aria-hidden="true">Saves now</small>}
                 </button>
               ))}
             </div>
-            <p>{outcomeMeta[outcome].description}</p>
+            <p>{outcome ? outcomeMeta[outcome].description : "Tap No answer to save it right away."}</p>
           </fieldset>
 
-          {guideSteps.length > 0 && ["conversation", "follow_up"].includes(outcome) && (
+          {guideSteps.length > 0 && ["conversation", "follow_up"].includes(choice) && (
             <button className="guided-entry-card" type="button" onClick={beginGuide}>
               <span><BookOpenText size={17} /></span>
               <span><strong>Need a prompt?</strong><small>{conversationGuideContext ? `${conversationGuideContext} · ` : ""}Open {conversationGuide?.title ?? "your favorite guide"} at step one.</small></span>
@@ -309,10 +327,10 @@ export function PropertyDrawer({
             </button>
           )}
 
-          {outcome !== "no_answer" && outcome !== "follow_up" && <button type="button" className="visit-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>{detailsOpen ? "Hide details" : outcome === "conversation" ? "Add a person or note" : "Add a note"}<ChevronDown size={15} /></button>}
+          {choice !== "no_answer" && choice !== "follow_up" && <button type="button" className="visit-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>{detailsOpen ? "Hide details" : choice === "conversation" ? "Add a person or note" : "Add a note"}<ChevronDown size={15} /></button>}
 
-          {outcome !== "no_answer" && (detailsOpen || outcome === "follow_up") && <div className="visit-optional-details">
-            {["conversation", "follow_up"].includes(outcome) && <>
+          {choice !== "no_answer" && (detailsOpen || choice === "follow_up") && <div className="visit-optional-details">
+            {["conversation", "follow_up"].includes(choice) && <>
               <label className="form-field">
                 <span>Person <small>Optional</small></span>
                 <div className="select-wrap"><select value={linkedResidentId} onChange={(event) => {
@@ -328,7 +346,7 @@ export function PropertyDrawer({
             </>}
 
             <label className="form-field">
-              <span>{outcome === "follow_up" ? "What should happen next?" : "Note"} <small>Optional</small></span>
+              <span>{choice === "follow_up" ? "What should happen next?" : "Note"} <small>Optional</small></span>
               <textarea
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
@@ -358,7 +376,7 @@ export function PropertyDrawer({
           </div>}
 
           <div className="drawer-actions">
-            {property.currentOutcome !== "do_not_visit" && <button className="text-danger" onClick={markDoNotVisit}><AlertOctagon size={14} /> Do not revisit</button>}
+            {property.currentOutcome !== "do_not_visit" && <button className="text-danger" onClick={markDoNotVisit}><AlertOctagon size={14} /> Don’t knock here</button>}
             <button className="button primary" onClick={saveVisit} disabled={!canSave}><Save size={16} /> Save visit</button>
           </div>
 

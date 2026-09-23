@@ -1,0 +1,72 @@
+/* Final screen-level refinements over the legacy feature styles. Loaded last. */
+
+/* Follow-ups toolbar: search with an inline icon, filters as a compact chip */
+.list-toolbar.followup-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-bottom: 14px; }
+.list-toolbar.followup-toolbar > .followup-search-field { min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 44px; margin: 0; padding: 0 12px; border-radius: var(--radius-sm); color: var(--label-2); background: var(--fill-3); }
+.list-toolbar.followup-toolbar > .followup-search-field input { flex: 1; min-width: 0; min-height: 44px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.list-toolbar.followup-toolbar .followup-filter-disclosure { position: relative; }
+.list-toolbar.followup-toolbar .followup-filter-disclosure > summary { min-height: 44px; margin: 0; }
+
+/* Follow-up cards: a compact date chip and quieter chrome */
+.followup-card .followup-date strong { font-size: 22px; }
+.followup-card .followup-date { min-width: 48px; padding: 6px 8px; border-radius: 12px; background: var(--bg-grouped); }
+.followup-card.overdue .followup-date { background: var(--red-soft); }
+.followup-person-group-header h2 { font-family: var(--font-display); font-size: var(--fs-title3); font-weight: 600; }
+.followup-person-group-header .avatar { width: 44px; height: 44px; font-size: var(--fs-subhead); }
+.followup-actions-outcome .button.primary { min-height: 44px; }
+
+/* Person profile: a contact-card header */
+.person-profile-avatar.avatar { width: 64px; height: 64px; font-size: var(--fs-title3); }
+.person-profile-heading-line h2 { font-family: var(--font-display); font-size: var(--fs-title1); line-height: 1.15; font-weight: 600; }
+
+/* People directory rows */
+.person-list-card .person-list-avatar.avatar { width: 44px; height: 44px; font-size: var(--fs-subhead); }
+.person-list-heading strong { font-size: var(--fs-body); font-weight: 600; }
+
+/* Contact-card profile header: centered identity, action tiles */
+.person-profile-header { text-align: center; }
+.person-profile-header .person-profile-back { justify-self: start; min-height: 44px; margin-left: -8px; padding: 0 8px; border-radius: 0; color: var(--tint); background: transparent; font-size: var(--fs-body); font-weight: 400; }
+.person-profile-identity { position: relative; display: grid; grid-template-columns: 1fr; justify-items: center; gap: 10px; }
+.person-profile-identity .person-profile-edit { position: absolute; top: 0; right: 0; }
+.person-profile-heading-copy { display: grid; justify-items: center; gap: 4px; }
+.person-profile-heading-line { justify-content: center; }
+.person-profile-contact { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-top: 14px; }
+.person-profile-contact > :is(a, button) { min-width: 0; display: grid; justify-items: center; gap: 4px; padding: 12px 8px; border-radius: 16px; color: var(--tint); background: var(--bg-grouped); text-align: center; text-decoration: none; }
+.person-profile-contact > :is(a, button) > svg { width: 20px; height: 20px; }
+.person-profile-contact > :is(a, button) span { min-width: 0; max-width: 100%; display: grid; }
+.person-profile-contact small { color: var(--label-2); font-size: var(--fs-caption); }
+.person-profile-contact strong { overflow: hidden; color: var(--label); font-size: var(--fs-footnote); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.list-toolbar.followup-toolbar .followup-filter-disclosure { width: auto; min-width: 0; }
+.list-toolbar.followup-toolbar .followup-filter-fields { position: absolute; z-index: 20; right: 0; width: min(320px, calc(100vw - 32px)); grid-template-columns: minmax(0, 1fr); box-shadow: var(--shadow-lg); }
+
+/* Brand glyph: the porch light is always on */
+.brand-glyph-light { fill: var(--accent); }
+
+/* Sign in: an evening street over the sign-in card */
+.auth-shell:has(.auth-welcome) { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; padding: 0 0 calc(var(--bottom-inset) + 24px); }
+.auth-welcome { position: relative; overflow: hidden; min-height: calc(var(--top-inset) + 290px); padding: calc(var(--top-inset) + 28px) 24px 0; color: var(--on-hero); background: linear-gradient(180deg, color-mix(in srgb, var(--hero-bg) 70%, #0b1a12) 0%, var(--hero-bg) 70%); }
+.auth-welcome-copy { position: relative; z-index: 1; display: grid; gap: 14px; max-width: 420px; margin: 0 auto; }
+.auth-welcome .auth-brand { margin: 0; color: var(--on-hero); }
+.auth-welcome .auth-brand span { color: var(--on-hero); background: rgba(255, 255, 255, .1); }
+.auth-tagline { color: var(--on-hero); font-family: var(--font-display); font-size: 30px; line-height: 1.12; font-weight: 600; }
+.auth-scene { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 170px; }
+.auth-shell:has(.auth-welcome) .auth-card { position: relative; z-index: 2; width: min(460px, calc(100% - 24px)); margin: -28px auto 0; border-radius: 26px; box-shadow: var(--shadow-lg); }
+
+.street-star { fill: rgba(255, 255, 255, .55); }
+.street-moon { fill: #f4e7c4; opacity: .9; }
+.street-house { fill: color-mix(in srgb, var(--hero-bg) 62%, #06110b); }
+.street-window { fill: rgba(255, 255, 255, .09); }
+.street-window.lit { fill: var(--accent); filter: drop-shadow(0 0 5px rgba(239, 180, 78, .75)); }
+.street-door { fill: color-mix(in srgb, var(--hero-bg) 40%, #06110b); }
+.street-porch { fill: #ffd98a; filter: drop-shadow(0 0 6px rgba(255, 210, 120, .9)); }
+.street-ground { fill: color-mix(in srgb, var(--hero-bg) 50%, #06110b); }
+.street-path { fill: none; stroke: rgba(255, 255, 255, .38); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: .5 9; }
+
+/* Loading: the mark on its own, breathing gently */
+.loading-mark { border-radius: 20px; animation: loading-breathe 2.2s ease-in-out infinite; }
+@keyframes loading-breathe { 50% { transform: scale(.94); opacity: .85; } }
+@media (prefers-reduced-motion: reduce) { .loading-mark { animation: none; } }
+
+/* Settings: soft icon chips instead of solid tiles */
+.settings-section-heading > span, .member-card-heading > span, .additional-followup-heading > span { color: var(--tint); background: var(--tint-soft-2); border-radius: 10px; }
+.settings-section-heading h2, .settings-section-heading h3 { font-size: var(--fs-headline); }

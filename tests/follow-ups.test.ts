@@ -43,12 +43,15 @@ describe("follow-up lifecycle", () => {
     expect(original.status).toBe("scheduled");
   });
 
-  it("does not complete or reschedule unaccepted work, but permits cancellation", () => {
+  it("treats the owner's own completion or reschedule as acceptance, but not someone else's", () => {
     const task = createFollowUp(input, "volunteer", now);
     for (const acceptance of ["pending", "declined", undefined] as const) {
-      expect(() => changeFollowUp({ ...task, acceptance }, { action: "completed" }, "volunteer", now)).toThrow("must accept");
-      expect(() => changeFollowUp({ ...task, acceptance }, { action: "rescheduled", dueAt: tomorrow }, "volunteer", now)).toThrow("must accept");
-      expect(changeFollowUp({ ...task, acceptance }, { action: "cancelled", note: "No longer requested." }, "volunteer", now).status).toBe("cancelled");
+      expect(() => changeFollowUp({ ...task, acceptance }, { action: "completed" }, "leader", now)).toThrow("must accept");
+      expect(() => changeFollowUp({ ...task, acceptance }, { action: "rescheduled", dueAt: tomorrow }, "leader", now)).toThrow("must accept");
+      const completed = changeFollowUp({ ...task, acceptance }, { action: "completed" }, "volunteer", now);
+      expect(completed).toMatchObject({ status: "completed", acceptance: "accepted" });
+      expect(completed.history.map((item) => item.action)).toEqual(["created", "accepted", "completed"]);
+      expect(changeFollowUp({ ...task, acceptance }, { action: "cancelled", note: "No longer requested." }, "leader", now).status).toBe("cancelled");
     }
   });
 

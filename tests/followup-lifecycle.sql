@@ -36,6 +36,7 @@ do $$ declare r jsonb; begin
  perform pg_temp.task_denied(pg_temp.task_command('change-task-location','task-a',1,r||'{"propertyId":"task-location-b"}'));
  perform pg_temp.task_denied(pg_temp.task_command('new-resolved-task','task-resolved',0,r||'{"status":"completed"}'));
  perform pg_temp.task_denied(pg_temp.task_command('historical-cancel-reason','task-a',1,r||'{"status":"cancelled","history":[{"action":"cancelled","note":"Earlier reason"},{"action":"note","note":"Unrelated"}]}'));
+ perform public.outreach_apply_command(pg_temp.task_command('task-create-owner-done','task-owner-done',0,r));
  perform public.outreach_apply_command(pg_temp.task_command('task-create-cancel','task-cancel',0,r));
  perform public.outreach_apply_command(pg_temp.task_command('task-cancel-current','task-cancel',1,r||'{"status":"cancelled","history":[{"action":"cancelled","note":"Neighbor no longer requested this step."}]}'));
  if (select count(*) from public.outreach_task_activity where task_id='task-cancel') <> 2 then raise exception 'Cancellation history was not appended exactly once'; end if;
@@ -45,6 +46,10 @@ do $$ declare r jsonb; begin
  r:='{"dueAt":"2026-09-14","propertyId":"task-location-a","assignedVolunteerId":"volunteer_40000000000040008000000000000012","acceptance":"declined","status":"scheduled"}';
  perform public.outreach_apply_command(pg_temp.task_command('decline-task','task-a',1,r));
  perform pg_temp.task_denied(pg_temp.task_command('declined-complete','task-a',2,r||'{"status":"completed"}'));
+ -- The owner's own completion accepts and completes in one save.
+ perform public.outreach_apply_command(pg_temp.task_command('owner-accept-and-complete','task-owner-done',1,r||'{"acceptance":"accepted","status":"completed","completionNote":"Fictional done."}'));
+ if (select status||'/'||acceptance from public.outreach_tasks where id='task-owner-done')<>'completed/accepted' then
+  raise exception 'An owner could not accept and complete in one save'; end if;
  perform public.outreach_apply_command(pg_temp.task_command('accept-task','task-a',2,r||'{"acceptance":"accepted"}'));
  perform public.outreach_apply_command(pg_temp.task_command('complete-task','task-a',3,r||'{"acceptance":"accepted","status":"completed","completionNote":"Fictional completion."}'));
  perform pg_temp.task_denied(pg_temp.task_command('reopen-task','task-a',4,r||'{"acceptance":"accepted"}'));

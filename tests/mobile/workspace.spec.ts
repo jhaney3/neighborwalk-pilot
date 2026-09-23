@@ -162,10 +162,14 @@ test("map filters and visit outcomes expose their selected state", async ({ page
   const sheet = page.getByRole("dialog", { name: /Home details for 118 Crockett Street/ });
   const talked = sheet.getByRole("button", { name: "Talked", exact: true });
   const noAnswer = sheet.getByRole("button", { name: "No answer", exact: true });
-  await expect(talked).toHaveAttribute("aria-pressed", "true");
-  await noAnswer.click();
-  await expect(noAnswer).toHaveAttribute("aria-pressed", "true");
+  // Nothing is preselected; choosing Talked waits for Save, No answer saves at once.
   await expect(talked).toHaveAttribute("aria-pressed", "false");
+  await talked.click();
+  await expect(talked).toHaveAttribute("aria-pressed", "true");
+  await expect(sheet.getByRole("button", { name: "Save visit", exact: true })).toBeEnabled();
+  await noAnswer.click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByText("No answer saved", { exact: true })).toBeVisible();
 });
 
 test("native compact controls retain 44 point hit targets", async ({ page }) => {
@@ -298,7 +302,7 @@ test("a People location opens a map with a contextual return", async ({ page }) 
   const search = workspace.getByRole("searchbox", { name: "Search", exact: true });
   await search.fill("Tasha");
   await workspace.locator(".followup-filter-disclosure summary").click();
-  await workspace.getByRole("combobox", { name: "Responsibility", exact: true }).selectOption("all");
+  await workspace.getByRole("combobox", { name: "Whose", exact: true }).selectOption("all");
   await workspace.getByRole("combobox", { name: "Status", exact: true }).selectOption("overdue");
   await page.getByRole("button", { name: "More actions", exact: true }).click();
   await workspace.evaluate((element) => { element.scrollTop = 120; });
@@ -312,7 +316,7 @@ test("a People location opens a map with a contextual return", async ({ page }) 
   await page.getByRole("button", { name: "Back to People" }).click();
   await expect(page.getByRole("tab", { name: "Follow-ups", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(search).toHaveValue("Tasha");
-  await expect(workspace.getByRole("combobox", { name: "Responsibility", exact: true })).toHaveValue("all");
+  await expect(workspace.getByRole("combobox", { name: "Whose", exact: true })).toHaveValue("all");
   await expect(workspace.getByRole("combobox", { name: "Status", exact: true })).toHaveValue("overdue");
   await expect(workspace.getByRole("button", { name: "More actions", exact: true })).toHaveAttribute("aria-expanded", "true");
   await expect.poll(() => workspace.evaluate((element) => element.scrollTop)).toBe(scrollTop);

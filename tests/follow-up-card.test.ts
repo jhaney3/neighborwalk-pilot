@@ -38,7 +38,7 @@ describe("follow-up task ownership", () => {
     expect(markup).not.toContain('class="followup-actions-outcome"');
     expect(markup).not.toContain("Who will do this?");
     expect(markup).not.toContain(">Accepted<");
-    expect(markup).not.toMatch(/\bComplete<\/button>/);
+    expect(markup).not.toMatch(/\bMark done<\/button>/);
   });
 
   it("shows acceptance and completion only when the task has an active owner", () => {
@@ -49,7 +49,7 @@ describe("follow-up task ownership", () => {
 
     expect(markup).toContain(`Owner: ${owner.name}`);
     expect(markup).toContain(">Accepted<");
-    expect(markup).toMatch(/\bComplete<\/button>/);
+    expect(markup).toMatch(/\bMark done<\/button>/);
   });
 
   it("keeps the access warning with an unowned person-linked task", () => {

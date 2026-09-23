@@ -20,3 +20,7 @@
 .walks-view-switch { margin: -8px 0 16px; }
 .walks-view-switch .segmented-control, .map-view-controls .segmented-control { width: 100%; }
 .map-view-controls { display: block; margin: 4px 0 12px; }
+
+/* Square icon action used in large-title headers (Plan a walk, Add person) */
+.button.icon-button { width: 44px; min-width: 44px; height: 44px; padding: 0; border-radius: 14px; }
+.people-view-embedded .people-toolbar { grid-template-columns: minmax(0, 1fr) auto; }

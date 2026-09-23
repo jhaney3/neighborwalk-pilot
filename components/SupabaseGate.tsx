@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, KeyRound, MapPinned, Navigation } from "lucide-react";
+import { BrandMark, StreetScene } from "./visuals";
+import { Check, KeyRound, MapPinned } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -256,10 +257,16 @@ function SignInScreen() {
   const busy = action !== null;
   return (
     <main className="auth-shell">
+      <div className="auth-welcome">
+        <StreetScene className="auth-scene" />
+        <div className="auth-welcome-copy">
+          <div className="auth-brand"><span aria-hidden="true"><BrandMark size={20} /></span><strong>NeighborWalk</strong></div>
+          <p className="auth-tagline">Knock, listen, and follow through, together.</p>
+        </div>
+      </div>
       <section className="auth-card" aria-labelledby="signin-title">
-        <div className="auth-brand"><span aria-hidden="true"><Navigation size={18} /></span><strong>NeighborWalk</strong></div>
         <h1 id="signin-title">{mode === "signin" ? "Sign in" : "Create account"}</h1>
-        <p className="auth-intro">Your church workspace</p>
+        <p className="auth-intro">to your church</p>
         <div className="auth-form">
           {isMobileApp && <><AppleSignInButton busy={busy} onClick={() => void runAuthAction("apple", signInWithApple)} /><GoogleSignInButton disabled={busy} loading={action === "google"} onClick={() => void signInWithGoogle()} /><div className="auth-divider"><span>or</span></div></>}
           {isProductionApp && !isMobileApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or</span></div></>}
@@ -307,5 +314,5 @@ function PasswordRecovery({ email, onSave }: { email: string; onSave: (password:
 }
 
 function ConnectionLoading() {
-  return <main className="app-loading"><div className="loading-mark"><Navigation size={23} /></div><h1>Opening your church workspace</h1><span role="status" aria-live="polite">Checking your secure session…</span></main>;
+  return <main className="app-loading"><div className="loading-mark"><BrandMark size={30} /></div><h1>Opening your church workspace</h1><span role="status" aria-live="polite">Checking your secure session…</span></main>;
 }
