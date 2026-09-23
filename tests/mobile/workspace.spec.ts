@@ -224,8 +224,7 @@ test("drawing a lasting zone uses a full-screen two-stage flow", async ({ page }
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/demo");
-  await openMap(page);
-  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation").getByRole("button", { name: /^Walks/ }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
@@ -261,7 +260,11 @@ test("drawing a lasting zone uses a full-screen two-stage flow", async ({ page }
 
   await launch.click();
   const reopenedCreator = dialog.locator(".walk-parent-zone-creator");
-  await dragAcrossMap(page, reopenedCreator.getByRole("region", { name: /Interactive map of/ }));
+  // The reopened map can still be initializing; retry the drag until it registers.
+  await expect(async () => {
+    await dragAcrossMap(page, reopenedCreator.getByRole("region", { name: /Interactive map of/ }));
+    await expect(reopenedCreator.getByText("Rectangle ready", { exact: true })).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
   await reopenedCreator.getByRole("button", { name: "Next", exact: true }).click();
   const zoneName = `Mobile zone ${Date.now()}`;
   await reopenedCreator.getByRole("textbox", { name: "Neighborhood name", exact: true }).fill(zoneName);
@@ -273,8 +276,7 @@ test("drawing a lasting zone uses a full-screen two-stage flow", async ({ page }
 test("zone creation stays inline above the phone breakpoint", async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 900 });
   await page.goto("/demo");
-  await openMap(page);
-  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation").getByRole("button", { name: /^Walks/ }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Plan a walk" });
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();

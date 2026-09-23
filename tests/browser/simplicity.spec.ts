@@ -464,8 +464,7 @@ test("an advance invitation becomes field access only after check-in and crew as
   const parentName = "Crockett Heights";
 
   await openDemo(page);
-  await openMap(page);
-  await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "Walks", exact: true }).click();
+  await page.getByRole("navigation").getByRole("button", { name: /^Walks/ }).click();
   await page.getByRole("button", { name: "Plan a walk", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "Plan a walk", exact: true });
   await dialog.getByRole("textbox", { name: "Walk name", exact: true }).fill(walkName);
