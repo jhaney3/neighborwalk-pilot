@@ -200,6 +200,45 @@ test("native compact controls retain 44 point hit targets", async ({ page }) => 
   }
 });
 
+for (const width of [320, 393]) {
+  test(`visit outcome choices show only their labels at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 852 });
+    await page.goto("/demo");
+    await openMap(page);
+    await page.getByRole("group", { name: "Walks view" }).getByRole("button", { name: "List", exact: true }).click();
+    await page.getByRole("button", { name: /118 Crockett Street/ }).click();
+
+    const choices = page.getByRole("dialog", { name: /Home details for 118 Crockett Street/ }).locator(".outcome-options button");
+    await expect(choices).toHaveCount(5);
+    const sizes = await choices.evaluateAll((buttons) => buttons.map((button) => {
+      const element = button as HTMLButtonElement;
+      const bounds = element.getBoundingClientRect();
+      return {
+        label: element.textContent?.trim(),
+        width: bounds.width,
+        height: bounds.height,
+        fits: element.scrollWidth <= element.clientWidth + 1,
+        hasExtraMarkup: element.childElementCount > 0,
+      };
+    }));
+    expect(sizes.map((choice) => choice.label)).toEqual([
+      "No answer",
+      "Talked",
+      "Follow-up",
+      "Not interested",
+      "Couldn’t reach",
+    ]);
+    for (const choice of sizes) {
+      expect(choice.width).toBeGreaterThan(100);
+      expect(choice.height).toBeGreaterThanOrEqual(56);
+      expect(choice.fits).toBe(true);
+      expect(choice.hasExtraMarkup).toBe(false);
+    }
+    expect(Math.abs(sizes[0].width - sizes[1].width)).toBeLessThanOrEqual(1);
+    expect(sizes[4].width).toBeGreaterThan(sizes[0].width * 1.8);
+  });
+}
+
 for (const width of [834, 1024]) {
   test(`iPad shell respects simulated safe areas at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });

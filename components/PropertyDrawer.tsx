@@ -303,8 +303,7 @@ export function PropertyDrawer({
                     if (value === "follow_up") setDetailsOpen(true);
                   }}
                 >
-                  <i />
-                  <span>{outcomeMeta[value].short}</span>
+                  {outcomeMeta[value].short}
                 </button>
               ))}
             </div>

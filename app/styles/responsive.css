@@ -173,8 +173,6 @@
   .auth-connection-actions > .button { flex: 1 1 calc(50% - 5px); }
   .auth-connection-actions > a:not(.button) { flex-basis: 100%; margin: 2px 0 0; text-align: center; }
 
-  .outcome-options { grid-template-columns: repeat(3, 1fr); }
-  .outcome-options button { min-height: 44px; flex-direction: row; }
   .form-row { grid-template-columns: 1fr; }
   .additional-followup-fields { grid-template-columns: 1fr; }
   .additional-followup-field.full { grid-column: auto; }

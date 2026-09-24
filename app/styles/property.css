@@ -71,15 +71,11 @@
 /* Encounter outcome + optional details */
 .outcome-fieldset { margin: 0; padding: 0; border: 0; }
 .outcome-fieldset legend, .form-field > span { display: block; margin-bottom: 6px; color: var(--label-2); font-size: var(--fs-footnote); font-weight: 600; }
-.outcome-options { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-.outcome-options button { min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 6px 2px; border-radius: var(--radius-sm); color: var(--label); background: var(--bg-grouped-3); font-size: var(--fs-caption); font-weight: 600; transition: background-color .15s ease, box-shadow .15s ease; }
-.outcome-options button:hover { background: var(--fill-3); }
-.outcome-options button.active { background: var(--tint-soft); box-shadow: inset 0 0 0 1.5px var(--tint); color: var(--tint); }
-.outcome-options button i { width: 12px; height: 12px; border-radius: 50%; background: var(--blue); }
-.outcome-options button[data-outcome="conversation"] i { background: var(--tint); }
-.outcome-options button[data-outcome="follow_up"] i { background: var(--orange); }
-.outcome-options button[data-outcome="declined"] i { background: #d2aaa6; }
-.outcome-options button[data-outcome="inaccessible"] i { background: #9b8c7d; }
+.outcome-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+#root .outcome-options button { min-width: 0; min-height: 56px; display: flex; align-items: center; justify-content: center; padding: 10px 12px; border-radius: var(--radius-sm); color: var(--label); background: var(--bg-grouped-3); font-size: var(--fs-subhead); font-weight: 600; line-height: var(--lh-subhead); text-align: center; transition: background-color .15s ease, box-shadow .15s ease; }
+.outcome-options button:last-child { grid-column: 1 / -1; }
+#root .outcome-options button:hover { background: var(--fill-3); }
+#root .outcome-options button.active { background: var(--tint-soft); box-shadow: inset 0 0 0 1.5px var(--tint); color: var(--tint); }
 .outcome-fieldset > p { min-height: 24px; margin: 8px 0 0; color: var(--label-2); font-size: var(--fs-footnote); line-height: 1.45; }
 .visit-details-toggle { width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: space-between; margin-top: 12px; padding: 0 14px; border-radius: var(--radius-sm); color: var(--tint); background: var(--bg-grouped-3); font-size: var(--fs-subhead); font-weight: 600; }
 .visit-details-toggle svg { transition: transform .2s ease; color: var(--label-3); }
