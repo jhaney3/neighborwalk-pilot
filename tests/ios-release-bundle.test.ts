@@ -21,6 +21,8 @@ function releaseBundle(overrides: Record<string, unknown> = {}) {
     releaseEligible: true,
     remotePush: true,
     apnsEnvironment: "production",
+    inviteOrigin: "https://invite.neighborwalk.org",
+    serviceOrigin: "https://neighborwalk.org",
     ...overrides,
   }));
   writeFileSync(resolve(app, "capacitor.config.json"), JSON.stringify({ appId: "app.neighborwalk.ios" }));
@@ -39,6 +41,13 @@ describe("iOS release bundle provenance verifier", () => {
   it("accepts an App Store bundle with matching native configuration", () => {
     const { bundle } = releaseBundle();
     expect(verify(bundle)).toContain("Verified app.neighborwalk.ios App Store bundle provenance.");
+  });
+
+  it("rejects missing or unsafe invitation and service origins", () => {
+    for (const overrides of [{ inviteOrigin: undefined }, { serviceOrigin: "http://localhost" }, { inviteOrigin: "https://neighborwalk.org" }]) {
+      const { bundle } = releaseBundle(overrides);
+      expect(() => verify(bundle)).toThrow();
+    }
   });
 
   it("rejects a sample bundle", () => {

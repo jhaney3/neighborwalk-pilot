@@ -54,3 +54,4 @@ __pycache__/
 /ios/App/build/
 **/xcuserdata/
 /ios/DerivedData/
+!/mobile/.env.example

@@ -42,6 +42,8 @@
     "outputs",
     "mobile/dist",
     "ios",
-    "supabase/functions"
+    "supabase/functions",
+    "test-results",
+    "playwright-report"
   ]
 }

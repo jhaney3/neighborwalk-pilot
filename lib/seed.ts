@@ -4,7 +4,7 @@ import {
   type NeighborWalkData,
 } from "./domain";
 import { DEFAULT_MAP_STYLE_URL, MAP_STYLE_CONFIGURATION_REVISION } from "./map-config";
-import { calendarDate } from "./calendar";
+import { calendarDate, calendarDaysFromNow, churchDateTimeToIso, DEFAULT_CHURCH_TIMEZONE } from "./calendar";
 
 const CHURCH_ID = "church_grace_harbor_demo";
 const EVENT_ID = "event_saturday_outreach";
@@ -19,10 +19,11 @@ function demoParcelGislink(index: number) {
 }
 
 function dayAt(offset: number, hour: number, minute = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  date.setHours(hour, minute, 0, 0);
-  return date.toISOString();
+  // Sample schedules follow their church, even when a device is in another zone.
+  // Normalize overflow minutes (used by the visit fixtures) before conversion.
+  const date = new Date(`${calendarDaysFromNow(offset, DEFAULT_CHURCH_TIMEZONE)}T00:00:00Z`);
+  date.setUTCHours(hour, minute, 0, 0);
+  return churchDateTimeToIso(date.toISOString().slice(0, 16), DEFAULT_CHURCH_TIMEZONE);
 }
 
 const boundary = (center: Coordinates, dx = 0.0047, dy = 0.0034): Coordinates[] => [

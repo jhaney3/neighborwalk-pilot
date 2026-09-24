@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from "vite";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { mobileReleaseConfig } from "../scripts/lib/mobile-release-config.mjs";
 import { assertSafeSupabaseUrl } from "../lib/environment";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -15,7 +16,8 @@ export default defineConfig(({ mode }) => {
     ? env.NEXT_PUBLIC_APNS_ENVIRONMENT
     : production ? "production" : "sandbox";
   if (production && (!remotePush || apnsEnvironment !== "production")) throw new Error("An iOS release requires production APNs assignment alerts.");
-  const allowed = ["NEXT_PUBLIC_INVITE_ORIGIN", "NEXT_PUBLIC_PHONE_AUTH_ENABLED", "NEXT_PUBLIC_PUSH_NOTIFICATIONS_ENABLED", "NEXT_PUBLIC_APNS_ENVIRONMENT", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_MAPTILER_KEY", "NEXT_PUBLIC_MAP_STYLE_URL", "NEXT_PUBLIC_GEOCODER_URL"];
+  const release = production ? mobileReleaseConfig(env) : null;
+  const allowed = ["NEXT_PUBLIC_SERVICE_ORIGIN", "NEXT_PUBLIC_INVITE_ORIGIN", "NEXT_PUBLIC_PHONE_AUTH_ENABLED", "NEXT_PUBLIC_PUSH_NOTIFICATIONS_ENABLED", "NEXT_PUBLIC_APNS_ENVIRONMENT", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_MAPTILER_KEY", "NEXT_PUBLIC_MAP_STYLE_URL", "NEXT_PUBLIC_GEOCODER_URL"];
   return {
     root: resolve(root, "mobile"),
     publicDir: resolve(root, "mobile/public"),
@@ -32,6 +34,7 @@ export default defineConfig(({ mode }) => {
             releaseEligible: production,
             remotePush,
             apnsEnvironment,
+            ...(release ?? {}),
           }),
         });
       },

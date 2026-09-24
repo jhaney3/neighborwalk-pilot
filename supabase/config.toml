@@ -52,3 +52,7 @@ verify_jwt = false
 
 [analytics]
 enabled = false
+
+# Validates bearer identity and a live database session inside the handler.
+[functions.account-deletion]
+verify_jwt = false

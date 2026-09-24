@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     "ios/**",
     "out/**",
     "coverage/**",
+    "test-results/**",
+    "playwright-report/**",
     "outputs/**",
     "work/**",
     "supabase/.temp/**",

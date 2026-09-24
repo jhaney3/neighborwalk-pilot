@@ -190,7 +190,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"$CONFIGURATION\" != \"Release\" ]; then\n  exit 0\nfi\nMARKER=\"$SRCROOT/App/public/build-provenance.json\"\nif [ ! -f \"$MARKER\" ]; then\n  echo \"error: Missing iOS build provenance. Run npm run ios:sync before a Release build.\"\n  exit 1\nfi\nif ! /usr/bin/grep -q '\"channel\":\"app-store\"' \"$MARKER\" || ! /usr/bin/grep -q '\"releaseEligible\":true' \"$MARKER\" || ! /usr/bin/grep -q '\"remotePush\":true' \"$MARKER\" || ! /usr/bin/grep -q '\"apnsEnvironment\":\"production\"' \"$MARKER\"; then\n  echo \"error: Refusing to build a sample, notification-incomplete, or unrecognized web bundle in Release. Run npm run ios:sync with the production mobile environment.\"\n  exit 1\nfi\nif [ ! -f \"$SRCROOT/App/public/index.html\" ]; then\n  echo \"error: The bundled iOS application is incomplete. Run npm run ios:sync.\"\n  exit 1\nfi\n";
+			shellScript = "\"$SRCROOT/../verify-release.sh\"";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -340,6 +340,7 @@
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				APS_ENVIRONMENT = development;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
@@ -363,6 +364,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				APS_ENVIRONMENT = production;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;

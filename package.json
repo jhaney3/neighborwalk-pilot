@@ -37,9 +37,14 @@
     "mobile:dev": "npm run mobile:prepare && vite --config mobile/vite.config.ts --mode sample",
     "ios:verify-bundle": "node scripts/verify-ios-release-bundle.mjs",
     "ios:sync": "npm run mobile:build && cap sync ios && npm run ios:verify-bundle",
-    "ios:release:prepare": "npm run ios:sync",
+    "ios:release:prepare": "npm run ios:release:check && npm run ios:sync",
     "ios:open": "cap open ios",
-    "test:mobile": "playwright test --config playwright.mobile.config.ts"
+    "test:mobile": "playwright test --config playwright.mobile.config.ts",
+    "ios:configure": "node scripts/configure-ios.mjs",
+    "ios:release:check": "node scripts/check-ios-release.mjs",
+    "deletion:inventory": "node scripts/account-deletion-inventory.mjs",
+    "ios:release:rehearse": "node scripts/rehearse-ios-release.mjs",
+    "test:mobile:webkit:container": "node scripts/test-mobile-webkit-container.mjs"
   },
   "dependencies": {
     "@capacitor/app": "8.1.1",

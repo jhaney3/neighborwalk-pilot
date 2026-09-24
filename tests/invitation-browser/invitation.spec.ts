@@ -100,3 +100,36 @@ test("Google button handles browser preview without losing an invitation", async
   expect(await page.evaluate(() => Object.values(sessionStorage).some(value => value.includes('"kind":"join"')))).toBe(true);
   await page.screenshot({ path: "outputs/ios/google-sign-in.png", fullPage: true });
 });
+
+test('an account without a workspace can request deletion and retry a service failure', async ({ page }) => {
+  const emailUser = { ...user, email: 'reviewer@example.test', app_metadata: { provider: 'email', providers: ['email'] }, identities: [] };
+  let attempts = 0;
+  await page.route('http://127.0.0.1:54321/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/auth/v1/token') return route.fulfill({ json: { ...session, user: emailUser } });
+    if (path === '/auth/v1/user') return route.fulfill({ json: emailUser });
+    if (path === '/functions/v1/account-deletion') {
+      attempts += 1;
+      if (attempts === 1) return route.fulfill({ status: 503, json: { error: 'unavailable' } });
+      return route.fulfill({ json: { request_id: 'fictional-request', requested_at: new Date().toISOString(), due_at: new Date(Date.now()+30*86400000).toISOString() } });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/login');
+  await page.getByRole('textbox', { name: 'Email address', exact: true }).fill(emailUser.email);
+  await page.getByLabel('Password', { exact: true }).fill('sample-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete account', exact: true }).click();
+  const submit = page.getByRole('button', { name: 'Request account deletion', exact: true });
+  await expect(submit).toBeDisabled();
+  await expect(page.getByText('If you use Sign in with Apple', { exact: false })).toBeVisible();
+  await page.screenshot({ path: 'outputs/ios/deletion-confirmation.png', fullPage: true });
+  await page.getByRole('checkbox').check();
+  await submit.click();
+  await expect(page.getByRole('alert').filter({ hasText: 'could not be confirmed' })).toBeVisible();
+  await submit.click();
+  await expect(page.getByRole('heading', { name: 'Deletion requested', exact: true })).toBeVisible();
+  await expect(page.getByText('fictional-request', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'outputs/ios/deletion-requested.png', fullPage: true });
+  expect(attempts).toBe(2);
+});

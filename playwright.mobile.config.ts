@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 const port = process.env.MOBILE_TEST_PORT ?? "4173";
 
 export default defineConfig({
+  outputDir: "test-results/mobile",
   testDir: "./tests/mobile",
   projects: [{ name: "chromium", use: { browserName: "chromium" } }, { name: "webkit", use: { browserName: "webkit", launchOptions: {} } }],
   fullyParallel: false,

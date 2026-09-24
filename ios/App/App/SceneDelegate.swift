@@ -155,6 +155,9 @@ class NeighborWalkApplePlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationContr
             pending?.reject("Apple could not verify this sign-in. Please try again."); return
         }
         var result: [String: Any] = ["identityToken": token]
+        if let data = credential.authorizationCode, let code = String(data: data, encoding: .utf8) {
+            result["authorizationCode"] = code
+        }
         if let name = credential.fullName {
             let formatted = PersonNameComponentsFormatter().string(from: name)
             if !formatted.isEmpty { result["fullName"] = formatted }
