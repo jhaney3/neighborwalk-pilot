@@ -1,4 +1,4 @@
-# NeighborWalk iOS release guide
+# SendMe iOS release guide
 
 This is the current iOS release status and checklist for `codex/neighborwalk-ios`. Earlier audit, web-release, and session checkpoints are preserved in the [historical archive](archive/README.md); they are not current release instructions. Verify every external gate against its actual environment before marking it complete.
 
@@ -6,7 +6,7 @@ See [Apple sign-in and invitations](ios-auth-and-invitations.md) for native auth
 
 ## Current release status
 
-The app and its supporting migrations, native configuration, and tests are implemented in this branch. Local verification passed on Linux. Five shared-backend migrations, both Edge Functions, and the public iOS policy/help additions are deployed. Apple-dependent activation and actual deletion fulfillment remain unverified. No signed iOS build, physical-device acceptance, TestFlight distribution, or App Store submission has been completed here. The remaining release gates are:
+The app and its supporting migrations, native configuration, and tests are implemented in this branch. Local verification passed on Linux and the Mac, including a production-configured iOS simulator build. Five shared-backend migrations, both Edge Functions, and public SendMe branding with iOS policy/help additions are deployed. Apple App ID registration and native signing metadata are configured; credential activation and actual deletion fulfillment remain unverified. No signed device archive, physical-device acceptance, TestFlight distribution, or App Store submission has been completed here. The remaining release gates are:
 
 1. Confirm Apple Developer and App Store Connect ownership, the final bundle identifier, signing, Push Notifications, and Associated Domains.
 2. Restore approved public mobile configuration; configure and test Apple, Google, and email authentication callbacks on a signed iPhone. Phone-only SMS sign-in is optional.
@@ -16,6 +16,18 @@ The app and its supporting migrations, native configuration, and tests are imple
 6. Test the final signed build on physical iPhone and iPad hardware, then distribute through TestFlight, address findings, and prepare App Store listing and review access.
 
 The sections below give the implementation evidence and detailed checks for these gates. A passing local build does not close any external gate.
+
+## Mac rebuild and SendMe rename — September 26, 2026
+
+- Updated the iOS checkout to `fbbdfa0`; installed dependencies using Node 22.23.3. The public brand is now **SendMe**, per the user's approval for the app, invitations and website. Branding source commit: `d3996b6`.
+- Apple team `RXRH5R33FV` owns registered App ID `app.neighborwalk.ios`, now described as SendMe. Push Notifications, Associated Domains and Sign in with Apple are enabled. Existing bundle IDs, URL schemes, backend formats and storage keys remain unchanged.
+- Configured the Xcode signing team and Associated Domain `applinks:neighborwalk-invites.vercel.app`. Restored public production mobile configuration locally; no secrets or local environment files are committed.
+- The separate invitation project serves `/invite` and the Apple association file successfully without a redirect. Its clean-URL rewrite now targets `/`. Current deployment: `dpl_58AHPoGAbxwcGq3XQbageddboe6i`.
+- Public website branding and approved operator/support identity (Jacob Haney; jacobbhaney@icloud.com) are deployed at https://neighborwalk-pilot.vercel.app. Production release source is `2cb3330` on `codex/sendme-web-release`, based on the previously deployed web version plus `70e90b9`; unrelated newer web features were not deployed. Deployment: `dpl_2UeDP2XsoDGNVpwsTScMUKxWoK5a`.
+- Supabase `push-delivery` version 2 renders fixed SendMe notification copy while accepting legacy database claims. APNs credentials and scheduling remain pending; the production-only, topic-restricted “SendMe Push” key review is prepared in Apple Developer but has not been registered. Creating/configuring it awaits the user's confirmation.
+- Passed iOS lint/typecheck, 44 relevant unit tests, 4 Chromium mobile navigation/responsive checks (320/393/768px), sample build, production `ios:sync`/bundle verification, and Xcode simulator build. Installed and opened SendMe in the iPhone 18 Pro / iOS 27 simulator. Separately passed deployed-web lint/typecheck, 24 relevant unit tests and Next.js build. Inspected the app sign-in page, web homepage, invitation page and native app rendering.
+- `ios:release:check` now passes public configuration, native metadata, and live invitation/AASA checks. Privacy/help/terms remain blocked by draft policy notices. The user approved publisher/contact details, but record/backup retention and ownership of the proposed 30-day deletion process still need confirmation. Do not mark policies approved or open enrollment merely to pass this check.
+- The native bundle records production configuration; that marker alone does not prove APNs activation, signed-device acceptance, account deletion, TestFlight or App Store readiness. Those external gates remain open.
 
 ## Linux release preparation — September 23, 2026
 
