@@ -12,6 +12,7 @@ import { drawingGestureIntent, drawingInstruction, moveDrawingCorner, rectangleB
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
 import { isMobileApp } from "../lib/mobile";
 import { cornerPlaced, selectionTick } from "../mobile/haptics";
+import { nativeMapTilerRequest } from "../mobile/map-requests";
 import { parcelKey, parcelProgress, propertyParcelKey } from "../lib/parcel-groups";
 import type { WalkTarget } from "../lib/walk-targets";
 import {
@@ -739,6 +740,7 @@ export function MapCanvas({
       map = new maplibregl.Map({
         container: containerRef.current,
         style: currentMapStyleUrlRef.current,
+        transformRequest: nativeMapTilerRequest,
         center: initialTerritory.center,
         zoom: initialTerritory.zoom,
         minZoom: 3,

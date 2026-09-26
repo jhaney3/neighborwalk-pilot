@@ -5,7 +5,10 @@ const config: CapacitorConfig = {
   appName: "SendMe",
   webDir: "mobile/dist",
   // No server.url: all application code ships in the reviewed binary.
-  ios: { contentInset: "never", backgroundColor: "#f1f2ec", preferredContentMode: "mobile", zoomEnabled: true },
+  ios: {
+    contentInset: "never", backgroundColor: "#f1f2ec", preferredContentMode: "mobile", zoomEnabled: true,
+    appendUserAgent: "SendMe-iOS/app.neighborwalk.ios",
+  },
   plugins: {
     Keyboard: { resize: "body", resizeOnFullScreen: true },
     CapacitorHttp: { enabled: true },

@@ -1,5 +1,6 @@
 import type { Coordinates } from "./domain";
 import { usableMapTilerKey } from "./map-config";
+import { nativeMapTilerHeaders } from "../mobile/map-requests";
 
 type GeocoderResponse = {
   address?: string;
@@ -93,7 +94,7 @@ export async function forwardGeocode(query: string, options: ForwardGeocodeOptio
   if (options.proximity) url.searchParams.set("proximity", options.proximity.join(","));
 
   const response = await fetch(url, {
-    headers: { accept: "application/json" },
+    headers: { accept: "application/json", ...nativeMapTilerHeaders(url.toString()) },
     signal: options.signal,
   });
   if (!response.ok) throw new Error(`Address search failed (${response.status})`);
@@ -116,7 +117,7 @@ export async function reverseGeocode(coordinates: Coordinates): Promise<string |
     url.searchParams.set("types", "address");
     url.searchParams.set("limit", "1");
   }
-  const response = await fetch(url, { headers: { accept: "application/json" } });
+  const response = await fetch(url, { headers: { accept: "application/json", ...nativeMapTilerHeaders(url.toString()) } });
   if (!response.ok) throw new Error(`Address lookup failed (${response.status})`);
   return firstAddress(await response.json() as GeocoderResponse);
 }

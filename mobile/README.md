@@ -1,4 +1,4 @@
-# NeighborWalk for iOS
+# SendMe for iOS
 
 This is a Capacitor iOS app with a **bundled React application**, not a remote website wrapper. Its entry point imports only the workspace and authentication screens. No landing page, marketing navigation, Next server, or live JavaScript-update service is packaged.
 
@@ -16,6 +16,8 @@ npm run mobile:dev
 ```
 
 Production public configuration belongs in ignored `mobile/.env.production.local`; start from `mobile/.env.example`. Set both the approved `NEXT_PUBLIC_SERVICE_ORIGIN` for policy/help/API pages and the separate `NEXT_PUBLIC_INVITE_ORIGIN`. Copy only the required public values from an approved deployment configuration: the Supabase URL and publishable key, MapTiler key or approved map overrides, and the dedicated HTTPS invitation origin. Never copy service-role keys or provider secrets. A production bundle cannot use the local database; local browser builds cannot access production. The `capacitor://localhost` native runtime is the one intentional exception to the browser-loopback guard.
+
+For MapTiler, set `NEXT_PUBLIC_MAPTILER_KEY` to the separate **SendMe iOS** frontend key. Restrict that key's allowed User-Agent to `SendMe-iOS/app.neighborwalk.ios` and leave its HTTP Origins field empty; MapTiler combines both restrictions, so a website-origin restriction rejects native requests. The app appends this identifier to its WebView agent and explicitly sends it on Capacitor HTTP requests to `api.maptiler.com`. Keep the website's origin-restricted key separate. This public map key ships in the app; the User-Agent check limits casual misuse and is not a secret or account credential. MapTiler setting changes may take five minutes to propagate. Rebuild and sync after changing the local key. Existing default OpenFreeMap preferences migrate to the configured MapTiler style; an explicitly chosen custom style remains unchanged.
 
 ```sh
 npm run ios:sync
