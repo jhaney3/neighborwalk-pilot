@@ -84,7 +84,7 @@ export function LeaderInvitations({ onChanged }: { onChanged: () => Promise<unkn
     if (!ready) return;
     const text = invitationMessage(ready.name, ready.link);
     if (navigator.share) {
-      await navigator.share({ title: "Join us on NeighborWalk", text: text.slice(0, -ready.link.length).trim(), url: ready.link });
+      await navigator.share({ title: "Join us on SendMe", text: text.slice(0, -ready.link.length).trim(), url: ready.link });
       setMessage("Invitation shared. Your device’s share app handles delivery.");
       return;
     }
@@ -116,7 +116,7 @@ export function LeaderInvitations({ onChanged }: { onChanged: () => Promise<unkn
         <button type="button" className="button quiet" disabled={busy} onClick={() => void run(async () => { await copyText(readyMessage); setMessage("Invitation copied."); })}><Copy size={16} /> Copy</button>
       </div>
       <input aria-label="Invitation link" readOnly value={ready.link} onFocus={(event) => event.currentTarget.select()} />
-      <p className={styles.note}>Your chosen app handles sending; NeighborWalk cannot confirm delivery. Copy the link now because its secret is only shown here once.</p>
+      <p className={styles.note}>Your chosen app handles sending; SendMe cannot confirm delivery. Copy the link now because its secret is only shown here once.</p>
     </div>}
 
     {message && <p className="member-message" role="status">{message}</p>}

@@ -69,10 +69,10 @@ export function pendingInvitationKind(storage: InvitationStorage): InvitationKin
 }
 
 export function invitationMessage(recipientName: string, link: string) {
-  return `${recipientName.trim() ? `Hi ${recipientName.trim()}! ` : ""}Join our church on NeighborWalk. Open this private link and sign in with Apple, Google, or your email. This invitation works once and expires in 7 days.\n${link}`;
+  return `${recipientName.trim() ? `Hi ${recipientName.trim()}! ` : ""}Join our church on SendMe. Open this private link and sign in with Apple, Google, or your email. This invitation works once and expires in 7 days.\n${link}`;
 }
 
 export function invitationDraftHref(kind: "email" | "phone", contact: string, message: string) {
-  if (kind === "email") return `mailto:${encodeURIComponent(contact)}?subject=${encodeURIComponent("Join us on NeighborWalk")}&body=${encodeURIComponent(message)}`;
+  if (kind === "email") return `mailto:${encodeURIComponent(contact)}?subject=${encodeURIComponent("Join us on SendMe")}&body=${encodeURIComponent(message)}`;
   return `sms:${contact}?body=${encodeURIComponent(message)}`;
 }
