@@ -5,7 +5,7 @@ import { z } from "zod";
 export const reminderJobSchema = z.object({ id: z.uuid(), preferenceId: z.uuid(), recipient: z.email(), lease: z.uuid() });
 export type ReminderJob = z.infer<typeof reminderJobSchema>;
 export const reminderPayloadSchema = z.object({
-  from: z.string().max(400), to: z.array(z.email()).length(1), subject: z.literal("Your NeighborWalk next steps"),
+  from: z.string().max(400), to: z.array(z.email()).length(1), subject: z.enum(["Your SendMe next steps", "Your NeighborWalk next steps"]),
   text: z.string().max(4000), headers: z.record(z.string(), z.string()),
   tags: z.array(z.object({ name: z.literal("neighborwalk_reminder_id"), value: z.uuid() }).strict()).length(1),
 }).strict();
@@ -30,8 +30,8 @@ export function unsubscribePreference(token: string | null, secrets: string[]) {
 export function buildReminderEmail(job: ReminderJob, config: { from: string; origin: string; unsubscribeSecret: string }): ReminderPayload {
   const unsubscribe = config.origin + "/api/reminders/unsubscribe?token=" + unsubscribeToken(job.preferenceId, config.unsubscribeSecret);
   return {
-    from: "NeighborWalk <" + config.from + ">", to: [job.recipient], subject: "Your NeighborWalk next steps",
-    text: "You asked NeighborWalk to remind you when your next steps need attention.\n\nSign in to review your own due work or an assignment waiting for your acceptance:\n"
+    from: "SendMe <" + config.from + ">", to: [job.recipient], subject: "Your SendMe next steps",
+    text: "You asked SendMe to remind you when your next steps need attention.\n\nSign in to review your own due work or an assignment waiting for your acceptance:\n"
       + config.origin + "/app/followups?scope=mine\n\nThis message intentionally contains no neighbor details. A reminder is not an emergency or a guarantee that a task is still available.\n\nTurn off these reminders:\n" + unsubscribe,
     headers: { "List-Unsubscribe": "<" + unsubscribe + ">", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
     tags: [{ name: "neighborwalk_reminder_id", value: job.id }],

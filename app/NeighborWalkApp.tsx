@@ -471,9 +471,9 @@ export function NeighborWalkApp({ supabaseUser, onSignOut, onUpdatePassword }: {
     <main className="app-shell">
       {data.sync.mode === "device_only" && <div className="demo-notice" role="status">Sample workspace · fictional data only · nothing here is shared with a church. <Link href="/">Return to website</Link></div>}
       <header className="app-header">
-        <button className="brand" onClick={() => navigate("today")} aria-label="Open NeighborWalk Home">
+        <button className="brand" onClick={() => navigate("today")} aria-label="Open SendMe Home">
           <span className="brand-mark" aria-hidden="true"><Navigation size={18} /></span>
-          <span><strong>NeighborWalk</strong><small>{data.church.name}</small></span>
+          <span><strong>SendMe</strong><small>{data.church.name}</small></span>
         </button>
         <div className="header-status">
           <span className={`network-chip ${online ? "online" : "offline"}`} aria-live="polite">{online ? <ShieldCheck size={13} /> : <WifiOff size={13} />}{syncStatusLabel}</span>
@@ -725,7 +725,7 @@ function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; er
         <div className="workspace-setup-mark"><Users size={22} /></div>
         <p className="eyebrow">Invitation required</p>
         <h1 id="workspace-title">Ask your leader for an invitation link.</h1>
-        <p>NeighborWalk is private to your church team. Open the one-time link from a leader, then sign in with the exact email address they invited.</p>
+        <p>SendMe is private to your church team. Open the one-time link from a leader, then sign in with the exact email address they invited.</p>
         <div className="workspace-account"><CircleUserRound size={17} /><span><strong>Signed in</strong>{user.email}</span></div>
         <div className="data-note"><ShieldCheck size={16} /><span>Invitation links expire after 7 days, work once, and cannot be used by a different email.</span></div>
         {error && <p className="auth-error" role="alert">{error}</p>}

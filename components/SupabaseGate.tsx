@@ -232,7 +232,7 @@ function SignInScreen() {
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="signin-title">
         <div className="auth-route" aria-hidden="true"><span><Navigation size={18} /></span><i /><span><MapPinned size={18} /></span></div>
-        <p className="eyebrow">NeighborWalk church workspace</p>
+        <p className="eyebrow">SendMe church workspace</p>
         <h1 id="signin-title">Pick up where care left off.</h1>
         <p className="auth-intro">{isProductionApp ? "Google is the quickest way in. Password sign-in is also available and does not send an email each time." : "Use your test account here. This workspace has its own data and sign-in."}</p>
         <div className="auth-form">
@@ -251,7 +251,7 @@ function SignInScreen() {
           <details className="auth-email-fallback"><summary>Use a one-time email link instead</summary><p>This fallback sends an email and may be unavailable when the project email limit is reached.</p><button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}><Mail size={16} />{action === "link" ? "Sending…" : "Send one-time link"}</button></details>
         </div>
         <div className="auth-privacy"><ShieldCheck size={16} /><span>People records are visible to their owner, church leaders and explicitly shared teammates. Pending handoff recipients and some historical creators may also have access, as shown on the profile.</span></div>
-        <p><Link href="/help">Sign-in help</Link> · <Link href="/">About NeighborWalk</Link> · <Link href="/privacy">Privacy</Link></p>
+        <p><Link href="/help">Sign-in help</Link> · <Link href="/">About SendMe</Link> · <Link href="/privacy">Privacy</Link></p>
       </section>
     </main>
   );

@@ -54,7 +54,7 @@ async function navigation(request) {
   } catch {
     const fallback = new URL(request.url).pathname.startsWith("/app") ? "/app/today" : "/";
     return await cache.match(request) || await cache.match(fallback) ||
-      new Response("NeighborWalk is offline. Reconnect to prepare this device.", { status: 503 });
+      new Response("SendMe is offline. Reconnect to prepare this device.", { status: 503 });
   }
 }
 

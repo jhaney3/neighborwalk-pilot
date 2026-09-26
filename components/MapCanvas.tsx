@@ -777,7 +777,7 @@ export function MapCanvas({
         if (!event.error) return;
         const message = redactMapError(event.error.message || String(event.error));
         if (containerRef.current) containerRef.current.dataset.mapError = message;
-        console.error("[NeighborWalk map]", message);
+        console.error("[SendMe map]", message);
         if (!mapLoaded) setMapStatus("error");
       });
 
