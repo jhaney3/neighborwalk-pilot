@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, KeyRound, MapPinned, Navigation } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CloudOff, Mail, PlugZap, WifiOff } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
@@ -23,6 +23,7 @@ import { MobileInvitation } from "./MobileInvitation";
 import { cancelDeviceReminders } from "../mobile/notifications";
 import { unregisterRemotePush } from "../mobile/push-notifications";
 import { actionFailed } from "../mobile/haptics";
+import { EntryBrand, EntryLoading, EntryNotice, EntryScreen, EntryTitle } from "./EntryScreens";
 
 export function NeighborWalkRoot() {
   const router = useRouter();
@@ -121,13 +122,13 @@ export function NeighborWalkRoot() {
     if (error) throw new Error(authErrorMessage(error));
   };
 
-  if (!configured && !localAuthPreview) return <main className="app-loading"><h1>Workspace connection unavailable</h1><p>Ask the operator to finish connecting this deployment. Real church records will not be replaced with sample data.</p><Link className="button quiet" href="/demo">Explore the separate sample workspace</Link></main>;
-  if (!offlineUser && !session && offlineCandidate && !passwordRecovery) return <main className="auth-shell"><section className="auth-card"><h1>Your prepared workspace is available</h1><p>The sign-in service cannot be reached. This device was checked with your church less than 24 hours ago. You can explicitly reopen its saved records; this is not a new sign-in.</p><p>New work stays on this device until your account and church permissions can be checked online. Signing out or a known access removal disables this option.</p><button className="button primary" onClick={() => {
+  if (!configured && !localAuthPreview) return <WorkspaceUnavailable />;
+  if (!offlineUser && !session && offlineCandidate && !passwordRecovery) return <OfflineWorkspace onOpen={() => {
     const candidate = !pendingInvitation(window.sessionStorage) ? preparedOfflineIdentity(window.localStorage, authStorageKey()) : null;
     if (candidate?.id === offlineCandidate.id) { setOfflineUser(candidate); setConnectionError(""); setLoading(false); }
     else { setOfflineCandidate(null); setConnectionError("This device now needs an online sign-in and membership check. Saved work has not been cleared."); }
-  }}>Open prepared offline workspace</button><button className="button quiet" onClick={() => window.location.reload()}>Retry online sign-in</button></section></main>;
-  if (connectionError && !offlineUser) return <main className="auth-shell"><section className="auth-card"><h1>Check your connection or invitation</h1><p role="alert">{connectionError}</p><p>Nothing was cleared. If an email link opened in another tab, sign in there, then reopen your original church invitation.</p><div className="auth-connection-actions"><button className="button quiet" onClick={() => window.location.reload()}>Try again</button><Link className="button quiet" href="/login">Open sign-in</Link><Link href="/help">Sign-in help</Link></div></section></main>;
+  }} />;
+  if (connectionError && !offlineUser) return <ConnectionProblem error={connectionError} />;
   if (loading && !offlineUser) return <ConnectionLoading />;
   if (!workspaceUser) return <SignInScreen />;
   if (passwordRecovery && session) return <PasswordRecovery email={session.user.email ?? "your account"} onSave={async (password) => { await updatePassword(password); setPasswordRecovery(false); }} />;
@@ -157,13 +158,17 @@ function authRedirectUrl() {
 
 type AuthAction = "apple" | "google" | "password" | "signup" | "reset" | "link" | null;
 
-function SignInScreen() {
+export function SignInScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [action, setAction] = useState<AuthAction>(null);
   const [confirmation, setConfirmation] = useState<{ title: string; detail: string } | null>(null);
   const [error, setError] = useState("");
+  const emailField = useRef<HTMLInputElement>(null);
+  const status = useRef<HTMLDivElement>(null);
+  // A link or reset starts lower down the screen; bring its answer into view.
+  useEffect(() => { if (error || confirmation) status.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [error, confirmation]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -181,6 +186,7 @@ function SignInScreen() {
   const requireEmail = () => {
     if (validAuthEmail(email)) return true;
     setError("Enter a valid email address.");
+    emailField.current?.focus();
     return false;
   };
   const clientOrError = () => {
@@ -255,39 +261,51 @@ function SignInScreen() {
   };
 
   const busy = action !== null;
+  const signingIn = mode === "signin";
+  const switchMode = (next: "signin" | "signup") => { setMode(next); setError(""); setConfirmation(null); };
+  const providers = isMobileApp || isProductionApp;
   return (
-    <main className="auth-shell">
-      <section className="auth-card" aria-labelledby="signin-title">
-        <div className="auth-brand"><span aria-hidden="true"><Navigation size={18} /></span><strong>SendMe</strong></div>
-        <h1 id="signin-title">{mode === "signin" ? "Sign in" : "Create account"}</h1>
-        <p className="auth-intro">Your church workspace</p>
-        <div className="auth-form">
-          {isMobileApp && <><AppleSignInButton busy={busy} onClick={() => void runAuthAction("apple", signInWithApple)} /><GoogleSignInButton disabled={busy} loading={action === "google"} onClick={() => void signInWithGoogle()} /><div className="auth-divider"><span>or</span></div></>}
-          {isProductionApp && !isMobileApp && <><button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button><div className="auth-divider"><span>or</span></div></>}
-          <form className="auth-credentials" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
-            <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" /></label>
-            <label className="form-field"><span>Password</span><input type="password" minLength={8} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-            <button className="button primary auth-submit" disabled={busy}>{action === "password" || action === "signup" ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}</button>
-          </form>
-          <div className="auth-secondary-actions">
-            {mode === "signin" ? <><button type="button" disabled={busy} onClick={() => void sendReset()}>Forgot password?</button><button type="button" disabled={busy} onClick={() => { setMode("signup"); setError(""); setConfirmation(null); }}>Create an account</button></> : <button type="button" disabled={busy} onClick={() => { setMode("signin"); setError(""); setConfirmation(null); }}>Back to sign in</button>}
-          </div>
-          {mode === "signup" && <p className="auth-hint">Account confirmation uses one email. After that, routine password sign-ins do not.</p>}
-          {confirmation && <div className="auth-confirmation" role="status"><Check size={20} /><div><strong>{confirmation.title}</strong><span>{confirmation.detail}</span></div></div>}
-          {error && <p className="auth-error" role="alert">{error}</p>}
-          <details className="auth-email-fallback"><summary>More options</summary><div className="auth-more-options">
-            <button type="button" className="button quiet auth-submit" disabled={busy} onClick={() => void sendLink()}>{action === "link" ? "Sending…" : "Email me a sign-in link"}</button>
-            {isMobileApp && process.env.NEXT_PUBLIC_PHONE_AUTH_ENABLED === "true" && <PhoneSignIn />}
-            {isMobileApp && <MobileInvitation />}
-          </div></details>
+    <EntryScreen labelledBy="signin-title" className="entry-signin">
+      <EntryBrand />
+      <EntryTitle id="signin-title" meta="Your church workspace">{signingIn ? "Sign in" : "Create account"}</EntryTitle>
+      {providers && <div className="entry-providers">
+        {isMobileApp
+          ? <><AppleSignInButton busy={busy} onClick={() => void runAuthAction("apple", signInWithApple)} /><GoogleSignInButton disabled={busy} loading={action === "google"} onClick={() => void signInWithGoogle()} /></>
+          : <button type="button" className="button auth-submit auth-google" disabled={busy} onClick={() => void signInWithGoogle()}><span className="google-mark" aria-hidden="true">G</span>{action === "google" ? "Opening Google…" : "Continue with Google"}</button>}
+        <p className="entry-divider mono-meta" aria-hidden="true"><span>or with email</span></p>
+      </div>}
+      <form className="entry-form" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
+        <label className="entry-field"><span className="mono-meta">Email address</span><input ref={emailField} className="sheet-input" type="email" autoComplete="email" inputMode="email" autoCapitalize="none" enterKeyHint="next" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourchurch.org" /></label>
+        <label className="entry-field"><span className="mono-meta">Password</span><input className="sheet-input" type="password" minLength={8} autoComplete={signingIn ? "current-password" : "new-password"} enterKeyHint="go" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={signingIn ? undefined : "At least 8 characters"} /></label>
+        <div ref={status} className="entry-status">
+          {error && <p className="inline-error" role="alert">{error}</p>}
+          {confirmation && <div className="offset-card entry-confirmation" role="status"><p className="mono-meta">{confirmation.title}</p><p>{confirmation.detail}</p></div>}
         </div>
-        <nav className="auth-links" aria-label="Sign-in support"><Link href="/help">Help</Link>{isMobileApp && <Link href="/demo">Explore demo</Link>}<Link href="/privacy">Privacy</Link></nav>
+        <button className="button-ink wide" disabled={busy}>{action === "password" || action === "signup" ? "Please wait…" : signingIn ? "Sign in" : "Create account"}</button>
+      </form>
+      <div className="entry-links">
+        {signingIn
+          ? <><button type="button" disabled={busy} onClick={() => void sendReset()}>Forgot password?</button><button type="button" disabled={busy} onClick={() => switchMode("signup")}>Create an account</button></>
+          : <button type="button" disabled={busy} onClick={() => switchMode("signin")}>Back to sign in</button>}
+      </div>
+      {!signingIn && <p className="sheet-copy entry-hint">We’ll send one email to confirm your account. After that, you sign in with your password.</p>}
+      <section className="settings-group" aria-labelledby="signin-more">
+        <h2 className="mono-meta sheet-label" id="signin-more">More ways in</h2>
+        <div className="grouped-rows">
+          <button type="button" className="grouped-row" disabled={busy} onClick={() => void sendLink()}>
+            <Mail size={19} aria-hidden="true" />
+            <span className="grouped-row-text"><strong>{action === "link" ? "Sending…" : "Email me a sign-in link"}</strong><small>No password needed</small></span>
+          </button>
+          {isMobileApp && process.env.NEXT_PUBLIC_PHONE_AUTH_ENABLED === "true" && <PhoneSignIn />}
+          {isMobileApp && <MobileInvitation />}
+        </div>
       </section>
-    </main>
+      <nav className="entry-footer mono-meta" aria-label="Sign-in support"><Link href="/help">Help</Link>{isMobileApp && <Link href="/demo">Explore the demo</Link>}<Link href="/privacy">Privacy</Link></nav>
+    </EntryScreen>
   );
 }
 
-function PasswordRecovery({ email, onSave }: { email: string; onSave: (password: string) => Promise<void> }) {
+export function PasswordRecovery({ email, onSave }: { email: string; onSave: (password: string) => Promise<void> }) {
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [saving, setSaving] = useState(false);
@@ -305,9 +323,45 @@ function PasswordRecovery({ email, onSave }: { email: string; onSave: (password:
       setSaving(false);
     }
   };
-  return <main className="auth-shell"><section className="auth-card auth-recovery" aria-labelledby="recovery-title"><div className="auth-route" aria-hidden="true"><span><KeyRound size={18} /></span><i /><span><MapPinned size={18} /></span></div><p className="eyebrow">Account recovery</p><h1 id="recovery-title">Choose a new password.</h1><p className="auth-intro">Set a password for {email}. Future sign-ins will not need an email link.</p><form className="auth-form" onSubmit={(event) => { event.preventDefault(); void save(); }}><label className="form-field"><span>New password</span><input type="password" minLength={8} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><label className="form-field"><span>Confirm password</span><input type="password" minLength={8} autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>{error && <p className="auth-error" role="alert">{error}</p>}<button className="button primary auth-submit" disabled={saving}>{saving ? "Saving…" : "Save password and continue"}</button></form></section></main>;
+  return <EntryScreen labelledBy="recovery-title">
+    <EntryBrand />
+    <EntryTitle id="recovery-title" meta={<>Account recovery · <span className="entry-account">{email}</span></>}>New password</EntryTitle>
+    <p className="sheet-copy">Choose a password for next time. You won’t need an email link to sign in.</p>
+    <form className="entry-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <label className="entry-field"><span className="mono-meta">New password</span><input className="sheet-input" type="password" minLength={8} autoComplete="new-password" enterKeyHint="next" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /></label>
+      <label className="entry-field"><span className="mono-meta">Confirm password</span><input className="sheet-input" type="password" minLength={8} autoComplete="new-password" enterKeyHint="done" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
+      {error && <p className="inline-error" role="alert">{error}</p>}
+      <button className="button-ink wide" disabled={saving}>{saving ? "Saving…" : "Save password and continue"}</button>
+    </form>
+  </EntryScreen>;
 }
 
-function ConnectionLoading() {
-  return <main className="app-loading"><div className="loading-mark"><Navigation size={23} /></div><h1>Opening your church workspace</h1><span role="status" aria-live="polite">Checking your secure session…</span></main>;
+export function ConnectionLoading() {
+  return <EntryLoading status="Checking your sign-in…" />;
+}
+
+export function WorkspaceUnavailable() {
+  return <EntryNotice id="unavailable-title" tone="problem" icon={<PlugZap size={22} />} title="Can’t connect yet"
+    reassurance="Real church records won’t be replaced with sample data"
+    actions={<Link className="button-outline wide" href="/demo">Explore the sample church</Link>}>
+    <p>This copy of the app isn’t connected to a church service. Ask whoever set it up to finish connecting it.</p>
+  </EntryNotice>;
+}
+
+export function OfflineWorkspace({ onOpen }: { onOpen: () => void }) {
+  return <EntryNotice id="offline-title" icon={<WifiOff size={22} />} title="You’re offline"
+    reassurance="New work stays on this phone until you’re back online"
+    actions={<><button type="button" className="button-ink wide" onClick={onOpen}>Open saved records</button><button type="button" className="button-outline wide" onClick={() => window.location.reload()}>Try signing in again</button></>}>
+    <p>Sign-in can’t be reached. This phone checked in with your church in the last 24 hours, so you can reopen the records saved here. This isn’t a new sign-in.</p>
+    <p>Signing out, or losing access to your church, turns this off.</p>
+  </EntryNotice>;
+}
+
+export function ConnectionProblem({ error }: { error: string }) {
+  return <EntryNotice id="connection-title" tone="problem" icon={<CloudOff size={22} />} title="Can’t check your sign-in"
+    reassurance="Nothing on this phone was cleared"
+    actions={<><button type="button" className="button-ink wide" onClick={() => window.location.reload()}>Try again</button><Link className="button-outline wide" href="/login">Open sign-in</Link><Link className="entry-text-link" href="/help">Sign-in help</Link></>}>
+    <p role="alert" className="inline-error">{error}</p>
+    <p>If an email link opened somewhere else, sign in there, then open your church invitation again.</p>
+  </EntryNotice>;
 }

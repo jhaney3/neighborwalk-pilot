@@ -149,3 +149,8 @@ The share image at `public/og.png` was edited with the built-in image-generation
 ## September 26, 2026 — Broad haptic feedback
 
 The user asked for more haptic feedback and chose every option offered: a tick on every button press and text field tap, success on other saves, errors, a warning on destructive confirmations, and taps for drawing corners. This replaces the earlier "sparingly" guidance. The vocabulary is fixed in `mobile/haptics.ts` (tick, light impact, success, warning, error), with dedupe so one action never buzzes twice. Details are in build plan decision 74.
+
+## September 26, 2026 — Entry screens join the redesign
+
+Sign-in, invitations, password recovery, loading and every problem screen before a church opens were still the pre-redesign card. The user asked for them to match the current theme. They now reuse the redesign's parts (see build plan decision 75); new styling is limited to layout in `app/styles/entry.css`, which only the iOS app loads, so the website's error and 404 pages are unchanged. References: the locked tabs (Today, More, Settings, Invite someone) and Apple's Sign in with Apple guidelines. Mobbin was not available in this session.
+

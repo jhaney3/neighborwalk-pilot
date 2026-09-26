@@ -1,0 +1,84 @@
+/* Screens shown before a church opens: sign-in, invitations, loading and
+   problems (components/EntryScreens.tsx). They reuse the tabs' parts — the
+   screen title, mono meta, sheet inputs, grouped rows, offset cards and the
+   ink/outline buttons — and only add the frame and spacing here. */
+.entry-screen { height: 100%; min-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: calc(var(--top-inset) + 28px) 16px calc(var(--bottom-inset) + 32px); color: var(--label); background: var(--bg); }
+.entry-screen::after { content: ""; position: fixed; z-index: 5; top: 0; left: 0; right: 0; height: var(--top-inset); background: color-mix(in srgb, var(--bg) 82%, transparent); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); pointer-events: none; }
+.entry-column { width: 100%; max-width: 480px; margin: 0 auto; display: grid; gap: 16px; align-content: start; }
+.entry-column > * { min-width: 0; }
+
+.entry-brand { display: flex; align-items: center; gap: 12px; }
+.entry-brand span { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border: 1.5px solid var(--ink-line); border-radius: 13px; color: var(--on-hero); background: var(--hero-bg); box-shadow: 2px 3px 0 0 var(--offset-hedge), 2px 3px 0 1.5px var(--ink-line); }
+.entry-brand strong { font-family: var(--font-display); font-size: 21px; font-weight: 850; letter-spacing: -.02em; }
+
+.entry-title { display: grid; gap: 10px; margin: 10px 0 4px; }
+.entry-title .screen-title { margin: 0; overflow-wrap: anywhere; }
+.entry-title .mono-meta { margin: 0; font-size: 12px; }
+.entry-account { text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+
+.entry-providers { display: grid; gap: 10px; }
+.entry-divider { display: flex; align-items: center; gap: 12px; margin: 6px 0 0; }
+.entry-divider::before, .entry-divider::after { content: ""; height: 1px; flex: 1; background: var(--hairline); }
+
+.entry-form { display: grid; gap: 14px; }
+.entry-field { display: grid; gap: 8px; }
+.entry-field > .mono-meta { padding: 0 2px; font-size: 12px; }
+.entry-status { display: grid; gap: 10px; scroll-margin: 24px; }
+.entry-status:empty { display: none; }
+.entry-status .inline-error, .entry-copy .inline-error, .entry-column > .inline-error { margin: 0; }
+.entry-confirmation { display: grid; gap: 4px; padding: 16px 18px; }
+.entry-confirmation p { margin: 0; }
+.entry-confirmation p + p { overflow-wrap: anywhere; font-size: var(--fs-subhead); line-height: 1.4; }
+
+.entry-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin-top: -4px; }
+.entry-links button, .entry-text-link { min-height: 44px; padding: 0 2px; border: 0; color: var(--tint); background: none; font-family: var(--font-display); font-size: 16px; font-weight: 700; }
+.entry-text-link { display: inline-flex; align-items: center; justify-self: center; }
+.entry-links button:disabled, .entry-text-link:disabled { opacity: .45; }
+.entry-hint { margin: -6px 2px 0; }
+
+.entry-column > .settings-group { margin-top: 10px; }
+.entry-disclosure summary { list-style: none; cursor: pointer; }
+.entry-disclosure summary::-webkit-details-marker { display: none; }
+.entry-disclosure .entry-chevron { flex: none; color: var(--label-3); transition: transform .2s ease; }
+.entry-disclosure[open] .entry-chevron { transform: rotate(180deg); }
+.entry-disclosure + .grouped-row, .grouped-row + .entry-disclosure, .entry-disclosure + .entry-disclosure { border-top: 1px solid var(--hairline); }
+.entry-disclosure .grouped-row-text small { white-space: normal; }
+.entry-disclosure-body { display: grid; gap: 12px; padding: 2px 16px 16px; }
+.entry-disclosure-body .sheet-copy { margin: 0; }
+.entry-disclosure-body .sheet-input { background: var(--bg); }
+.entry-sent { margin: 0; text-transform: none; letter-spacing: 0; font-size: 13px; }
+
+.entry-card { display: grid; gap: 6px; padding: 16px 18px; }
+.entry-card p { margin: 0; }
+.entry-account-line { display: grid; gap: 4px; }
+.entry-account-line strong { overflow-wrap: anywhere; font-family: var(--font-display); font-size: 18px; font-weight: 750; }
+.entry-actions { display: grid; gap: 10px; margin-top: 4px; }
+.entry-footer, .entry-footnote, .entry-reassurance, .entry-waiting { margin: 0; text-align: center; }
+.entry-footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 0 22px; margin-top: 12px; }
+.entry-footer a { min-height: 44px; display: inline-flex; align-items: center; color: var(--label-2); }
+.entry-footnote { margin-top: 4px; }
+
+/* Loading: the brand tile and one mono line, where the launch screen was. */
+.entry-loading { display: grid; place-content: center; justify-items: center; gap: 18px; }
+.entry-loading .entry-brand span { width: 64px; height: 64px; border-radius: 19px; box-shadow: var(--offset-shadow); }
+.entry-loading .entry-brand svg { width: 28px; height: 28px; }
+.entry-loading .mono-meta { margin: 0; font-size: 12px; }
+
+/* Problems and stops: an icon, the title, what happened, then the actions. */
+.entry-notice .entry-column { min-height: 100%; align-content: center; }
+.entry-notice-icon { width: 56px; height: 56px; display: grid; place-items: center; border: 1.5px solid var(--ink-line); border-radius: 50%; color: var(--label); background: var(--offset-hedge); }
+.entry-notice-icon.problem { color: var(--red-text); background: var(--red-soft); }
+.entry-copy { display: grid; gap: 10px; }
+.entry-copy p { margin: 0; color: var(--label-2); font-size: var(--fs-callout); line-height: 1.45; }
+.entry-copy p.inline-error { color: var(--red-text); font-size: var(--fs-footnote); }
+.entry-reassurance { text-align: left; }
+
+/* Delete account: the outline button beside Sign out, and its sheet. */
+.button-outline.danger { color: var(--red-text); }
+.button-ink.danger { color: #fff; background: var(--red); }
+.deletion-body { display: grid; gap: 12px; }
+.deletion-body .sheet-copy, .deletion-body .inline-error { margin: 0; }
+.deletion-reference code { font-family: var(--font-mono); text-transform: none; color: var(--label); }
+#root .modal-heading h2 { font-family: var(--font-display); font-size: 26px; line-height: 1.1; font-weight: 850; letter-spacing: -.02em; }
+
+@media (prefers-reduced-motion: reduce) { .entry-disclosure .entry-chevron { transition: none; } }

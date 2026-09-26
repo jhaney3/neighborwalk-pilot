@@ -5,13 +5,11 @@ import {
   CircleAlert,
   CircleCheck,
   CircleEllipsis,
-  CircleUserRound,
   Info,
   MapPin,
   Navigation,
   Plus,
   Sun,
-  ShieldCheck,
   Users,
   X,
 } from "lucide-react";
@@ -22,6 +20,7 @@ import Link from "next/link";
 import { isMobileApp } from "../lib/mobile";
 import { MobileInvitation } from "../components/MobileInvitation";
 import { AccountDeletion } from "../components/AccountDeletion";
+import { EntryBrand, EntryLoading, EntryNotice, EntryScreen, EntryTitle } from "../components/EntryScreens";
 import { appHref, appRoute, type AppView } from "../lib/app-routes";
 import { TodayView } from "../components/TodayView";
 import { ConversationLogger } from "../components/ConversationLogger";
@@ -442,23 +441,23 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
   );
 }
 
-function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; error?: string; onSignOut?: () => Promise<void> }) {
+export function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; error?: string; onSignOut?: () => Promise<void> }) {
   const action = useAsyncAction();
   return (
-    <main className="workspace-setup-shell">
-      <section className="workspace-setup-card" aria-labelledby="workspace-title">
-        <div className="workspace-setup-mark"><Users size={22} /></div>
-        <p className="eyebrow">Invitation required</p>
-        <h1 id="workspace-title">Ask your leader for an invitation link.</h1>
-        <p>SendMe is private to each church. Open the invite link from your leader, then sign in.</p>
-        <div className="workspace-account"><CircleUserRound size={17} /><span><strong>Signed in</strong>{user.email}</span></div>
-        <div className="data-note"><ShieldCheck size={16} /><span>Invite links work once and expire after 7 days.</span></div>
-        {error && <p className="auth-error" role="alert">{error}</p>}
-        {isMobileApp && <><MobileInvitation /><AccountDeletion /></>}
-        {onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onSignOut)}>Use a different account</button>}
-        {action.error && <p role="alert">{action.error}</p>}
-      </section>
-    </main>
+    <EntryScreen labelledBy="workspace-title">
+      <EntryBrand />
+      <EntryTitle id="workspace-title" meta="Invitation required">Ask your leader for an invite</EntryTitle>
+      <p className="sheet-copy">SendMe is private to each church. Open the invite link your leader sent, then sign in.</p>
+      <div className="offset-card entry-card"><p className="entry-account-line"><span className="mono-meta">Signed in as</span> <strong>{user.email}</strong></p></div>
+      {error && <p className="inline-error" role="alert">{error}</p>}
+      {isMobileApp && <div className="grouped-rows"><MobileInvitation /></div>}
+      <div className="entry-actions">
+        {onSignOut && <button type="button" className="button-outline wide" disabled={action.busy} onClick={() => void action.run(onSignOut)}>Use a different account</button>}
+        {isMobileApp && <AccountDeletion />}
+      </div>
+      {action.error && <p className="inline-error" role="alert">{action.error}</p>}
+      <p className="mono-meta entry-footnote">Invite links work once · expire in 7 days</p>
+    </EntryScreen>
   );
 }
 
@@ -472,14 +471,27 @@ function MobileNav({ active, icon, label, count, attention = false, onClick }: {
   return <button className={active ? "active" : ""} onClick={onClick} aria-current={active ? "page" : undefined} aria-label={accessibilityLabel}><span>{icon}{count ? <b aria-hidden="true">{count}</b> : attention ? <b className="dot" aria-hidden="true" /> : null}</span><small>{label}</small></button>;
 }
 
-function AppLoading() {
-  return <main className="app-loading"><div className="loading-mark"><Navigation size={23} /></div><h1>Getting things ready</h1><span role="status" aria-live="polite">Loading your church…</span></main>;
+export function AppLoading() {
+  return <EntryLoading status="Loading your church…" />;
 }
 
-function AppFailure({ error, onSignOut, onRecovery }: { error: string; onSignOut?: () => Promise<void>; onRecovery?: () => Promise<void> }) {
+export function AppFailure({ error, onSignOut, onRecovery }: { error: string; onSignOut?: () => Promise<void>; onRecovery?: () => Promise<void> }) {
   const action = useAsyncAction();
   const confirm = useConfirm();
   let hasInvitation = false;
   try { hasInvitation = typeof window !== "undefined" && Boolean(pendingInvitation(window.sessionStorage)); } catch { /* Leave a blocked browser's state intact. */ }
-  return <main className="app-loading error"><div className="loading-mark"><X size={23} /></div><h1>We couldn’t open your church</h1><p>{error}</p><p>Nothing on this phone was deleted. Reconnect, or ask your leader to check your access.</p><button className="button primary" onClick={() => location.reload()}>Try again</button>{hasInvitation && <button className="button quiet" disabled={action.busy} onClick={() => { void confirm({ title: "Use your existing church instead?", message: "This skips the invitation on this phone. The invitation itself still works.", confirmLabel: "Skip invitation" }).then((confirmed) => { if (confirmed) void action.run(async () => { clearPendingInvitation(); window.location.reload(); }); }); }}>Skip this invitation</button>}{onRecovery && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(onRecovery)}>Download my unsent work</button>}{onSignOut && <button className="button quiet" disabled={action.busy} onClick={() => { void confirm({ title: "Sign out?", message: "Unsent work stays on this phone and sends when you sign back in with this account.", confirmLabel: "Sign out", destructive: true }).then((confirmed) => { if (confirmed) void action.run(onSignOut); }); }}>Sign out or use a different account</button>}{isMobileApp && onSignOut && <AccountDeletion />}<Link href="/help">Sign-in help</Link>{action.error && <p role="alert">{action.error}</p>}</main>;
+  return <EntryNotice id="failure-title" tone="problem" icon={<X size={22} />} title="We couldn’t open your church"
+    reassurance="Nothing on this phone was deleted"
+    actions={<>
+      <button type="button" className="button-ink wide" onClick={() => location.reload()}>Try again</button>
+      {hasInvitation && <button type="button" className="button-outline wide" disabled={action.busy} onClick={() => { void confirm({ title: "Use your existing church instead?", message: "This skips the invitation on this phone. The invitation itself still works.", confirmLabel: "Skip invitation" }).then((confirmed) => { if (confirmed) void action.run(async () => { clearPendingInvitation(); window.location.reload(); }); }); }}>Skip this invitation</button>}
+      {onRecovery && <button type="button" className="button-outline wide" disabled={action.busy} onClick={() => void action.run(onRecovery)}>Download my unsent work</button>}
+      {onSignOut && <button type="button" className="button-outline wide" disabled={action.busy} onClick={() => { void confirm({ title: "Sign out?", message: "Unsent work stays on this phone and sends when you sign back in with this account.", confirmLabel: "Sign out", destructive: true }).then((confirmed) => { if (confirmed) void action.run(onSignOut); }); }}>Sign out or use a different account</button>}
+      {isMobileApp && onSignOut && <AccountDeletion />}
+      <Link className="entry-text-link" href="/help">Sign-in help</Link>
+      {action.error && <p className="inline-error" role="alert">{action.error}</p>}
+    </>}>
+    <p className="inline-error">{error}</p>
+    <p>Reconnect, or ask your leader to check your access.</p>
+  </EntryNotice>;
 }

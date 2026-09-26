@@ -26,16 +26,16 @@ export function AccountDeletion() {
     finally { setBusy(false); }
   };
   return <>
-    <button className="button danger" onClick={() => { destructiveAsked(); setOpen(true); }}><Trash2 size={16} /> Delete account</button>
-    {open && <Modal title={receipt ? "Deletion requested" : "Delete your account?"} description={receipt ? "Your request has been securely recorded." : "This permanently removes your account and associated personal data. It cannot be undone once completed."} onClose={() => { if (!busy) setOpen(false); }}>
-      {receipt ? <div role="status"><p>Your account and associated personal data will be deleted within 30 days. You’ll receive confirmation at your account email when it is complete.</p><p>Request reference: <code>{receipt.request_id}</code></p><button className="button primary" onClick={() => setOpen(false)}>Done</button></div> : <>
-        <p>If you use Sign in with Apple, you’ll be asked to confirm that Apple account so its authorization can be revoked.</p>
-        <p>Deletion is processed within 30 days. Your account stays available until processing is complete. We’ll email you when it is finished. Records that must legally be retained will be explained in that confirmation.</p>
-        <p>Share any pending fieldwork first. Deleting your account does not uninstall this app or automatically erase offline copies on your devices.</p>
+    <button type="button" className="button-outline wide danger" onClick={() => { destructiveAsked(); setOpen(true); }}><Trash2 size={17} aria-hidden="true" /> Delete account</button>
+    {open && <Modal className="deletion-sheet" title={receipt ? "Deletion requested" : "Delete your account?"} description={receipt ? "Your request has been securely recorded." : "This permanently removes your account and associated personal data. It cannot be undone once completed."} onClose={() => { if (!busy) setOpen(false); }}>
+      {receipt ? <div className="deletion-body" role="status"><p className="sheet-copy">Your account and associated personal data will be deleted within 30 days. You’ll receive confirmation at your account email when it is complete.</p><p className="mono-meta deletion-reference">Request reference <code>{receipt.request_id}</code></p><button type="button" className="button-ink wide" onClick={() => setOpen(false)}>Done</button></div> : <div className="deletion-body">
+        <p className="sheet-copy">If you use Sign in with Apple, you’ll be asked to confirm that Apple account so its authorization can be revoked.</p>
+        <p className="sheet-copy">Deletion is processed within 30 days. Your account stays available until processing is complete. We’ll email you when it is finished. Records that must legally be retained will be explained in that confirmation.</p>
+        <p className="sheet-copy">Share any pending fieldwork first. Deleting your account does not uninstall this app or automatically erase offline copies on your devices.</p>
         <label className="toggle-row"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I want to permanently delete my account and associated personal data.</span></label>
         {error && <p role="alert" className="inline-error">{error}</p>}
-        <div className="modal-actions"><button className="button quiet" disabled={busy} onClick={() => setOpen(false)}>Keep account</button><button className="button danger" disabled={!confirmed || busy} onClick={() => void submit()}>{busy ? "Submitting…" : "Request account deletion"}</button></div>
-      </>}
+        <div className="entry-actions"><button type="button" className="button-ink wide danger" disabled={!confirmed || busy} onClick={() => void submit()}>{busy ? "Submitting…" : "Request account deletion"}</button><button type="button" className="button-outline wide" disabled={busy} onClick={() => setOpen(false)}>Keep account</button></div>
+      </div>}
     </Modal>}
   </>;
 }

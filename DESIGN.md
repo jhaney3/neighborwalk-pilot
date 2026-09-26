@@ -54,6 +54,7 @@ Check each item against the current Apple Human Interface Guidelines page when y
 - **Motion:** respect `prefers-reduced-motion` (there are existing blocks in `app/styles/responsive.css` and `people.css`). Keep transitions short; the Walks / Map / List switch must not jump (WK1).
 - **Keyboard:** inputs stay visible above the keyboard. Done dismisses single-line fields (`mobile/keyboard.ts`); keep that behavior.
 - **VoiceOver:** meaningful labels on icon-only buttons (the tab bar, ⋯, locate, the pin bar icons), a logical reading order in sheets, and state announced for switches, segments and checks.
+- **Entry screens** (sign-in, invitations, loading, problems) aren't in the walkthrough. They use `components/EntryScreens.tsx` and `app/styles/entry.css`; captures and the fixture live in `docs/design/entry-screens/`. Keep new pre-church screens on those parts.
 - **Deliberate departures the user chose (keep them):** the pill tab bar with icon-only inactive tabs, the separate yellow + button, the offset "next action" card, and mono metadata. Don't "correct" these toward stock iOS.
 
 ## Design system and rules

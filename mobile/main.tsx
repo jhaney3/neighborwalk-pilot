@@ -5,6 +5,7 @@ import { App } from "@capacitor/app";
 import { Network } from "@capacitor/network";
 import { NeighborWalkRoot } from "../components/SupabaseGate";
 import { NeighborWalkApp } from "../app/NeighborWalkApp";
+import { AppCrashed } from "../components/EntryScreens";
 import { installNavigation, navigate, usePathname } from "./navigation";
 import { receiveAuthLink } from "./auth-links";
 import { publishNativeConnectivity } from "./connectivity";
@@ -44,6 +45,7 @@ import "../app/styles/walk-mode.css";
 import "../app/styles/followups.css";
 import "../app/styles/walk-page.css";
 import "../app/styles/pins.css";
+import "../app/styles/entry.css";
 import "./native.css";
 
 installMobileColorTheme();
@@ -69,7 +71,7 @@ class AppBoundary extends Component<{ children: ReactNode }, { failed: boolean }
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   render() {
-    return this.state.failed ? <main className="app-loading"><h1>Let’s reopen your workspace.</h1><p>Your saved work is still on this device.</p><button className="button primary" onClick={() => window.location.reload()}>Try again</button></main> : this.props.children;
+    return this.state.failed ? <AppCrashed /> : this.props.children;
   }
 }
 function MobileApp() {

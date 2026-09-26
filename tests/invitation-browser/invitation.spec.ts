@@ -39,7 +39,6 @@ test("phone signup sends normalized number and verifies the one-time code", asyn
     return route.fulfill({ json: [] });
   });
   await page.goto("/login");
-  await page.getByText("More options", { exact: true }).click();
   await page.getByText("Sign in with your phone number", { exact: true }).click();
   await page.getByLabel("Phone number with country code").fill("+1 (615) 555-0123");
   await page.getByRole("button", { name: "Text me a code" }).click();
@@ -55,7 +54,6 @@ test("pasted links use the dedicated invite host and fit a small iPhone", async 
   await page.setViewportSize({ width: 320, height: 740 });
   await page.route("http://127.0.0.1:54321/**", (route) => route.fulfill({ json: [] }));
   await page.goto("/login");
-  await page.getByText("More options", { exact: true }).click();
   await page.getByText("Have a church invitation?", { exact: true }).click();
   await page.getByLabel("Invitation link", { exact: true }).fill(`https://invite.example.test/invite#join=${token}`);
   await page.getByRole("button", { name: "Use invitation" }).click();

@@ -1,7 +1,9 @@
 "use client";
+import { Smartphone } from "lucide-react";
 import { useState } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { actionFailed } from "../mobile/haptics";
+import { EntryDisclosure } from "./EntryScreens";
 
 export function PhoneSignIn() {
   const [phone, setPhone] = useState("");
@@ -28,12 +30,15 @@ export function PhoneSignIn() {
     setBusy(true); setError("");
     try { await operation(); } catch (failure) { actionFailed(); setError(failure instanceof Error ? failure.message : "Sign-in could not finish. Please retry."); } finally { setBusy(false); }
   };
-  return <details className="auth-email-fallback"><summary>Sign in with your phone number</summary><p>We’ll text a code to verify your number. This creates an account if you’re new. Message and data rates may apply.</p>
-    <form className="form-stack" onSubmit={(event) => { event.preventDefault(); void run(sentTo ? verify : send); }}>
-      {!sentTo ? <label className="form-field"><span>Phone number with country code</span><input required type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+1 615 555 0123" /></label> : <><p role="status">Code sent to {sentTo}.</p><label className="form-field"><span>Verification code</span><input required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" maxLength={10} value={code} onChange={(event) => setCode(event.target.value)} /></label></>}
-      <button className="button quiet auth-submit" disabled={busy}>{busy ? "Please wait…" : sentTo ? "Verify and continue" : "Text me a code"}</button>
-      {sentTo && <><button type="button" className="button quiet" disabled={busy} onClick={() => void run(send)}>Send another code</button><button type="button" className="button quiet" disabled={busy} onClick={() => { setSentTo(""); setCode(""); }}>Use another number</button></>}
-      {error && <p role="alert" className="auth-error">{error}</p>}
+  return <EntryDisclosure icon={<Smartphone size={19} aria-hidden="true" />} title="Sign in with your phone number" detail="We’ll text you a code">
+    <p className="sheet-copy">This creates an account if you’re new. Message and data rates may apply.</p>
+    <form className="entry-form" onSubmit={(event) => { event.preventDefault(); void run(sentTo ? verify : send); }}>
+      {!sentTo
+        ? <label className="entry-field"><span className="mono-meta">Phone number with country code</span><input className="sheet-input" required type="tel" autoComplete="tel" enterKeyHint="send" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+1 615 555 0123" /></label>
+        : <><p className="mono-meta entry-sent" role="status">Code sent to {sentTo}.</p><label className="entry-field"><span className="mono-meta">Verification code</span><input className="sheet-input" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" maxLength={10} enterKeyHint="go" value={code} onChange={(event) => setCode(event.target.value)} /></label></>}
+      {error && <p role="alert" className="inline-error">{error}</p>}
+      <button className="button-ink wide" disabled={busy}>{busy ? "Please wait…" : sentTo ? "Verify and continue" : "Text me a code"}</button>
+      {sentTo && <div className="entry-links"><button type="button" disabled={busy} onClick={() => void run(send)}>Send another code</button><button type="button" disabled={busy} onClick={() => { setSentTo(""); setCode(""); }}>Use another number</button></div>}
     </form>
-  </details>;
+  </EntryDisclosure>;
 }
