@@ -898,7 +898,7 @@ export function MapCanvas({
         if (!event.error) return;
         const message = redactMapError(event.error.message || String(event.error));
         if (containerRef.current) containerRef.current.dataset.mapError = message;
-        console.error("[NeighborWalk map]", message);
+        console.error("[SendMe map]", message);
         if (!mapLoaded) setMapStatus("error");
       });
 
@@ -1164,7 +1164,7 @@ export function MapCanvas({
         <div className="map-state error"><AlertTriangle size={23} /><strong>The map is unavailable</strong><span>Your saved locations and visit records can still be used in the address list.</span>{onUseAddressList && <button className="button primary" onClick={onUseAddressList}>Use address list</button>}</div>
       )}
       {mapStatus === "ready" && locationStatus && !addMode && !drawMode && <div className="map-location-notice" role="status"><AlertTriangle size={16} /><span>{locationStatus === "denied"
-        ? "Location access is off. Search and saved addresses still work. To change it, open iOS Settings → NeighborWalk → Location."
+        ? "Location access is off. Search and saved addresses still work. To change it, open iOS Settings → SendMe → Location."
         : "Your location is unavailable right now. Search and saved addresses still work."}</span></div>}
       {addMode && (
         <div className="map-mode-banner"><MapPin size={15} /><span>Tap the next door</span></div>

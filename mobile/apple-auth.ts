@@ -5,7 +5,7 @@ const apple = registerPlugin<{ signIn(options: { nonce: string }): Promise<{ ide
 const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 export async function signInWithApple() {
-  if (Capacitor.getPlatform() !== "ios") throw new Error("Open the NeighborWalk iPhone or iPad app to use Sign in with Apple.");
+  if (Capacitor.getPlatform() !== "ios") throw new Error("Open the SendMe iPhone or iPad app to use Sign in with Apple.");
   const client = getSupabaseBrowserClient();
   if (!client) throw new Error("The workspace connection is unavailable.");
   const nonce = hex(crypto.getRandomValues(new Uint8Array(32)));

@@ -19,7 +19,7 @@
   const copy = document.getElementById("copy");
   copy.hidden = false;
   copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(link.href); status.textContent = "Copied. Paste this invitation in NeighborWalk after installing."; }
+    try { await navigator.clipboard.writeText(link.href); status.textContent = "Copied. Paste this invitation in SendMe after installing."; }
     catch { status.textContent = "Select your browser’s address bar and copy the complete invitation link."; }
   };
   status.textContent = "This invitation works once and expires after 7 days. Share it only with its intended recipient.";

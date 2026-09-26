@@ -139,3 +139,9 @@ same type and card system. Where the build differs from the mockups:
   people checked in or logging on this walk first.
 - **Narrow phones (≤360pt)**: the active tab keeps its ink segment but drops
   its label so four tabs and + fit; VoiceOver labels are unchanged.
+
+## September 26, 2026 — SendMe public name
+
+The user approved SendMe everywhere people see the product name: iOS display name, app and website copy, invitations, notifications, exports and share metadata/artwork. Keep the existing visual design. Preserve `app.neighborwalk.ios`, the `neighborwalk://` scheme, storage/serialization identifiers and existing service URLs for compatibility. Historical design captures retain the original name. APNs accepts the existing fixed generic database copy and renders SendMe at delivery; email retries retain their original payload for provider idempotency.
+
+The share image at `public/og.png` was edited with the built-in image-generation tool. Prompt: replace only the large headline “NeighborWalk” with “SendMe”; retain the dark green serif typography, scale, left alignment, landscape composition, phone illustration, colors and “Neighborhood outreach, kept in order.” copy. The inspected output is 1730 × 909.

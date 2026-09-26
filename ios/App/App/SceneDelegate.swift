@@ -35,7 +35,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
         cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         let title = UILabel()
-        title.text = "NeighborWalk"
+        title.text = "SendMe"
         let titleFont = UIFont.systemFont(ofSize: 28, weight: .semibold)
         title.font = titleFont.fontDescriptor.withDesign(.serif).map { UIFont(descriptor: $0, size: 28) } ?? titleFont
         title.textColor = .label
@@ -94,7 +94,7 @@ class NeighborWalkPrintPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let webView = self.bridge?.webView else { call.reject("The worksheet is unavailable."); return }
             let controller = UIPrintInteractionController.shared
             let info = UIPrintInfo(dictionary: nil)
-            info.jobName = "NeighborWalk field worksheet"
+            info.jobName = "SendMe field worksheet"
             info.outputType = .general
             controller.printInfo = info
             controller.printFormatter = webView.viewPrintFormatter()

@@ -108,7 +108,7 @@ export function WalkPage(props: WalkPageProps) {
   const open = (assignment: Assignment) => void action.run(() => onStart(outing.id, assignment.territoryId, assignment.targetId));
   const nudge = () => void action.run(async () => {
     const weekday = format(outing.startsAt, { weekday: "long" });
-    const message = `Are you coming to ${outing.name} on ${weekday} at ${format(outing.startsAt, { hour: "numeric", minute: "2-digit" })}?${outing.meetingPoint ? ` We meet at ${outing.meetingPoint}.` : ""} Reply in NeighborWalk under Today.`;
+    const message = `Are you coming to ${outing.name} on ${weekday} at ${format(outing.startsAt, { hour: "numeric", minute: "2-digit" })}?${outing.meetingPoint ? ` We meet at ${outing.meetingPoint}.` : ""} Reply in SendMe under Today.`;
     if (await shareText("Walk reminder", message) === "copied") props.onNotice?.("Reminder copied. Paste it in your group text.");
   });
   const addToCalendar = () => void action.run(() => shareFile(new Blob([walkCalendarFile(outing, data.church.name)], { type: "text/calendar" }), `${outing.name.replace(/[^\w -]+/g, "").trim() || "walk"}.ics`));

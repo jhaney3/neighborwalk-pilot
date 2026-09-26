@@ -1161,7 +1161,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `neighborwalk-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.download = `sendme-backup-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
   }, [data, supabaseUser]);
@@ -1394,7 +1394,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     if (revision === undefined) throw new Error("Refresh shared records before exporting.");
     const { reviewedData } = await runAdministration({ action: "record_export", expectedRevision: revision, kind });
     const copy = kind === "backup" ? exportNeighborWalkData(reviewedData) : new Blob([exportCsv(reviewedData, kind)], { type: "text/csv;charset=utf-8" });
-    downloadBlob(copy, "neighborwalk-" + kind + "-" + new Date().toISOString().slice(0, 10) + (kind === "backup" ? ".json" : ".csv"));
+    downloadBlob(copy, "sendme-" + kind + "-" + new Date().toISOString().slice(0, 10) + (kind === "backup" ? ".json" : ".csv"));
   }, [runAdministration]);
   const reauthenticateAdmin = useCallback(async (password: string) => {
     const scope = requireAdminScope();
@@ -1413,7 +1413,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     const session = await client?.auth.getSession();
     if (session?.data.session?.user.id !== scope.userId) throw new Error("Sign in again with the original author’s account before recovering device work.");
     const recovery = await authoredDeviceRecovery(scope);
-    downloadBlob(new Blob([JSON.stringify(recovery, null, 2)], { type: "application/json" }), "neighborwalk-my-authored-device-recovery.json");
+    downloadBlob(new Blob([JSON.stringify(recovery, null, 2)], { type: "application/json" }), "sendme-my-authored-device-recovery.json");
   }, [supabaseUser]);
   const reviewAdministrationPending = useCallback(async () => {
     const scope = requireAdminScope();
@@ -1438,14 +1438,14 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     if (scope && roleRef.current === "leader") await authorizeRecoveryExport(scope);
     const copy = scope && roleRef.current !== "leader"
       ? new Blob([JSON.stringify(authoredRecovery(current, scope), null, 2)], { type: "application/json" }) : exportNeighborWalkData(current);
-    downloadBlob(copy, "neighborwalk-device-recovery-" + new Date().toISOString().slice(0, 10) + ".json");
+    downloadBlob(copy, "sendme-device-recovery-" + new Date().toISOString().slice(0, 10) + ".json");
   }, [authorizeRecoveryExport]);
   const listDeviceArchives = useCallback(async () => storageScopeRef.current ? recoveryArchives(storageScopeRef.current) : [], []);
   const downloadDeviceArchive = useCallback(async (key: string) => {
     const scope = storageScopeRef.current;
     if (!scope || !storeRef.current) throw new Error("An authorized account is required.");
     if (roleRef.current === "leader") await authorizeRecoveryExport(scope);
-    downloadBlob(await exportRecoveryArchive(scope, key, roleRef.current === "leader" ? "workspace" : "authored"), "neighborwalk-preserved-recovery.json");
+    downloadBlob(await exportRecoveryArchive(scope, key, roleRef.current === "leader" ? "workspace" : "authored"), "sendme-preserved-recovery.json");
   }, [authorizeRecoveryExport]);
 
   const pendingCount = data?.sync.pending.length ?? 0;

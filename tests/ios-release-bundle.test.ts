@@ -13,7 +13,7 @@ function releaseBundle(overrides: Record<string, unknown> = {}) {
   const bundle = resolve(app, "public");
   fixtures.push(root);
   mkdirSync(bundle, { recursive: true });
-  writeFileSync(resolve(bundle, "index.html"), "<!doctype html><title>NeighborWalk</title>");
+  writeFileSync(resolve(bundle, "index.html"), "<!doctype html><title>SendMe</title>");
   writeFileSync(resolve(bundle, "build-provenance.json"), JSON.stringify({
     schemaVersion: 1,
     appId: "app.neighborwalk.ios",

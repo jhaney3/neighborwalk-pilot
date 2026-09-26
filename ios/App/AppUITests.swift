@@ -8,7 +8,7 @@ final class AppUITests: XCTestCase {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         if springboard.buttons["Open"].exists { springboard.buttons["Open"].tap() }
         let sample = app.webViews.links["Explore sample workspace"].firstMatch
-        let home = app.webViews.buttons["Open NeighborWalk Home"].firstMatch
+        let home = app.webViews.buttons["Open SendMe Home"].firstMatch
         if !home.waitForExistence(timeout: 2) {
             XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 15))
             for _ in 0..<6 where !sample.isHittable { app.webViews.firstMatch.swipeUp() }

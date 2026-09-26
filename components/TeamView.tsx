@@ -132,7 +132,7 @@ function InviteSheet({ data, onClose, onSent }: { data: NeighborWalkData; onClos
     const { data: created, error } = await client.rpc("create_shared_invitation", { contact_kind: "phone", contact_value: number, recipient_name: name.trim(), invitation_role: role });
     if (error) throw new Error(error.message || "The invite wasn’t created. If it asks, confirm your sign-in in Team › Access.");
     const link = invitationLink(origin, (created as { token: string }).token, "join");
-    const text = `${name.trim() ? `Hi ${name.trim()}! ` : ""}Join ${data.church.name} on NeighborWalk. This link works once and expires in 7 days.\n${link}`;
+    const text = `${name.trim() ? `Hi ${name.trim()}! ` : ""}Join ${data.church.name} on SendMe. This link works once and expires in 7 days.\n${link}`;
     await onSent();
     window.location.href = `sms:${number}&body=${encodeURIComponent(text)}`;
     onClose();

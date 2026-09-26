@@ -15,7 +15,7 @@ export function googleCallbackCode(value: string) {
 }
 
 export async function signInWithGoogleNative() {
-  if (Capacitor.getPlatform() !== "ios") throw new Error("Open the NeighborWalk iPhone or iPad app to use this Google sign-in option.");
+  if (Capacitor.getPlatform() !== "ios") throw new Error("Open the SendMe iPhone or iPad app to use this Google sign-in option.");
   if (inProgress) throw new Error("Google sign-in is already open.");
   const client = getSupabaseBrowserClient();
   if (!client) throw new Error("The app connection is unavailable.");

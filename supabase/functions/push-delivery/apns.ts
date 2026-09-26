@@ -15,15 +15,18 @@ export type ClaimedDelivery = {
 
 export type DeliveryOutcome = "delivered" | "retry" | "permanent_failure" | "invalid_token";
 
-const genericCopy: Record<PushKind, { title: string; body: string; path: RegExp }> = {
+// Accept existing database claims while sending the current public brand.
+const genericCopy: Record<PushKind, { title: string; body: string; legacyBody: string; path: RegExp }> = {
   walk_invitation: {
     title: "Walk invitation",
-    body: "You have a new walk invitation in NeighborWalk.",
+    body: "You have a new walk invitation in SendMe.",
+    legacyBody: "You have a new walk invitation in NeighborWalk.",
     path: /^\/app\/outreach(?:\/[A-Za-z0-9_-]{1,240})?$/,
   },
   follow_up_assignment: {
     title: "New follow-up",
-    body: "A follow-up was assigned to you in NeighborWalk.",
+    body: "A follow-up was assigned to you in SendMe.",
+    legacyBody: "A follow-up was assigned to you in NeighborWalk.",
     path: /^\/app\/followups(?:\/[A-Za-z0-9_-]{1,240})?$/,
   },
 };
@@ -32,7 +35,7 @@ export function validClaim(delivery: ClaimedDelivery) {
   const copy = genericCopy[delivery.event_kind];
   return Boolean(copy
     && copy.title === delivery.title
-    && copy.body === delivery.body
+    && (copy.body === delivery.body || copy.legacyBody === delivery.body)
     && copy.path.test(delivery.app_path)
     && /^[0-9a-f]{16,512}$/.test(delivery.device_token)
     && delivery.device_token.length % 2 === 0
@@ -43,7 +46,7 @@ export function notificationPayload(delivery: ClaimedDelivery) {
   if (!validClaim(delivery)) throw new Error("Unsafe push delivery claim");
   return {
     aps: {
-      alert: { title: delivery.title, body: delivery.body },
+      alert: { title: delivery.title, body: genericCopy[delivery.event_kind].body },
       sound: "default",
     },
     source: "neighborwalk-remote-push-v1",

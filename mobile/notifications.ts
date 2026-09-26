@@ -66,7 +66,7 @@ function reminderTarget(notification: PendingLocalNotificationSchema) {
 
 /**
  * Build only privacy-safe, accepted work reminders for the active signed-in
- * volunteer. iOS retains at most 64 pending local notifications, so NeighborWalk
+ * volunteer. iOS retains at most 64 pending local notifications, so SendMe
  * uses the earliest 60 and leaves a little system/plugin headroom.
  */
 export function deviceReminderPlan(data: NeighborWalkData, now = new Date()): LocalNotificationSchema[] {
@@ -84,7 +84,7 @@ export function deviceReminderPlan(data: NeighborWalkData, now = new Date()): Lo
     reminders.push({
       id: stableNotificationId("follow-up", data.church.id, volunteerId, task.id),
       title: "Next step due",
-      body: "Open NeighborWalk to review an accepted follow-up.",
+      body: "Open SendMe to review an accepted follow-up.",
       schedule: { at },
       sound: "default",
       interruptionLevel: "active",
@@ -106,7 +106,7 @@ export function deviceReminderPlan(data: NeighborWalkData, now = new Date()): Lo
     reminders.push({
       id: stableNotificationId("walk", data.church.id, volunteerId, outing.id),
       title: "Walk coming up",
-      body: "An accepted NeighborWalk outing starts soon. Open the app for current details.",
+      body: "An accepted SendMe outing starts soon. Open the app for current details.",
       schedule: { at },
       sound: "default",
       interruptionLevel: "active",

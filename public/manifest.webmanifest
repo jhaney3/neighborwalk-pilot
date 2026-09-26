@@ -1,6 +1,6 @@
 {
-  "name": "NeighborWalk",
-  "short_name": "NeighborWalk",
+  "name": "SendMe",
+  "short_name": "SendMe",
   "description": "Turn neighborhood conversations into personal follow-through.",
   "start_url": "/app/today",
   "id": "/",

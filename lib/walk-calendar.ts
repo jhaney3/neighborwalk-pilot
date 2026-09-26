@@ -13,7 +13,7 @@ export function walkCalendarFile(outing: Pick<OutreachEvent, "id" | "name" | "st
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//NeighborWalk//Walk//EN",
+    "PRODID:-//SendMe//Walk//EN",
     "BEGIN:VEVENT",
     `UID:${outing.id}@neighborwalk.app`,
     `DTSTAMP:${stamp(now.toISOString())}`,

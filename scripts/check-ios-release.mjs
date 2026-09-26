@@ -31,7 +31,7 @@ const get = async (url) => {
 if (config) {
   await check('Invitation hosting and Apple association', async () => {
     const page = await get(`${config.inviteOrigin}/invite`);
-    if (!(await page.text()).includes('Open NeighborWalk')) throw new Error('Invitation handoff page is missing.');
+    if (!(await page.text()).includes('Open SendMe')) throw new Error('Invitation handoff page is missing.');
     const association = await get(`${config.inviteOrigin}/.well-known/apple-app-site-association`);
     if (!association.headers.get('content-type')?.includes('application/json')) throw new Error('AASA must be served as JSON without redirects.');
     const body = await association.json();

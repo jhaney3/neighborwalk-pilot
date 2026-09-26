@@ -40,7 +40,7 @@ export function observeOfflineShell(script: string, publish: (state: OfflineShel
 export const offlineShellCopy: Record<OfflineShellState, string> = {
   preparing: "Getting ready to work offline. Keep this page open.",
   ready: "Ready to reopen offline. Maps still need a connection.",
-  update_waiting: "An update is ready. Close all NeighborWalk tabs and reopen to use it.",
+  update_waiting: "An update is ready. Close all SendMe tabs and reopen to use it.",
   unavailable: "Offline use isn’t ready yet. Reconnect and check again.",
   development: "Offline use is only available in the production build.",
 };

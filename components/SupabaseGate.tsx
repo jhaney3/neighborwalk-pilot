@@ -257,7 +257,7 @@ function SignInScreen() {
   return (
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="signin-title">
-        <div className="auth-brand"><span aria-hidden="true"><Navigation size={18} /></span><strong>NeighborWalk</strong></div>
+        <div className="auth-brand"><span aria-hidden="true"><Navigation size={18} /></span><strong>SendMe</strong></div>
         <h1 id="signin-title">{mode === "signin" ? "Sign in" : "Create account"}</h1>
         <p className="auth-intro">Your church workspace</p>
         <div className="auth-form">

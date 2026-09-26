@@ -13,7 +13,7 @@ export function MobileInvitation() {
         const path = mobileInvitationPath(link.trim());
         if (!path) throw new Error();
         window.location.replace(path);
-      } catch { setError("Paste a complete NeighborWalk invitation link from your leader."); }
+      } catch { setError("Paste a complete SendMe invitation link from your leader."); }
     }}><label className="form-field"><span>Invitation link</span><input type="url" autoCapitalize="none" autoCorrect="off" value={link} onChange={(event) => setLink(event.target.value)} required /></label>
       {error && <p role="alert" className="inline-error">{error}</p>}
       <button className="button quiet auth-submit" type="submit">Use invitation</button>

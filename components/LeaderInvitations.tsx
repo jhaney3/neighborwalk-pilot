@@ -46,11 +46,11 @@ export function LeaderInvitations({ onChanged }: { onChanged: () => Promise<unkn
     setMessage("Invitation ready. Choose how to share it below.");
     await load(); await onChanged();
   };
-  const text = ready ? `${ready.name ? `Hi ${ready.name}! ` : ""}Join our church on NeighborWalk. Open this link and sign in with Apple, Google, or your email. This invitation works once and expires in 7 days.\n${ready.link}` : "";
+  const text = ready ? `${ready.name ? `Hi ${ready.name}! ` : ""}Join our church on SendMe. Open this link and sign in with Apple, Google, or your email. This invitation works once and expires in 7 days.\n${ready.link}` : "";
   const share = async () => {
     if (!ready) return;
-    if (Capacitor.isNativePlatform()) await Share.share({ title: "Join us on NeighborWalk", text, dialogTitle: "Share invitation" });
-    else if (navigator.share) await navigator.share({ title: "Join us on NeighborWalk", text });
+    if (Capacitor.isNativePlatform()) await Share.share({ title: "Join us on SendMe", text, dialogTitle: "Share invitation" });
+    else if (navigator.share) await navigator.share({ title: "Join us on SendMe", text });
     else { await navigator.clipboard.writeText(text); setMessage("Invitation copied. Paste it into a message."); }
   };
   return <div className={`member-invite-card ${styles.card}`}>

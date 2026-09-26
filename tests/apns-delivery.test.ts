@@ -30,10 +30,12 @@ describe("APNs privacy and response handling", () => {
   it("accepts only fixed generic copy, opaque app paths and APNs-safe tokens", () => {
     expect(validClaim(claim)).toBe(true);
     expect(notificationPayload(claim)).toEqual({
-      aps: { alert: { title: claim.title, body: claim.body }, sound: "default" },
+      aps: { alert: { title: claim.title, body: "You have a new walk invitation in SendMe." }, sound: "default" },
       source: "neighborwalk-remote-push-v1",
       path: claim.app_path,
     });
+    expect(validClaim({ ...claim, body: "You have a new walk invitation in SendMe." })).toBe(true);
+    expect(notificationPayload({ ...claim, event_kind: "follow_up_assignment", title: "New follow-up", body: "A follow-up was assigned to you in NeighborWalk.", app_path: "/app/followups/task_1" }).aps.alert.body).toBe("A follow-up was assigned to you in SendMe.");
     expect(validClaim({ ...claim, body: "Meet Jane at 12 Main Street" })).toBe(false);
     expect(validClaim({ ...claim, app_path: "https://attacker.test/collect" })).toBe(false);
     expect(validClaim({ ...claim, device_token: "header\ninjection" })).toBe(false);

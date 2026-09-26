@@ -157,7 +157,7 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
   if (data && supabaseUser && workspaceStatus === "invitation_required") {
     return <InvitationRequired user={supabaseUser} error={data.sync.lastError} onSignOut={onSignOut} />;
   }
-  if (workspaceStatus === "locked" || !data || !activeVolunteer) return <AppFailure error={storageError || "NeighborWalk couldn’t load your church’s records."} onSignOut={onSignOut} onRecovery={supabaseUser ? actions.downloadAuthoredDeviceRecovery : undefined} />;
+  if (workspaceStatus === "locked" || !data || !activeVolunteer) return <AppFailure error={storageError || "SendMe couldn’t load your church’s records."} onSignOut={onSignOut} onRecovery={supabaseUser ? actions.downloadAuthoredDeviceRecovery : undefined} />;
 
   const pendingChanges = data.sync.commands?.length ?? data.sync.pending.length;
   const needsReview = data.sync.legacyRecoveryRequired || data.sync.commands?.some((q) => q.state === "needs_review");
@@ -445,7 +445,7 @@ function InvitationRequired({ user, error, onSignOut }: { user: SupabaseUser; er
         <div className="workspace-setup-mark"><Users size={22} /></div>
         <p className="eyebrow">Invitation required</p>
         <h1 id="workspace-title">Ask your leader for an invitation link.</h1>
-        <p>NeighborWalk is private to each church. Open the invite link from your leader, then sign in.</p>
+        <p>SendMe is private to each church. Open the invite link from your leader, then sign in.</p>
         <div className="workspace-account"><CircleUserRound size={17} /><span><strong>Signed in</strong>{user.email}</span></div>
         <div className="data-note"><ShieldCheck size={16} /><span>Invite links work once and expire after 7 days.</span></div>
         {error && <p className="auth-error" role="alert">{error}</p>}
