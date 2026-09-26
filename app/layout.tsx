@@ -28,22 +28,22 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   metadataBase: metadataOrigin(),
-  title: "NeighborWalk — Go together. Follow through personally.",
+  title: "SendMe — Go together. Follow through personally.",
   description: "Turn neighborhood conversations into personal follow-through. Shared outings, owned next steps, and thoughtful care handoffs for church teams.",
-  applicationName: "NeighborWalk",
+  applicationName: "SendMe",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "NeighborWalk" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "SendMe" },
   formatDetection: { telephone: false },
   icons: { icon: "/favicon.svg", apple: "/apple-touch-icon.png" },
   openGraph: {
-    title: "NeighborWalk",
+    title: "SendMe",
     description: "Turn neighborhood conversations into personal follow-through.",
     type: "website",
-    images: [{ url: "/og.png", width: 1728, height: 909, alt: "NeighborWalk neighborhood outreach field app" }],
+    images: [{ url: "/og.png", width: 1730, height: 909, alt: "SendMe neighborhood outreach field app" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "NeighborWalk",
+    title: "SendMe",
     description: "Turn neighborhood conversations into personal follow-through.",
     images: ["/og.png"],
   },

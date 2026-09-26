@@ -35,7 +35,7 @@ export function FieldWorksheet({ churchName, context, pages, printedAt }: {
           <div><dt>Assigned to</dt><dd>{context.ownerLabel}</dd></div>
           <div><dt>Printed</dt><dd>{printed}</dd></div>
         </dl>
-        <p className="field-worksheet-confidential"><strong>Confidential when completed.</strong> Keep with the assigned team, return promptly, enter into NeighborWalk, and shred securely. Do not record medical, counseling, or other sensitive care details.</p>
+        <p className="field-worksheet-confidential"><strong>Confidential when completed.</strong> Keep with the assigned team, return promptly, enter into SendMe, and shred securely. Do not record medical, counseling, or other sensitive care details.</p>
       </header>
       <div className="field-worksheet-records">
         {page.rows.map((row) => <FieldWorksheetRecord key={row.entry.key} row={row} />)}
@@ -53,7 +53,7 @@ function FieldWorksheetRecord({ row }: { row: AddressWorksheetRow }) {
       <div><h2>{row.entry.address}{row.entry.unit ? ` · ${row.entry.unit}` : ""}</h2><p>App status at print: <strong>{row.statusLabel}</strong></p></div>
     </header>
     {row.restricted ? <div className="field-worksheet-stop"><strong>DO NOT APPROACH</strong><span>This location has an active do-not-visit instruction. Leave this record blank.</span></div>
-      : unavailable ? <div className="field-worksheet-stop unavailable"><strong>ADDRESS UNAVAILABLE</strong><span>Identify this parcel in NeighborWalk before using the worksheet.</span></div>
+      : unavailable ? <div className="field-worksheet-stop unavailable"><strong>ADDRESS UNAVAILABLE</strong><span>Identify this parcel in SendMe before using the worksheet.</span></div>
       : row.recordedThisWalk ? <div className="field-worksheet-stop recorded"><strong>ALREADY ENTERED FOR THIS WALK</strong><span>Do not create a duplicate visit. Review the app if a correction is needed.</span></div>
       : <>
         <div className="field-worksheet-outcomes"><strong>Outcome—choose one</strong><div>{WORKSHEET_OUTCOMES.map((label) => <WorksheetChoice label={label} key={label} />)}</div></div>

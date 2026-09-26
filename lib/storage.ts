@@ -45,7 +45,7 @@ function withoutLegacyFields(candidate: unknown, keys: string[]): unknown {
 }
 
 function getDatabase() {
-  if (typeof window === "undefined") throw new Error("NeighborWalk storage is available in the browser only.");
+  if (typeof window === "undefined") throw new Error("SendMe storage is available in the browser only.");
   databasePromise ??= openDB(DB_NAME, DB_VERSION, {
     upgrade(database) {
       if (!database.objectStoreNames.contains(STORE)) database.createObjectStore(STORE);

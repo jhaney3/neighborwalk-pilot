@@ -5,7 +5,7 @@ export const dynamicParams = false;
 export async function generateMetadata({ params }: { params: Promise<{ page: string }> }) {
   const { page } = await params;
   const content = publicPages[page as PublicPage];
-  return content ? { title: content.title + " | NeighborWalk", description: content.description, alternates: { canonical: "/" + page } } : {};
+  return content ? { title: content.title + " | SendMe", description: content.description, alternates: { canonical: "/" + page } } : {};
 }
 export default async function InformationPage({ params }: { params: Promise<{ page: string }> }) {
   const { page } = await params;

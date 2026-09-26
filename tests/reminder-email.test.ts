@@ -40,7 +40,7 @@ describe("opt-in reminder delivery", () => {
   });
   it("uses only a single recipient envelope, generic content and a protected own-work link", () => {
     expect(payload.to).toEqual([job.recipient]);
-    expect(payload.subject).toBe("Your NeighborWalk next steps");
+    expect(payload.subject).toBe("Your SendMe next steps");
     expect(payload.text).toContain("/app/followups?scope=mine");
     expect(payload.text).not.toContain(job.recipient);
     expect(JSON.stringify(payload)).not.toContain(secret);
