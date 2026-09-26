@@ -175,7 +175,7 @@ function PersonPage({ resident, data, canManage, activeVolunteerId, restrictionA
 
     {resident.pendingOwnerId === activeVolunteerId && onHandoff && <div className="fu-detail-accept">
       <p>{owner?.name ?? "Their owner"} asked you to take over caring for {name}.</p>
-      <div className="wd-buttons"><button type="button" className="button-outline" disabled={action.busy} onClick={() => void action.run(() => onHandoff(resident.id, "decline"))}>Decline</button><button type="button" className="button-ink" disabled={action.busy} onClick={() => void action.run(() => onHandoff(resident.id, "accept"))}>Accept</button></div>
+      <div className="wd-buttons"><button type="button" className="button-outline" disabled={action.busy} onClick={() => void action.run(() => onHandoff(resident.id, "decline"))}>Decline</button><button type="button" className="button-ink" disabled={action.busy} onClick={() => void action.save(() => onHandoff(resident.id, "accept"))}>Accept</button></div>
     </div>}
 
     {next && <NextFollowUpCard task={next} data={data} today={today} activeVolunteerId={activeVolunteerId} onOpen={() => onOpenFollowUp(next.id)} />}
@@ -206,7 +206,7 @@ function PersonPage({ resident, data, canManage, activeVolunteerId, restrictionA
     {sheet === "edit" && <PersonFormSheet data={data} resident={resident} activeVolunteerId={activeVolunteerId} onSave={onUpsertResident} onSaved={() => setSheet(null)} onClose={() => setSheet(null)} />}
     {sheet === "followup" && <PlanFollowUpSheet data={data} name={name} onSave={(note, date) => onAddPersonFollowUp(resident.id, note, date)} onClose={() => setSheet(null)} />}
     {noteToArchive && <ActionSheet title={noteToArchive.kind === "prayer" ? "Prayer request" : "Note"} closeLabel="Cancel" onClose={() => setSheet(null)} actions={[
-      { label: "Archive note", destructive: true, disabled: !(canManage || noteToArchive.authorId === activeVolunteerId), onSelect: () => { setSheet(null); void action.run(() => onDeletePersonNote(noteToArchive.id)); } },
+      { label: "Archive note", destructive: true, disabled: !(canManage || noteToArchive.authorId === activeVolunteerId), onSelect: () => { setSheet(null); void action.save(() => onDeletePersonNote(noteToArchive.id)); } },
     ]} />}
   </article>;
 }
@@ -281,7 +281,7 @@ function NoteSheet({ data, resident, onSave, onClose }: { data: NeighborWalkData
     <p className="mono-meta privacy-line"><LockKeyhole size={12} aria-hidden="true" /> {owner} and church leaders{more ? ` and ${more} more` : ""} can see this</p>
     {body.length > limit && <p className="inline-error">Keep it under {limit} characters.</p>}
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy || !body.trim() || body.length > limit} onClick={() => void action.run(() => onSave(kind, body.trim()), onClose)}>{action.busy ? "Saving…" : "Save note"}</button>
+    <button type="button" className="walk-save" disabled={action.busy || !body.trim() || body.length > limit} onClick={() => void action.save(() => onSave(kind, body.trim()), onClose)}>{action.busy ? "Saving…" : "Save note"}</button>
   </Sheet>;
 }
 
@@ -330,7 +330,7 @@ function PrivacySheet({ resident, data, canManage, canEdit, restrictionActions, 
     <p className="list-group-footer">{blocked ? "They asked not to be contacted at all. Only a leader can change this." : "Turning one on hides that way of reaching them everywhere. Only a leader can turn one off."}</p>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
     {cancelAsk && pendingOwner && onHandoff && <ActionSheet title={`Stop asking ${pendingOwner.name} to take over?`} onClose={() => setCancelAsk(false)} actions={[
-      { label: "Cancel hand-off", destructive: true, onSelect: () => { setCancelAsk(false); void action.run(() => onHandoff(resident.id, "cancel")); } },
+      { label: "Cancel hand-off", destructive: true, onSelect: () => { setCancelAsk(false); void action.save(() => onHandoff(resident.id, "cancel")); } },
     ]} closeLabel="Keep waiting" />}
   </Sheet>;
 }
@@ -356,7 +356,7 @@ function AccessSheet({ resident, data, canEdit, onSave, onClose }: { resident: R
       {savedTeams.map((team) => <button key={team.id} type="button" className="grouped-row" role="checkbox" aria-checked={teams.includes(team.id)} disabled={!canEdit} onClick={() => setTeams((list) => flip(list, team.id))}><span className="grouped-row-text"><strong>{team.name}</strong><small>{team.memberIds.length} people</small></span>{teams.includes(team.id) && <Check size={19} className="row-check" aria-hidden="true" />}</button>)}
     </div></>}
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    {canEdit && <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.run(() => onSave({ sharedWithVolunteerIds: people, sharedWithTeamIds: teams }), onClose)}>{action.busy ? "Saving…" : "Save"}</button>}
+    {canEdit && <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.save(() => onSave({ sharedWithVolunteerIds: people, sharedWithTeamIds: teams }), onClose)}>{action.busy ? "Saving…" : "Save"}</button>}
   </Sheet>;
 }
 
@@ -367,7 +367,7 @@ function OwnerSheet({ resident, data, onRequest, onClose }: { resident: Resident
   const confirm = useConfirm();
   const choices = data.volunteers.filter((volunteer) => volunteer.active && volunteer.id !== resident.assignedVolunteerId);
   const ask = (volunteerId: string, name: string) => void confirm({ title: `Ask ${name} to take over?`, message: "You stay responsible until they accept. Then the open follow-ups move to them.", confirmLabel: "Send request" })
-    .then((yes) => { if (yes) void action.run(() => onRequest(volunteerId), onClose); });
+    .then((yes) => { if (yes) void action.save(() => onRequest(volunteerId), onClose); });
   return <Sheet className="home-sheet form" modal detent="medium" labelledBy={titleId} onDismiss={action.busy ? () => undefined : onClose}>
     <SheetHead id={titleId} title="Change owner" onClose={onClose} />
     <p className="sheet-copy">They’ll need to accept. You stay responsible until they do.</p>
@@ -391,7 +391,7 @@ function PlanFollowUpSheet({ data, name, onSave, onClose }: { data: NeighborWalk
     <label className="pin-field"><span className="mono-meta">What needs to happen?</span><textarea ref={field} rows={2} maxLength={data.church.noteCharacterLimit} value={note} onChange={(event) => setNote(event.target.value)} placeholder={`Check in with ${name}`} /></label>
     <label className="pin-field"><span className="mono-meta">Due</span><input type="date" min={calendarDate(new Date(), timezone)} value={date} onChange={(event) => setDate(event.target.value)} /></label>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy || !note.trim() || !date} onClick={() => void action.run(() => onSave(note.trim(), date), onClose)}>{action.busy ? "Saving…" : "Add follow-up"}</button>
+    <button type="button" className="walk-save" disabled={action.busy || !note.trim() || !date} onClick={() => void action.save(() => onSave(note.trim(), date), onClose)}>{action.busy ? "Saving…" : "Add follow-up"}</button>
   </Sheet>;
 }
 
@@ -415,7 +415,7 @@ export function PersonFormSheet({ data, resident, initialPropertyId, activeVolun
   const home = indexCurrentRecords(data.properties).get(propertyId);
   const hasPhone = stayInTouch && phone.trim().length >= 3;
   const valid = Boolean(name.trim() || hasPhone) && (!stayInTouch || !phone.trim() || phone.trim().length >= 3);
-  const save = () => action.run(async () => {
+  const save = () => action.save(async () => {
     const contact = { phone: hasPhone ? phone.trim() : undefined, preferredContact: hasPhone ? method : "none" as const };
     const moved = Boolean(resident && (resident.propertyId ?? "") !== propertyId);
     const input: ResidentInput = resident

@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
+import { destructiveAsked } from "../mobile/haptics";
 
 export function Modal({ title, description, wide = false, mobileImmersive = false, className, role, onClose, children }: { title: string; description?: string; wide?: boolean; mobileImmersive?: boolean; className?: string; role?: "alertdialog"; onClose: () => void; children: React.ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -107,6 +108,7 @@ const ConfirmContext = createContext<Confirm>(async (options) => window.confirm(
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [request, setRequest] = useState<{ options: ConfirmOptions; resolve: (confirmed: boolean) => void } | null>(null);
   const confirm = useCallback<Confirm>((options) => new Promise<boolean>((resolve) => {
+    if (options.destructive) destructiveAsked();
     setRequest((current) => {
       current?.resolve(false);
       return { options, resolve };

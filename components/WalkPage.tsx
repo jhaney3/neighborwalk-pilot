@@ -104,8 +104,8 @@ export function WalkPage(props: WalkPageProps) {
   const minutes = Math.max(0, Math.floor((clock - Date.parse(outing.startsAt)) / 60000));
   const walkedMinutes = Math.max(0, Math.round((Date.parse(outing.endsAt) - Date.parse(outing.startsAt)) / 60000));
   const walkers = new Set(encounters.map((visit) => visit.volunteerId)).size || counts.here;
-  const transition = (status: OutreachEvent["status"]) => action.run(() => onSave({ ...outing, status }, outing.id));
-  const open = (assignment: Assignment) => void action.run(() => onStart(outing.id, assignment.territoryId, assignment.targetId));
+  const transition = (status: OutreachEvent["status"]) => action.save(() => onSave({ ...outing, status }, outing.id));
+  const open = (assignment: Assignment) => void action.save(() => onStart(outing.id, assignment.territoryId, assignment.targetId));
   const nudge = () => void action.run(async () => {
     const weekday = format(outing.startsAt, { weekday: "long" });
     const message = `Are you coming to ${outing.name} on ${weekday} at ${format(outing.startsAt, { hour: "numeric", minute: "2-digit" })}?${outing.meetingPoint ? ` We meet at ${outing.meetingPoint}.` : ""} Reply in SendMe under Today.`;
@@ -234,7 +234,7 @@ export function WalkPage(props: WalkPageProps) {
         const Channel = channelIcon[channel];
         const title = person?.name ?? (home ? houseLabel(home.address, home.unit) : "Name not known");
         return <li key={task.id}><Channel size={17} aria-hidden="true" /><span className="wrap-up-owner-copy"><strong>{title}</strong><small>{channelWord[channel]} · {task.note ?? formatCalendarDate(calendarDate(task.dueAt, timezone), { weekday: "short", day: "numeric" })}</small></span>
-          <label className="assign-chip"><span aria-hidden="true">Assign</span><select aria-label={`Assign ${title}`} value="" disabled={action.busy} onChange={(event) => { const id = event.target.value; if (id) void action.run(() => props.onAssignFollowUp(task.id, id)); }}><option value="" disabled>Assign</option>{data.volunteers.filter((volunteer) => volunteer.active).map((volunteer) => <option key={volunteer.id} value={volunteer.id}>{volunteer.name}</option>)}</select></label></li>;
+          <label className="assign-chip"><span aria-hidden="true">Assign</span><select aria-label={`Assign ${title}`} value="" disabled={action.busy} onChange={(event) => { const id = event.target.value; if (id) void action.save(() => props.onAssignFollowUp(task.id, id)); }}><option value="" disabled>Assign</option>{data.volunteers.filter((volunteer) => volunteer.active).map((volunteer) => <option key={volunteer.id} value={volunteer.id}>{volunteer.name}</option>)}</select></label></li>;
       })}</ul></div>
     </section>}
     {canManage && outing.status === "completed" && <NotesForNextTime outing={outing} onSave={(debrief) => onSave({ ...outing, debrief }, outing.id)} />}
@@ -277,7 +277,7 @@ export function WalkPage(props: WalkPageProps) {
       { label: "Add to calendar", onSelect: () => { setSheet(null); addToCalendar(); } },
       ...(me && me.status !== "not_going" && outing.status !== "active" ? [{ label: "Can’t make it", destructive: true, onSelect: () => { setSheet(null); respond("not_going"); } }] : []),
     ]} />}
-    {sheet === "route" && <RouteSheet data={data} assignments={fieldAssignments} current={route} selected={routeId} canManage={canManage} routeName={routeName} onPick={(id) => { setRouteId(id); setSheet(null); }} onReplace={(id) => { setSheet(null); props.onReplaceRoute(id); }} onCancelRoute={(assignment) => { setSheet(null); void confirm({ title: `Cancel ${routeName(assignment)}?`, message: "Its team is freed up. Visits already logged stay.", confirmLabel: "Cancel route", destructive: true }).then((yes) => { if (yes) void action.run(() => props.onAssign({ ...assignment, status: "cancelled" }, assignment.id)); }); }} onClose={() => setSheet(null)} />}
+    {sheet === "route" && <RouteSheet data={data} assignments={fieldAssignments} current={route} selected={routeId} canManage={canManage} routeName={routeName} onPick={(id) => { setRouteId(id); setSheet(null); }} onReplace={(id) => { setSheet(null); props.onReplaceRoute(id); }} onCancelRoute={(assignment) => { setSheet(null); void confirm({ title: `Cancel ${routeName(assignment)}?`, message: "Its team is freed up. Visits already logged stay.", confirmLabel: "Cancel route", destructive: true }).then((yes) => { if (yes) void action.save(() => props.onAssign({ ...assignment, status: "cancelled" }, assignment.id)); }); }} onClose={() => setSheet(null)} />}
     {sheet === "edit" && <EditWalk data={data} outing={outing} targets={targets} onChange={(step) => setSheet(step === "when" ? "when" : step === "who" ? "invitations" : step === "name" ? "name" : null)} onWhere={() => { setSheet(null); props.onEditSetup(0); }} onClose={() => setSheet(null)} />}
     {sheet === "when" && <WhenSheet data={data} outing={outing} onClose={() => setSheet("edit")} onSave={async (patch) => { await onSave({ ...outing, ...patch }, outing.id); setSheet("edit"); }} />}
     {sheet === "name" && <NameSheet outing={outing} onClose={() => setSheet("edit")} onSave={async (name) => { await onSave({ ...outing, name }, outing.id); setSheet("edit"); }} />}
@@ -305,7 +305,7 @@ function NotesForNextTime({ outing, onSave }: { outing: OutreachEvent; onSave: (
   const action = useAsyncAction();
   return <section className="wd-section" aria-labelledby="notes-next-time">
     <div className="list-section-head"><h2 id="notes-next-time">Notes for next time</h2><span className="mono-meta" role="status">{action.busy ? "Saving…" : justSaved && value === saved ? "Saved" : ""}</span></div>
-    <textarea className="notes-field" aria-labelledby="notes-next-time" rows={3} maxLength={2000} value={value} placeholder="What should the next team know? Where to start, what to bring." onChange={(event) => { setValue(event.target.value); setJustSaved(false); }} onBlur={() => { if (value !== saved) void action.run(() => onSave(value.trim()), () => { setSaved(value); setJustSaved(true); }); }} />
+    <textarea className="notes-field" aria-labelledby="notes-next-time" rows={3} maxLength={2000} value={value} placeholder="What should the next team know? Where to start, what to bring." onChange={(event) => { setValue(event.target.value); setJustSaved(false); }} onBlur={() => { if (value !== saved) void action.save(() => onSave(value.trim()), () => { setSaved(value); setJustSaved(true); }); }} />
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
   </section>;
 }
@@ -358,7 +358,7 @@ function WhenSheet({ data, outing, onClose, onSave }: { data: NeighborWalkData; 
     <WalkWhenFields timezone={timezone} day={day} time={time} duration={duration} meetingPoint={meetingPoint} onDay={setDay} onTime={setTime} onDuration={setDuration} onMeetingPoint={setMeetingPoint} />
     <p className="mono-meta">{formatCalendarDate(day, { weekday: "short", month: "short", day: "numeric" })} · {clockLabel(time)}–{clockLabel(addLocalMinutes(`${day}T${time}`, duration).slice(11, 16))}</p>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.run(() => onSave({ startsAt: churchDateTimeToIso(`${day}T${time}`, timezone), endsAt: churchDateTimeToIso(addLocalMinutes(`${day}T${time}`, duration), timezone), meetingPoint: meetingPoint.trim() }))}>{action.busy ? "Saving…" : "Save"}</button>
+    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.save(() => onSave({ startsAt: churchDateTimeToIso(`${day}T${time}`, timezone), endsAt: churchDateTimeToIso(addLocalMinutes(`${day}T${time}`, duration), timezone), meetingPoint: meetingPoint.trim() }))}>{action.busy ? "Saving…" : "Save"}</button>
   </Sheet>;
 }
 
@@ -370,7 +370,7 @@ function NameSheet({ outing, onClose, onSave }: { outing: OutreachEvent; onClose
     <div className="home-sheet-head"><h2 className="pin-title" id={titleId}>Name</h2><button type="button" className="round-line" aria-label="Close" onClick={onClose}><X size={18} aria-hidden="true" /></button></div>
     <label className="pin-field"><span className="mono-meta">Walk name</span><input value={name} maxLength={160} enterKeyHint="done" onChange={(event) => setName(event.target.value)} /></label>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy || !name.trim()} onClick={() => void action.run(() => onSave(name.trim()))}>{action.busy ? "Saving…" : "Save"}</button>
+    <button type="button" className="walk-save" disabled={action.busy || !name.trim()} onClick={() => void action.save(() => onSave(name.trim()))}>{action.busy ? "Saving…" : "Save"}</button>
   </Sheet>;
 }
 
@@ -383,7 +383,7 @@ export function InvitationsSheet({ data, outing, onClose, onSave }: { data: Neig
     <div className="home-sheet-head"><h2 className="pin-title" id={titleId}>Who’s invited?</h2><button type="button" className="round-line" aria-label="Close" onClick={onClose}><X size={18} aria-hidden="true" /></button></div>
     <InviteRoster data={data} eventId={outing?.id} selectedIds={ids} onChange={setIds} />
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.run(() => onSave(ids))}>{action.busy ? "Saving…" : "Save"}</button>
+    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.save(() => onSave(ids))}>{action.busy ? "Saving…" : "Save"}</button>
   </Sheet>;
 }
 
@@ -455,6 +455,6 @@ function RepeatSheet({ data, outing, targets, onClose, onCreate }: { data: Neigh
       <div className="grouped-row"><span className="grouped-row-text" id={`${titleId}-routes`}><strong>Copy routes</strong><small>{routes.length ? `${routes.length} ${routes.length === 1 ? "route" : "routes"} in ${area?.name ?? "this neighborhood"}` : "No routes to copy"}</small></span><input type="checkbox" role="switch" aria-labelledby={`${titleId}-routes`} checked={copyRoutes} disabled={!routes.length} onChange={(event) => setCopyRoutes(event.target.checked)} /></div>
     </div>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.run(() => onCreate(day, invite, copyRoutes))}>{action.busy ? "Creating…" : "Create draft"}</button>
+    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.save(() => onCreate(day, invite, copyRoutes))}>{action.busy ? "Creating…" : "Create draft"}</button>
   </Sheet>;
 }

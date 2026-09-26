@@ -6,6 +6,7 @@ import { Copy, Mail, MessageCircle, Share2, UserPlus } from "lucide-react";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { invitationLink } from "../lib/invitations";
 import styles from "./Invitations.module.css";
+import { actionFailed } from "../mobile/haptics";
 
 type Pending = { id: string; contactKind: string; contact: string; name: string; role: string; expiresAt: string };
 const errorMessage = (error: unknown) => error && typeof error === "object" && "message" in error ? String(error.message) : "Please check your connection and try again.";
@@ -30,7 +31,7 @@ export function LeaderInvitations({ onChanged }: { onChanged: () => Promise<unkn
   useEffect(() => { void Promise.resolve().then(load).catch((failure) => setError(errorMessage(failure))); }, [load]);
   const run = async (operation: () => Promise<void>) => {
     setBusy(true); setError(""); setMessage("");
-    try { await operation(); } catch (failure) { setError(errorMessage(failure)); } finally { setBusy(false); }
+    try { await operation(); } catch (failure) { actionFailed(); setError(errorMessage(failure)); } finally { setBusy(false); }
   };
   const create = async () => {
     if (!origin || new URL(origin).protocol !== "https:") throw new Error("Invitations aren’t set up yet.");

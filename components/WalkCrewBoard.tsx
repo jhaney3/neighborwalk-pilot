@@ -54,8 +54,8 @@ export function CheckInScreen({ data, outing, targets, onClose, onSave, onStart 
   };
   const staffed = targets.filter((target) => (crews[target.id] ?? []).length).length;
   const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: outing.timezone ?? data.church.timezone }).format(new Date());
-  const save = () => void action.run(() => onSave(outing.id, crews, attendingIds), onClose);
-  const start = () => void action.run(async () => { await onSave(outing.id, crews, attendingIds); await onStart!(); }, onClose);
+  const save = () => void action.save(() => onSave(outing.id, crews, attendingIds), onClose);
+  const start = () => void action.save(async () => { await onSave(outing.id, crews, attendingIds); await onStart!(); }, onClose);
   const editingTarget = targets.find((target) => target.id === editing);
 
   return <div className="screen-page overlay check-in" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={action.busy}>

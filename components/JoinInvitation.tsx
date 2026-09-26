@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { clearPendingInvitation } from "../lib/invitations";
+import { actionFailed } from "../mobile/haptics";
 
 type Preview = { joined: boolean; churchName: string; role?: string };
 export function JoinInvitation({ token, account }: { token: string; account: string }) {
@@ -28,7 +29,7 @@ export function JoinInvitation({ token, account }: { token: string; account: str
       const { error } = await client.rpc("shared_invitation", { invitation_token: token, accept_invitation: true });
       if (error) throw error;
       finish();
-    } catch (failure) { setError(failure instanceof Error ? failure.message : (failure as { message?: string }).message ?? "Could not join. Please retry."); }
+    } catch (failure) { actionFailed(); setError(failure instanceof Error ? failure.message : (failure as { message?: string }).message ?? "Could not join. Please retry."); }
     finally { setBusy(false); }
   };
   return <main className="auth-shell"><section className="auth-card">

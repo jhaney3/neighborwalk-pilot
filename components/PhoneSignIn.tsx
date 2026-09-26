@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { getSupabaseBrowserClient } from "../lib/supabase";
+import { actionFailed } from "../mobile/haptics";
 
 export function PhoneSignIn() {
   const [phone, setPhone] = useState("");
@@ -25,7 +26,7 @@ export function PhoneSignIn() {
   };
   const run = async (operation: () => Promise<void>) => {
     setBusy(true); setError("");
-    try { await operation(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Sign-in could not finish. Please retry."); } finally { setBusy(false); }
+    try { await operation(); } catch (failure) { actionFailed(); setError(failure instanceof Error ? failure.message : "Sign-in could not finish. Please retry."); } finally { setBusy(false); }
   };
   return <details className="auth-email-fallback"><summary>Sign in with your phone number</summary><p>We’ll text a code to verify your number. This creates an account if you’re new. Message and data rates may apply.</p>
     <form className="form-stack" onSubmit={(event) => { event.preventDefault(); void run(sentTo ? verify : send); }}>

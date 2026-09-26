@@ -209,12 +209,12 @@ export function TaskCard({ task, grouped = false, ...props }: FollowUpsViewProps
       {open && hasOutcomeActions && <div className="followup-actions-outcome">
         {snoozing
           ? <>
-            <button className="button quiet small" disabled={action.busy} onClick={() => void action.run(() => onReschedule(task.id, calendarDaysFromNow(1, data.church.timezone)), () => setSnoozing(false))}>Tomorrow</button>
-            <button className="button quiet small" disabled={action.busy} onClick={() => void action.run(() => onReschedule(task.id, calendarDaysFromNow(7, data.church.timezone)), () => setSnoozing(false))}>Next week</button>
+            <button className="button quiet small" disabled={action.busy} onClick={() => void action.save(() => onReschedule(task.id, calendarDaysFromNow(1, data.church.timezone)), () => setSnoozing(false))}>Tomorrow</button>
+            <button className="button quiet small" disabled={action.busy} onClick={() => void action.save(() => onReschedule(task.id, calendarDaysFromNow(7, data.church.timezone)), () => setSnoozing(false))}>Next week</button>
             <button className="text-button" disabled={action.busy} onClick={() => setSnoozing(false)}>Cancel</button>
           </>
           : <>
-            {ownTask && task.acceptance === "pending" && onAccept && <button className="button quiet small" disabled={action.busy} onClick={() => void action.run(() => onAccept(task.id, "declined"))}>Decline</button>}
+            {ownTask && task.acceptance === "pending" && onAccept && <button className="button quiet small" disabled={action.busy} onClick={() => void action.save(() => onAccept(task.id, "declined"))}>Decline</button>}
             {canAct && <button className="button quiet small" disabled={action.busy} onClick={() => setSnoozing(true)}><CalendarClock size={15} /> Snooze</button>}
             {canAct && <button className="button primary small" disabled={action.busy} onClick={() => setEditing("complete")}><Check size={16} /> Mark done</button>}
           </>}
@@ -275,7 +275,7 @@ export function TaskEditor({ task, mode, data, onComplete, onReschedule, onCance
   return <Modal title={mode === "complete" ? "Mark done" : mode === "reschedule" ? "Reschedule follow-up" : "Cancel follow-up"} description="Keep it short and factual." onClose={action.busy ? () => undefined : onClose}>
     <form className="form-stack" onSubmit={(e) => {
       e.preventDefault();
-      void action.run(() => mode === "complete" ? onComplete(task.id, { completionNote: note.trim() || undefined,
+      void action.save(() => mode === "complete" ? onComplete(task.id, { completionNote: note.trim() || undefined,
         nextFollowUp: another ? { dueAt: nextDate, note: nextNote.trim(), assignedTeamId: task.assignedTeamId } : undefined })
         : mode === "reschedule" ? onReschedule(task.id, date, note.trim() || undefined) : onCancel(task.id, note.trim() || undefined), onClose);
     }}>

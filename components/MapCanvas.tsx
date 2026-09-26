@@ -11,6 +11,7 @@ import { groupBy } from "../lib/collections";
 import { drawingGestureIntent, drawingInstruction, moveDrawingCorner, rectangleBoundary, rectangleHasArea, type MapDrawingMode } from "../lib/map-drawing";
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
 import { isMobileApp } from "../lib/mobile";
+import { cornerPlaced, selectionTick } from "../mobile/haptics";
 import { parcelKey, parcelProgress, propertyParcelKey } from "../lib/parcel-groups";
 import type { WalkTarget } from "../lib/walk-targets";
 import {
@@ -823,6 +824,7 @@ export function MapCanvas({
         if (intent.kind === "move-corner") {
           if ("points" in event) event.preventDefault();
           dragVertexRef.current = intent.index;
+          selectionTick();
           map.dragPan.disable();
           map.getCanvas().style.cursor = "grabbing";
           return;
@@ -876,6 +878,7 @@ export function MapCanvas({
       const finishDrawingGesture = () => {
         if (!map || !modesRef.current.drawMode) return;
         if (pointerMovedRef.current && (rectangleDragStartRef.current || dragVertexRef.current !== null)) {
+          cornerPlaced();
           suppressMapClickRef.current = true;
           window.setTimeout(() => { suppressMapClickRef.current = false; }, 350);
         }
@@ -980,10 +983,11 @@ export function MapCanvas({
           }
           const vertex = draftVertexAt(event);
           if (vertex) {
-            if (Number(vertex.properties?.index) === 0 && modesRef.current.drawShape === "polygon" && modesRef.current.draftBoundary.length >= 3) callbacksRef.current.onDraftClose?.();
+            if (Number(vertex.properties?.index) === 0 && modesRef.current.drawShape === "polygon" && modesRef.current.draftBoundary.length >= 3) { cornerPlaced(); callbacksRef.current.onDraftClose?.(); }
             return;
           }
           if (modesRef.current.drawShape === "polygon") {
+            cornerPlaced();
             callbacksRef.current.onDraftBoundaryChange([...modesRef.current.draftBoundary, coordinates]);
           }
           return;

@@ -7,6 +7,7 @@ import type { Map as MapLibreMap, MapMouseEvent, MapTouchEvent } from "maplibre-
 import type { Coordinates, Territory } from "../lib/domain";
 import { drawingBoundaryReady, drawingGestureIntent, drawingInstruction, moveDrawingCorner, rectangleBoundary, rectangleHasArea, undoDrawingPoint, type MapDrawingMode } from "../lib/map-drawing";
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
+import { cornerPlaced, selectionTick } from "../mobile/haptics";
 import type { ParcelFeatureCollection } from "../lib/parcels";
 import { clipLineToBoundary, closeRing, mapLineOffsetForSide, polygonInsideBoundary, polygonSelfIntersects, polygonsOverlap, streetSidePolygons } from "../lib/planning-geometry";
 import { EMPTY_PLANNING_PARCELS, EMPTY_STREETS, loadPlanningLayers, loadingPlanningParcelLayer, loadingPlanningStreetLayer, planningLayerMatchesIdentity, type PlanningParcelLayer, type PlanningStreetLayer } from "../lib/planning-loader";
@@ -259,6 +260,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
         if (intent.kind === "move-corner") {
           if ("points" in event) event.preventDefault();
           dragVertex.current = intent.index;
+          selectionTick();
           map.dragPan.disable();
           return;
         }
@@ -285,7 +287,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
           setPoints((current) => moveDrawingCorner(current, drawingMode, vertexIndex, here));
         }
       };
-      const finishDrawingGesture = () => { if (pointerMoved.current && (rectangleStart.current || dragVertex.current !== null)) { suppressMapClick.current = true; window.setTimeout(() => { suppressMapClick.current = false; }, 350); } rectangleStart.current = null; rectanglePointerStart.current = null; dragVertex.current = null; map.dragPan.enable(); };
+      const finishDrawingGesture = () => { if (pointerMoved.current && (rectangleStart.current || dragVertex.current !== null)) { cornerPlaced(); suppressMapClick.current = true; window.setTimeout(() => { suppressMapClick.current = false; }, 350); } rectangleStart.current = null; rectanglePointerStart.current = null; dragVertex.current = null; map.dragPan.enable(); };
       map.on("mousedown", startDrawingGesture);
       map.on("touchstart", startDrawingGesture);
       map.on("mousemove", continueDrawingGesture);
@@ -300,7 +302,7 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
           ? map.queryRenderedFeatures(event.point, { layers: ["plan-draft-point-hit"] })[0]
           : undefined;
         if (vertex) return;
-        if (current.mode === "polygon") { setPoints((value) => [...value, [event.lngLat.lng, event.lngLat.lat]]); return; }
+        if (current.mode === "polygon") { cornerPlaced(); setPoints((value) => [...value, [event.lngLat.lng, event.lngLat.lat]]); return; }
         if (current.mode === "rectangle") return;
         if (current.mode === "streets") {
           const street = map.queryRenderedFeatures(event.point, { layers: ["plan-streets-hit"] })[0];

@@ -9,7 +9,7 @@ import { residentInput } from "../lib/resident-input";
 import type { EncounterInput } from "../lib/encounters";
 import { useAsyncAction } from "../lib/use-async-action";
 import { isCommunityOuting } from "../lib/walk-phase";
-import { selectionTick, visitSaved } from "../mobile/haptics";
+import { selectionTick } from "../mobile/haptics";
 import { ContactBlock } from "./PinSheet";
 import { ActionSheet, Sheet } from "./Sheet";
 import { initials } from "./ui";
@@ -164,7 +164,7 @@ export function ConversationLogger({ data, outingId, routeName, onSave, onCreate
   };
   const createPerson = () => action.run(async () => { addPerson(await onCreatePerson(personInput(trimmedQuery))); });
 
-  const save = (chosenHappened: Happened) => action.run(async () => {
+  const save = (chosenHappened: Happened) => action.save(async () => {
     const chosenOutcome: EncounterInput["outcome"] = chosenHappened === "follow_up" ? "follow_up" : chosenHappened === "declined" ? "declined" : "conversation";
     const shared: EncounterInput = {
       context: place,
@@ -200,7 +200,6 @@ export function ConversationLogger({ data, outingId, routeName, onSave, onCreate
         outcome: first || chosenOutcome !== "follow_up" ? chosenOutcome : "conversation",
         ...(first ? followUpDetails : {}) });
     }
-    visitSaved();
   }, onClose);
 
   const choose = (option: (typeof happenings)[number]) => {

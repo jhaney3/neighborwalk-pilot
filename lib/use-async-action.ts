@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { actionFailed, saveSucceeded } from "../mobile/haptics";
 
 /** Prevent double submissions and keep failed forms open with their input. */
 export function useAsyncAction() {
@@ -12,8 +13,10 @@ export function useAsyncAction() {
     setBusy(true);
     setError(null);
     try { await action(); onSuccess?.(); }
-    catch (failure) { setError(failure instanceof Error ? failure.message : "This change could not be saved. Your form is still here; please try again."); }
+    catch (failure) { actionFailed(); setError(failure instanceof Error ? failure.message : "This change could not be saved. Your form is still here; please try again."); }
     finally { inFlight.current = false; setBusy(false); }
   };
-  return { busy, error, run, clearError: () => setError(null) };
+  /** `run` for a change the person made: a success tap once it has saved. */
+  const save = (action: () => Promise<unknown>, onSuccess?: () => void) => run(action, () => { saveSucceeded(); onSuccess?.(); });
+  return { busy, error, run, save, clearError: () => setError(null) };
 }

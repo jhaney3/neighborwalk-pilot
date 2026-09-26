@@ -121,7 +121,7 @@ function InviteSheet({ data, onClose, onSent }: { data: NeighborWalkData; onClos
   const phoneId = useId();
   const field = useFocusOnMount<HTMLInputElement>();
   const number = phoneE164(phone);
-  const send = () => action.run(async () => {
+  const send = () => action.save(async () => {
     setNotice("");
     if (data.sync.mode !== "connected") { setNotice("The sample church can’t send invites. Sign in to your church to invite people."); return; }
     if (!/^\+[1-9]\d{6,14}$/.test(number)) throw new Error("Check the number. Include the country code outside the US.");
@@ -170,10 +170,10 @@ function SavedTeamSheet({ data, team, onSave, onDelete, onClose }: { data: Neigh
     <h3 className="mono-meta sheet-label">Members · {memberIds.filter((id) => people.some((person) => person.id === id)).length}</h3>
     <div className="grouped-rows check-rows" role="group" aria-label="Members">
       {people.map((person) => <button key={person.id} type="button" className="grouped-row" role="checkbox" aria-checked={memberIds.includes(person.id)} onClick={() => flip(person.id)}><span className="check-box" aria-hidden="true">{memberIds.includes(person.id) && <Check size={16} strokeWidth={3} />}</span><span className="grouped-row-text"><strong>{person.name}</strong></span></button>)}
-      {onDelete && <button type="button" className="grouped-row danger" disabled={action.busy} onClick={() => void confirm({ title: `Delete ${team?.name}?`, message: "Its walk assignments are cancelled. People keep their follow-ups and history.", confirmLabel: "Delete team", destructive: true }).then((yes) => { if (yes) void action.run(onDelete, onClose); })}><span className="grouped-row-text"><strong>Delete team</strong></span></button>}
+      {onDelete && <button type="button" className="grouped-row danger" disabled={action.busy} onClick={() => void confirm({ title: `Delete ${team?.name}?`, message: "Its walk assignments are cancelled. People keep their follow-ups and history.", confirmLabel: "Delete team", destructive: true }).then((yes) => { if (yes) void action.save(onDelete, onClose); })}><span className="grouped-row-text"><strong>Delete team</strong></span></button>}
     </div>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy || name.trim().length < 2} onClick={() => void action.run(() => onSave({ name: name.trim(), memberIds, status: team?.status ?? "ready" }), onClose)}>{action.busy ? "Saving…" : "Save"}</button>
+    <button type="button" className="walk-save" disabled={action.busy || name.trim().length < 2} onClick={() => void action.save(() => onSave({ name: name.trim(), memberIds, status: team?.status ?? "ready" }), onClose)}>{action.busy ? "Saving…" : "Save"}</button>
   </Sheet>;
 }
 

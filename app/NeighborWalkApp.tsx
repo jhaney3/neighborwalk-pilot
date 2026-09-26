@@ -50,6 +50,7 @@ import { useVisibleParcels } from "../lib/use-visible-parcels";
 import { compactToastMessage, type Toast, type ToastTone } from "../lib/toasts";
 import { calendarDate } from "../lib/calendar";
 import { deviceReminderFingerprint, reconcileDeviceReminders } from "../mobile/notifications";
+import { actionFailed, saveSucceeded } from "../mobile/haptics";
 import { registerRemotePush, REMOTE_PUSH_REFRESH_EVENT, remotePushConfigured } from "../mobile/push-notifications";
 
 type View = AppView;
@@ -102,7 +103,11 @@ function NeighborWalkWorkspace({ supabaseUser, onSignOut, onUpdatePassword }: Ne
   const [logOpen, setLogOpen] = useState(false);
   const [addPersonHome, setAddPersonHome] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
-  const showToast = useCallback((message: string, tone: ToastTone = "success") => setToast({ message: compactToastMessage(message), tone }), []);
+  const showToast = useCallback((message: string, tone: ToastTone = "success") => {
+    if (tone === "success") saveSucceeded();
+    else if (tone === "error") actionFailed();
+    setToast({ message: compactToastMessage(message), tone });
+  }, []);
   const reminderDataRef = useRef(data);
   const remindersEnabled = data?.preferences.notificationsEnabled === true;
   const signedInUserId = supabaseUser?.id;

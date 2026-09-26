@@ -138,9 +138,9 @@ function EditHome({ data, property, canManage, activeVolunteerId, onMovePin, onS
     <label className="pin-field"><span className="mono-meta">Unit or label</span><input value={unit} maxLength={60} enterKeyHint="done" placeholder="Optional · e.g. Apt B" onChange={(event) => setUnit(event.target.value)} /></label>
     <div className="grouped-rows">
       <button type="button" className="grouped-row" disabled={!property.coordinates || action.busy} onClick={onMovePin}><span className="grouped-row-text"><strong>Move pin</strong><small>Drag it onto the right house</small></span><ChevronRight size={17} aria-hidden="true" /></button>
-      {mayDelete && <button type="button" className="grouped-row danger" disabled={action.busy || !canDelete} onClick={() => void confirm({ title: `Delete ${property.address}?`, message: "Use this only for a pin dropped by mistake.", confirmLabel: "Delete home", destructive: true }).then((yes) => { if (yes) void action.run(onDelete); })}><span className="grouped-row-text"><strong>Delete home</strong><small>{canDelete ? "Only if it was pinned by mistake" : "It has visits or people, so it stays"}</small></span></button>}
+      {mayDelete && <button type="button" className="grouped-row danger" disabled={action.busy || !canDelete} onClick={() => void confirm({ title: `Delete ${property.address}?`, message: "Use this only for a pin dropped by mistake.", confirmLabel: "Delete home", destructive: true }).then((yes) => { if (yes) void action.save(onDelete); })}><span className="grouped-row-text"><strong>Delete home</strong><small>{canDelete ? "Only if it was pinned by mistake" : "It has visits or people, so it stays"}</small></span></button>}
     </div>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy || address.trim().length < 3} onClick={() => void action.run(() => onSave({ address, unit }))}>{action.busy ? "Saving…" : "Save"}</button>
+    <button type="button" className="walk-save" disabled={action.busy || address.trim().length < 3} onClick={() => void action.save(() => onSave({ address, unit }))}>{action.busy ? "Saving…" : "Save"}</button>
   </Sheet>;
 }

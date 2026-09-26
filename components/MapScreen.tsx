@@ -11,7 +11,7 @@ import type { MapViewport, ParcelFeatureCollection } from "../lib/parcels";
 import { homesVisitedOnWalk, neighborhoodPins, routeVisitsTonight, routeWalkerIds } from "../lib/pin-counts";
 import type { useNeighborWalk } from "../lib/use-neighborwalk";
 import { parcelKey, type WalkTarget } from "../lib/walk-targets";
-import { pinDropped, selectionTick, visitSaved } from "../mobile/haptics";
+import { pinDropped, selectionTick, saveSucceeded } from "../mobile/haptics";
 import { HomeSheet } from "./HomeSheet";
 import { MapCanvas, type AddIntent, type MapSearchTarget } from "./MapCanvas";
 import { DrawChrome, EditNeighborhood, NameNeighborhood, NeighborhoodSheet, neighborhoodColors } from "./NeighborhoodTools";
@@ -152,7 +152,7 @@ export function MapScreen({ data, actions, canManage, activeVolunteerId, territo
     pendingRef.current = save;
     setPending(save);
     hideHint();
-    if (!hold) { visitSaved(); setPin(null); setHome(null); }
+    if (!hold) { saveSucceeded(); setPin(null); setHome(null); }
   };
   const updateSave = (visit: PinVisit) => {
     if (!pendingRef.current) return;
@@ -160,7 +160,7 @@ export function MapScreen({ data, actions, canManage, activeVolunteerId, territo
     setPending(pendingRef.current);
   };
   const releaseSave = () => {
-    if (pendingRef.current) { pendingRef.current = { ...pendingRef.current, held: false }; setPending(pendingRef.current); visitSaved(); }
+    if (pendingRef.current) { pendingRef.current = { ...pendingRef.current, held: false }; setPending(pendingRef.current); saveSucceeded(); }
     setPin(null); setHome(null);
   };
   const undo = () => {

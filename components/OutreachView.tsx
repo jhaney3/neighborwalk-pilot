@@ -80,7 +80,7 @@ function TargetReplacementModal({ data, outing, assignment, target, territory, o
     if (!await confirm({ title: `Replace ${target.name}?`, message: "Its assignment is cancelled. Past visits stay on record.", confirmLabel: "Replace" })) return;
     const input = { ...replacement };
     delete (input as Partial<WalkTargetDraft>).clientId;
-    void action.run(() => onReplace(assignment.id, input, {
+    void action.save(() => onReplace(assignment.id, input, {
       assignedTeamId: assignment.assignedTeamId,
       assignedVolunteerId: assignment.assignedVolunteerId,
     }), onClose);

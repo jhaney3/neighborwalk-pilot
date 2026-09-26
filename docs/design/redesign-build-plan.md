@@ -179,7 +179,7 @@ Please review these. Each one fills a gap the walkthrough didn't draw, or settle
 
 **Shared**
 
-18. **Haptics:** a light tap when a pin drops, a success tap when a visit saves, and a selection tick on chips and segments.
+18. **Haptics:** a light tap when a pin drops, a success tap when a visit saves, and a selection tick on chips and segments. Widened on Sep 26, 2026 at the user's request: see decision 74.
 19. **Maps in the app pan with one finger** (the web embed still needs two), and pinch zooms. The +/− buttons are gone; only locate remains, drawn as the navigation arrow.
 20. **The sample app** uses a "live sample" built at load: the walk started 72 minutes ago, there are more doors on Crockett north, an earlier walk (26 days ago), and walks coming up. Unit tests still use the fixed sample.
 21. **Old guide links** (`?view=guide`) now open More.
@@ -247,3 +247,7 @@ Please review these. Each one fills a gap the walkthrough didn't draw, or settle
 71. **The logger's contact block starts on No** for a new person. Anyone whose phone is already on file isn't asked again, so picking Tasha plus a new name shows only the new name's block. This supersedes the "starts on Yes" part of decision 67 and of BD12. The door pin sheet (WM4) and Edit/New person (PE7/PE8) still start on Yes, as drawn.
 72. **Done on the logger's second page is never greyed out.** If a follow-up names no one and says nothing, tapping Done explains what to add instead. "What should happen next?" used to vanish after the first letter typed; it now stays for the whole follow-up.
 73. **The cell phone field is a boxed input** with a 44pt height, and gets a green focus ring. This applies everywhere the contact block appears: logger, pin sheet, Edit person, New person.
+
+### Haptics widened (2026-09-26)
+
+74. **Haptics everywhere a person acts,** at the user's request. A selection tick on every button, link, switch and check, and on every tap into a text field (focus that code moves by itself stays silent). A light tap for each drawing corner placed or dragged into place, as for a pin. Success when any change saves: finishing or starting a walk, a note, a follow-up, an accept, a delete, settings, a neighborhood, and so on. A warning when a red confirmation opens. An error when a save, sign-in or invitation fails. A tick right after another haptic is dropped, and the same outcome twice within 0.6s plays once, so a save and its toast don't double up. Shares, syncs, exports, previews and sign-out give only the press tick.

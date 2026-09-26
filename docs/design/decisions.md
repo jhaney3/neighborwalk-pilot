@@ -145,3 +145,7 @@ same type and card system. Where the build differs from the mockups:
 The user approved SendMe everywhere people see the product name: iOS display name, app and website copy, invitations, notifications, exports and share metadata/artwork. Keep the existing visual design. Preserve `app.neighborwalk.ios`, the `neighborwalk://` scheme, storage/serialization identifiers and existing service URLs for compatibility. Historical design captures retain the original name. APNs accepts the existing fixed generic database copy and renders SendMe at delivery; email retries retain their original payload for provider idempotency.
 
 The share image at `public/og.png` was edited with the built-in image-generation tool. Prompt: replace only the large headline “NeighborWalk” with “SendMe”; retain the dark green serif typography, scale, left alignment, landscape composition, phone illustration, colors and “Neighborhood outreach, kept in order.” copy. The inspected output is 1730 × 909.
+
+## September 26, 2026 — Broad haptic feedback
+
+The user asked for more haptic feedback and chose every option offered: a tick on every button press and text field tap, success on other saves, errors, a warning on destructive confirmations, and taps for drawing corners. This replaces the earlier "sparingly" guidance. The vocabulary is fixed in `mobile/haptics.ts` (tick, light impact, success, warning, error), with dedupe so one action never buzzes twice. Details are in build plan decision 74.

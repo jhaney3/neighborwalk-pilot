@@ -4,6 +4,7 @@ import { Trash2 } from "lucide-react";
 import { getSupabaseBrowserClient } from "../lib/supabase";
 import { Modal } from "./ui";
 import { requestMobileAccountDeletion } from "../mobile/account-deletion";
+import { actionFailed, destructiveAsked, saveSucceeded } from "../mobile/haptics";
 
 export function AccountDeletion() {
   const [open, setOpen] = useState(false);
@@ -20,11 +21,12 @@ export function AccountDeletion() {
       const result = data as { request_id?: string; requested_at?: string } | null;
       if (!result?.request_id || !result.requested_at) throw new Error("The deletion request was not confirmed. Please try again.");
       setReceipt({ request_id: result.request_id, requested_at: result.requested_at });
-    } catch (failure) { setError(failure instanceof Error ? failure.message : "Your deletion request could not be confirmed. Reconnect and try again."); }
+      saveSucceeded();
+    } catch (failure) { actionFailed(); setError(failure instanceof Error ? failure.message : "Your deletion request could not be confirmed. Reconnect and try again."); }
     finally { setBusy(false); }
   };
   return <>
-    <button className="button danger" onClick={() => setOpen(true)}><Trash2 size={16} /> Delete account</button>
+    <button className="button danger" onClick={() => { destructiveAsked(); setOpen(true); }}><Trash2 size={16} /> Delete account</button>
     {open && <Modal title={receipt ? "Deletion requested" : "Delete your account?"} description={receipt ? "Your request has been securely recorded." : "This permanently removes your account and associated personal data. It cannot be undone once completed."} onClose={() => { if (!busy) setOpen(false); }}>
       {receipt ? <div role="status"><p>Your account and associated personal data will be deleted within 30 days. You’ll receive confirmation at your account email when it is complete.</p><p>Request reference: <code>{receipt.request_id}</code></p><button className="button primary" onClick={() => setOpen(false)}>Done</button></div> : <>
         <p>If you use Sign in with Apple, you’ll be asked to confirm that Apple account so its authorization can be revoked.</p>

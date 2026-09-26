@@ -95,7 +95,7 @@ export function ParentZoneCreator({ churchId, mapStyleUrl, baseTerritory, demo =
 
   const save = () => {
     if (name.trim().length < 3 || !boundaryReady) return;
-    void action.run(async () => {
+    void action.save(async () => {
       const center = centerForBoundary(boundary);
       const id = await onAddZone({ name: name.trim(), boundary, center, color, kind: "map" });
       onCreated({ id, churchId, name: name.trim(), boundary, center, color, kind: "map", zoom: 15.5 });

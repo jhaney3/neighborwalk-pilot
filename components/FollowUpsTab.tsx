@@ -10,7 +10,7 @@ import { checkInCompletion, checkInOutcomes, followUpInList, groupFollowUpsByWhe
 import { houseLabel } from "../lib/pin-counts";
 import { indexCurrentRecords } from "../lib/record-aliases";
 import { useAsyncAction } from "../lib/use-async-action";
-import { selectionTick, visitSaved } from "../mobile/haptics";
+import { selectionTick } from "../mobile/haptics";
 import { TaskEditor, type FollowUpsViewProps } from "./FollowUpsView";
 import { visitDetailLine } from "./HomeSheet";
 import { HistoryList, outcomeWord, type HistoryEntry } from "./OutcomeGrid";
@@ -183,7 +183,7 @@ export function FollowUpDetail(props: FollowUpsViewProps & { taskId: string }) {
 
     {ownTask && task.acceptance === "pending" && onAccept && open && <div className="fu-detail-accept">
       <p>This was handed to you. Will you take it?</p>
-      <div className="wd-buttons"><button type="button" className="button-outline" disabled={action.busy} onClick={() => void action.run(() => onAccept(task.id, "declined"))}>Give it back</button><button type="button" className="button-ink" disabled={action.busy} onClick={() => void action.run(() => onAccept(task.id, "accepted"))}>Accept</button></div>
+      <div className="wd-buttons"><button type="button" className="button-outline" disabled={action.busy} onClick={() => void action.save(() => onAccept(task.id, "declined"))}>Give it back</button><button type="button" className="button-ink" disabled={action.busy} onClick={() => void action.save(() => onAccept(task.id, "accepted"))}>Accept</button></div>
     </div>}
 
     {canAct && <div className="fu-detail-actions">
@@ -256,7 +256,7 @@ function CheckInSheet({ task, title, data, onComplete, onClose }: { task: Follow
       ? <label className="walk-field"><span className="mono-meta">Note</span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Keep it short and factual." /></label>
       : <button type="button" className="pin-add-note mono-meta" onClick={() => setNoteOpen(true)}>+ Add a note</button>}
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={!outcome || action.busy || tooLong} onClick={() => outcome && void action.run(async () => { await onComplete(task.id, checkInCompletion(task, outcome, outcome === "all_set" ? null : next, note)); visitSaved(); }, onClose)}>{action.busy ? "Saving…" : "Save"}</button>
+    <button type="button" className="walk-save" disabled={!outcome || action.busy || tooLong} onClick={() => outcome && void action.save(async () => { await onComplete(task.id, checkInCompletion(task, outcome, outcome === "all_set" ? null : next, note)); }, onClose)}>{action.busy ? "Saving…" : "Save"}</button>
   </Sheet>;
 }
 
@@ -277,7 +277,7 @@ function LaterSheet({ task, data, canManage, activeVolunteerId, onReschedule, on
   // People who walked the same walk come first.
   const crew = new Set(data.outingParticipants.filter((participant) => participant.eventId === task.eventId).map((participant) => participant.volunteerId));
   const shown = everyone ? members : [...members].sort((a, b) => Number(crew.has(b.id)) - Number(crew.has(a.id))).slice(0, 2);
-  const snooze = (to: string) => void action.run(() => onReschedule(task.id, to), onClose);
+  const snooze = (to: string) => void action.save(() => onReschedule(task.id, to), onClose);
   const dateLabel = (value: string, first: boolean) => `${formatCalendarDate(value, { weekday: "short" })} ${first ? "9:00 AM" : formatCalendarDate(value, { day: "numeric" })}`;
   const canHandOff = canManage && onAssign && task.status === "scheduled";
   const canGiveBack = ownTask && onAccept && task.status === "scheduled";
@@ -295,8 +295,8 @@ function LaterSheet({ task, data, canManage, activeVolunteerId, onReschedule, on
     {(canHandOff || canGiveBack) && <section aria-label="Hand it off">
       <p className="mono-meta">{canAct ? "Or hand it off" : "Hand it to"}</p>
       <div className="handoff-faces">
-        {canHandOff && shown.map((member) => <button type="button" key={member.id} aria-label={`Hand off to ${member.name}`} disabled={action.busy} onClick={() => void action.run(() => onAssign!(task.id, member.id), onClose)}><span>{initials(member.name)}</span>{member.id === activeVolunteerId ? "Me" : member.name.split(" ")[0]}</button>)}
-        {canGiveBack && <button type="button" className="leaders" aria-label="Give it back to the leaders" disabled={action.busy} onClick={() => void action.run(() => onAccept!(task.id, "declined"), onClose)}><span><Star size={16} aria-hidden="true" /></span>Leaders</button>}
+        {canHandOff && shown.map((member) => <button type="button" key={member.id} aria-label={`Hand off to ${member.name}`} disabled={action.busy} onClick={() => void action.save(() => onAssign!(task.id, member.id), onClose)}><span>{initials(member.name)}</span>{member.id === activeVolunteerId ? "Me" : member.name.split(" ")[0]}</button>)}
+        {canGiveBack && <button type="button" className="leaders" aria-label="Give it back to the leaders" disabled={action.busy} onClick={() => void action.save(() => onAccept!(task.id, "declined"), onClose)}><span><Star size={16} aria-hidden="true" /></span>Leaders</button>}
         {canHandOff && !everyone && members.length > shown.length && <button type="button" className="anyone" aria-label="Choose from everyone" onClick={() => setEveryone(true)}><span><Plus size={18} aria-hidden="true" /></span>Anyone</button>}
       </div>
       {canHandOff && <p className="handoff-note">They’ll be asked to accept it.</p>}

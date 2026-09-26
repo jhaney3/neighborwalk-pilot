@@ -83,7 +83,7 @@ export function NameNeighborhood({ color, onColor, onSave, onBack }: { color: st
     <label className="pin-field"><span className="mono-meta">Name</span><input value={name} maxLength={120} enterKeyHint="done" placeholder="Riverside" onChange={(event) => setName(event.target.value)} /></label>
     <div className="pin-field"><span className="mono-meta">Color</span><Swatches value={color} onChange={setColor} /></div>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy || name.trim().length < 3} onClick={() => void action.run(() => onSave(name.trim(), color))}>{action.busy ? "Saving…" : "Save neighborhood"}</button>
+    <button type="button" className="walk-save" disabled={action.busy || name.trim().length < 3} onClick={() => void action.save(() => onSave(name.trim(), color))}>{action.busy ? "Saving…" : "Save neighborhood"}</button>
   </Sheet>;
 }
 
@@ -111,12 +111,12 @@ export function EditNeighborhood({ data, territory, onSave, onRedraw, onDelete, 
     <div className="pin-field"><span className="mono-meta">Color</span><Swatches value={color} onChange={setColor} /></div>
     <div className="grouped-rows">
       <button type="button" className="grouped-row" onClick={onRedraw}><span className="grouped-row-text"><strong>Boundary</strong><small>{corners} corners</small></span><span className="mono-meta hedge">Redraw ›</span></button>
-      <button type="button" className="grouped-row danger" disabled={action.busy || !nearest} onClick={() => nearest && void confirm({ title: `Delete ${territory.name}?`, message: `Its ${pins} ${pins === 1 ? "pin moves" : "pins move"} to ${nearest.name}, with every visit. Walks keep their history.`, confirmLabel: "Delete neighborhood", destructive: true }).then((yes) => { if (yes) void action.run(() => onDelete(nearest.id)); })}>
+      <button type="button" className="grouped-row danger" disabled={action.busy || !nearest} onClick={() => nearest && void confirm({ title: `Delete ${territory.name}?`, message: `Its ${pins} ${pins === 1 ? "pin moves" : "pins move"} to ${nearest.name}, with every visit. Walks keep their history.`, confirmLabel: "Delete neighborhood", destructive: true }).then((yes) => { if (yes) void action.save(() => onDelete(nearest.id)); })}>
         <span className="grouped-row-text"><strong>Delete neighborhood</strong><small>{nearest ? "Pins and visits stay" : "Add another neighborhood first"}</small></span>
       </button>
     </div>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy || name.trim().length < 3} onClick={() => void action.run(() => onSave(name.trim(), color))}>{action.busy ? "Saving…" : "Save"}</button>
+    <button type="button" className="walk-save" disabled={action.busy || name.trim().length < 3} onClick={() => void action.save(() => onSave(name.trim(), color))}>{action.busy ? "Saving…" : "Save"}</button>
   </Sheet>;
 }
 

@@ -162,7 +162,7 @@ export function WalkSetupWizard({ data, outing, initialStep = 0, onClose, onComp
   const readyMissing = outingInput ? [...readyPreparationMissing(outingInput), ...(invitedMemberIds.length ? [] : ["at least one invited person"])] : ["valid date and time"];
   const save = (intent: WalkSaveIntent) => {
     if (!outingInput) return;
-    void action.run(async () => {
+    void action.save(async () => {
       const result = await saveWalkSetup({
         outing: outingInput,
         area: community ? { kind: "community" } : { kind: "existing", territoryId },

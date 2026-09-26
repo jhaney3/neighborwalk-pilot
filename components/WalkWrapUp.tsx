@@ -86,7 +86,7 @@ export function WalkWrapUp({ scope = "route", data, outing, routeName, visits: r
           <Channel size={17} aria-hidden="true" />
           <span className="wrap-up-owner-copy"><strong>{title}</strong><small>{[channelWord[channel], task.note && !person ? task.note : when].join(" · ")}</small></span>
           {owner ? <span className="fu-owner" title={owner.name} aria-label={`Owner: ${owner.name}`}>{initials(owner.name)}</span>
-            : canManage ? <label className="assign-chip"><span aria-hidden="true">Assign</span><select aria-label={`Assign ${title}`} value="" disabled={action.busy} onChange={(event) => { const id = event.target.value; if (id) void action.run(() => onAssign(task.id, id)); }}><option value="" disabled>Assign</option>{crew.length > 0 && <optgroup label="On this walk">{crew.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</optgroup>}<optgroup label={crew.length ? "Everyone else" : "Church members"}>{others.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</optgroup></select></label>
+            : canManage ? <label className="assign-chip"><span aria-hidden="true">Assign</span><select aria-label={`Assign ${title}`} value="" disabled={action.busy} onChange={(event) => { const id = event.target.value; if (id) void action.save(() => onAssign(task.id, id)); }}><option value="" disabled>Assign</option>{crew.length > 0 && <optgroup label="On this walk">{crew.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</optgroup>}<optgroup label={crew.length ? "Everyone else" : "Church members"}>{others.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</optgroup></select></label>
             : <span className="mono-meta">Open</span>}
         </li>;
       })}</ul> : <p className="wrap-up-empty">No follow-ups from this {scope === "walk" ? "walk" : "route"}.</p>}
@@ -94,6 +94,6 @@ export function WalkWrapUp({ scope = "route", data, outing, routeName, visits: r
     </section>
 
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.run(onFinish)}>{action.busy ? "Finishing…" : scope === "walk" ? "Finish walk" : "Finish route"}</button>
+    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.save(onFinish)}>{action.busy ? "Finishing…" : scope === "walk" ? "Finish walk" : "Finish route"}</button>
   </div>;
 }

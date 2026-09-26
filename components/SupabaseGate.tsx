@@ -22,6 +22,7 @@ import { signInWithApple } from "../mobile/apple-auth";
 import { MobileInvitation } from "./MobileInvitation";
 import { cancelDeviceReminders } from "../mobile/notifications";
 import { unregisterRemotePush } from "../mobile/push-notifications";
+import { actionFailed } from "../mobile/haptics";
 
 export function NeighborWalkRoot() {
   const router = useRouter();
@@ -197,7 +198,7 @@ function SignInScreen() {
   const runAuthAction = async (nextAction: Exclude<AuthAction, null>, operation: () => Promise<void>) => {
     begin(nextAction);
     try { await operation(); }
-    catch (error) { setError(authErrorMessage(error)); }
+    catch (error) { actionFailed(); setError(authErrorMessage(error)); }
     finally { setAction(null); }
   };
 
@@ -299,6 +300,7 @@ function PasswordRecovery({ email, onSave }: { email: string; onSave: (password:
     try {
       await onSave(password);
     } catch (saveError) {
+      actionFailed();
       setError(authErrorMessage(saveError));
       setSaving(false);
     }

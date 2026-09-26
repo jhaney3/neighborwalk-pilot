@@ -2,7 +2,6 @@ import { Component, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { App } from "@capacitor/app";
-import { Haptics } from "@capacitor/haptics";
 import { Network } from "@capacitor/network";
 import { NeighborWalkRoot } from "../components/SupabaseGate";
 import { NeighborWalkApp } from "../app/NeighborWalkApp";
@@ -11,6 +10,7 @@ import { receiveAuthLink } from "./auth-links";
 import { publishNativeConnectivity } from "./connectivity";
 import { installMobileFocusModality, installSingleLineKeyboardDismissal } from "./keyboard";
 import { installMobileColorTheme } from "./theme";
+import { installPressHaptics } from "./haptics";
 import { addDeviceReminderTapListener } from "./notifications";
 import { addRemotePushTapListener, REMOTE_PUSH_REFRESH_EVENT } from "./push-notifications";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -62,9 +62,7 @@ if (Capacitor.isNativePlatform()) {
   void Network.addListener("networkStatusChange", ({ connected }) => publishNativeConnectivity(connected));
   void addDeviceReminderTapListener((target) => navigate(target));
   void addRemotePushTapListener((target) => navigate(target));
-  document.addEventListener("click", (event) => {
-    if ((event.target as HTMLElement).closest(".mobile-nav button:not(.active)")) void Haptics.selectionChanged().catch(() => {});
-  });
+  installPressHaptics();
 }
 
 class AppBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {

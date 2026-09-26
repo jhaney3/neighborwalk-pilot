@@ -292,7 +292,7 @@ function TeamEditor({ team, members, onClose, onSave, onDelete }: {
           return <label key={member.user_id} aria-label={`Include ${memberLabel(member)} on this team`}><input type="checkbox" checked={memberIds.includes(id)} onChange={(event) => setMemberIds((current) => event.target.checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))} /><span><strong>{memberLabel(member)}</strong><small>{member.member_email ?? member.role}</small></span></label>;
         })}{!members.length && <p>No active members are available yet.</p>}</fieldset>
       </div>
-      <div className="modal-actions split">{onDelete ? <button className="button danger" disabled={action.busy} onClick={() => void action.run(onDelete)}><Trash2 size={14} /> Archive group</button> : <span />}<div><button className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={name.trim().length < 2 || action.busy} onClick={() => void action.run(() => onSave({ name, memberIds, status }))}><Check size={14} /> Save group</button></div></div>
+      <div className="modal-actions split">{onDelete ? <button className="button danger" disabled={action.busy} onClick={() => void action.save(onDelete)}><Trash2 size={14} /> Archive group</button> : <span />}<div><button className="button quiet" disabled={action.busy} onClick={onClose}>Cancel</button><button className="button primary" disabled={name.trim().length < 2 || action.busy} onClick={() => void action.save(() => onSave({ name, memberIds, status }))}><Check size={14} /> Save group</button></div></div>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
   </Modal>;
 }
@@ -301,7 +301,7 @@ function MemberAccessReview({ review, onClose, onSave }: { review: { member: Mem
   const [reason, setReason] = useState("");
   const action = useAsyncAction();
   return <Modal title="Review member access" onClose={action.busy ? () => undefined : onClose}>
-    <form className="form-stack" aria-busy={action.busy} onSubmit={(event) => { event.preventDefault(); void action.run(() => onSave(reason)); }}>
+    <form className="form-stack" aria-busy={action.busy} onSubmit={(event) => { event.preventDefault(); void action.save(() => onSave(reason)); }}>
       <p><strong>{memberLabel(review.member)}</strong>: {review.member.active ? "Active" : "Suspended"} {review.member.role} → {review.patch.active ? "Active" : "Suspended"} {review.patch.role}.</p>
       <p>{!review.patch.active ? "Their access stops right away. A leader should review their people and follow-ups." : review.patch.role === "leader" ? "Leaders can see every person and manage access." : "Volunteers see their walks and the people shared with them."}</p>
       <label className="form-field"><span>Reason (no neighbor details)</span><textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label>

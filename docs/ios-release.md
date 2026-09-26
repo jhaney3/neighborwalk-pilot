@@ -272,7 +272,7 @@ signed release; finish TestFlight and App Store submission materials.
 
 ## What was built
 
-A separate, locally bundled Capacitor iOS app, with the existing React workspace and Supabase access controls, iOS-only styling, an app icon, launch screen, deep-link authentication, native export/share sheets, AirPrint, haptic tab selection, privacy-safe APNs alerts and local reminders, and app-switcher privacy protection. The landing page is not packaged. The app starts at `/app/today`, showing sign-in when necessary.
+A separate, locally bundled Capacitor iOS app, with the existing React workspace and Supabase access controls, iOS-only styling, an app icon, launch screen, deep-link authentication, native export/share sheets, AirPrint, haptic feedback on presses, pins, saves, warnings and errors, privacy-safe APNs alerts and local reminders, and app-switcher privacy protection. The landing page is not packaged. The app starts at `/app/today`, showing sign-in when necessary.
 
 The website is maintained in the separate `rework/church-ready-neighborwalk` worktree. Native work stays on `codex/neighborwalk-ios`; the authorized shared backend and public policy rollout is recorded above. Signing in to a real account in the production iOS build **does use the live shared church database**. The sample workspace uses fictional data and a separate local store.
 

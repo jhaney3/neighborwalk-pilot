@@ -175,7 +175,7 @@ function ChurchProfile({ data, onUpdateChurch, onBack }: Props) {
     <h2 className="mono-meta sheet-label">Default follow-up</h2>
     <SegmentedControl label="Default follow-up" value={days} onChange={(value) => { selectionTick(); setDays(value); }} options={choices} />
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy || !name.trim()} onClick={() => void action.run(() => onUpdateChurch({ name: name.trim(), timezone: zone, defaultFollowUpDays: Number(days) }), onBack)}>{action.busy ? "Saving…" : "Save"}</button>
+    <button type="button" className="walk-save" disabled={action.busy || !name.trim()} onClick={() => void action.save(() => onUpdateChurch({ name: name.trim(), timezone: zone, defaultFollowUpDays: Number(days) }), onBack)}>{action.busy ? "Saving…" : "Save"}</button>
     {picking && <ActionSheet title="Timezone" closeLabel="Cancel" onClose={() => setPicking(false)} actions={zones.map((value) => ({ label: `${zoneLabel(value)}${value === zone ? " ✓" : ""}`, onSelect: () => { setZone(value); setPicking(false); } }))} />}
   </SubPage>;
 }
@@ -199,7 +199,7 @@ function RecordsPrivacy({ data, onUpdateChurch, onBack }: Props) {
     <SegmentedControl label="Note limit" value={limit} onChange={(value) => { selectionTick(); setLimit(value); }} options={limits} />
     <div className="grouped-rows"><div className="grouped-row"><span className="grouped-row-text" id={faithId}><strong>Faith &amp; relationship fields</strong><small>Off hides them but keeps what’s saved</small></span><input type="checkbox" role="switch" aria-labelledby={faithId} checked={faith} onChange={(event) => setFaith(event.target.checked)} /></div></div>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.run(() => onUpdateChurch({ retentionDays: Number(review), noteCharacterLimit: Number(limit), pathwayEnabled: faith }), onBack)}>{action.busy ? "Saving…" : "Save"}</button>
+    <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.save(() => onUpdateChurch({ retentionDays: Number(review), noteCharacterLimit: Number(limit), pathwayEnabled: faith }), onBack)}>{action.busy ? "Saving…" : "Save"}</button>
   </SubPage>;
 }
 
@@ -220,7 +220,7 @@ function DataPage({ data, onExport, onImport, onClearOutreach, onOpenDataHealth,
     <input ref={file} className="visually-hidden" type="file" tabIndex={-1} aria-label="Import a backup file" accept="application/json,.json" onChange={(event) => {
       const chosen = event.target.files?.[0];
       event.target.value = "";
-      if (chosen) void action.run(async () => { await onImport(chosen); setMessage("Backup imported and checked."); });
+      if (chosen) void action.save(async () => { await onImport(chosen); setMessage("Backup imported and checked."); });
     }} />
     <p className="privacy-line quiet"><LockKeyhole size={13} aria-hidden="true" /> Exports include names and notes. Keep the file private.</p>
     {sample && <div className="grouped-rows"><Row title="Clear outreach records" detail="Homes, visits, follow-ups and people. Settings, teams and neighborhoods stay." danger onClick={() => setClearing(true)} /></div>}
@@ -242,7 +242,7 @@ function ClearRecordsSheet({ data, onClear, onDone, onClose }: { data: NeighborW
     <h3 className="mono-meta sheet-label" id={fieldId}>Type {data.church.name} to confirm</h3>
     <input className="sheet-input" aria-labelledby={fieldId} value={typed} autoComplete="off" onChange={(event) => setTyped(event.target.value)} />
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save danger" disabled={action.busy || !matches} onClick={() => void action.run(onClear, onDone)}>{action.busy ? "Clearing…" : "Clear records"}</button>
+    <button type="button" className="walk-save danger" disabled={action.busy || !matches} onClick={() => void action.save(onClear, onDone)}>{action.busy ? "Clearing…" : "Clear records"}</button>
     <button type="button" className="button-outline wide" disabled={action.busy} onClick={onClose}>Cancel</button>
   </Sheet>;
 }
@@ -265,7 +265,7 @@ function MapSettings({ data, onSetPreference, onBack }: Props) {
     <input className="sheet-input" aria-labelledby={styleId} inputMode="url" autoComplete="off" value={styleUrl} onChange={(event) => setStyleUrl(event.target.value)} />
     <p className="sheet-copy">Maps need a connection. Your records don’t.</p>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-    <button type="button" className="walk-save" disabled={action.busy || styleUrl.trim() === data.preferences.mapStyleUrl} onClick={() => void action.run(saveStyle, onBack)}>Save</button>
+    <button type="button" className="walk-save" disabled={action.busy || styleUrl.trim() === data.preferences.mapStyleUrl} onClick={() => void action.save(saveStyle, onBack)}>Save</button>
   </SubPage>;
 }
 
@@ -290,7 +290,7 @@ function AccountPage({ data, online, canManage, accountEmail, onSignOut, onUpdat
       <h2 className="mono-meta sheet-label" id={passwordId}>Password</h2>
       <input className="sheet-input" aria-labelledby={passwordId} type="password" minLength={8} autoComplete="new-password" value={password} placeholder="New password" onChange={(event) => setPassword(event.target.value)} />
       <input className="sheet-input" aria-label="Confirm new password" type="password" minLength={8} autoComplete="new-password" value={again} placeholder="Confirm new password" onChange={(event) => setAgain(event.target.value)} />
-      <button type="button" className="button-outline wide" disabled={action.busy || !password} onClick={() => void action.run(savePassword)}>Save password</button>
+      <button type="button" className="button-outline wide" disabled={action.busy || !password} onClick={() => void action.save(savePassword)}>Save password</button>
     </>}
     <ReminderSettings key={data.church.id} churchId={data.church.id} timezone={data.church.timezone} online={online} connected={data.sync.mode === "connected"} />
     {message && <p role="status" className="inline-notice">{message}</p>}
