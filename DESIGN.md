@@ -2,7 +2,7 @@
 
 Read this before touching any screen. It tells you what's been decided, where the decisions live, how to build them, and how to prove the result matches.
 
-Status on Sep 25, 2026: **the design is locked and the build is staged but not started.** The working tree still holds an earlier, uncommitted build pass. Parts of it contradict the locked design, and Phase 0 of the build plan removes them. Nothing is committed; don't commit unless the user asks.
+Status on Sep 25, 2026: **the redesign is built and committed** (`42a8334` on `codex/ios-experiment`). Every screen in the final check is rated Match except PL1 and BD11, which wait on the user's call about the logger header and grid. Changes made after the lock are logged as decisions at the bottom of the build plan. Still to do on a Mac: `npm run ios:sync`, device testing and a signed-in (non-sample) pass.
 
 ## The three documents
 
@@ -28,7 +28,7 @@ The sample data has gaps that will make honest captures hard. The live walk show
 
 - The user wants **the iOS app** to look flawless. Ignore the web (Next.js) experience for now. Don't run or fix web browser tests (`tests/browser`), and don't change the web worktree (branch `rework/church-ready-neighborwalk`).
 - The code is shared with the web build, so it still has to pass `npm run lint` and `npm run typecheck`.
-- Work in this worktree (`/home/jhaney/Work/neighborwalk-redesign`, branch `codex/ios-experiment`). Leave the release worktree (`/home/jhaney/Work/neighborwalk-pilot-ios`, branch `codex/neighborwalk-ios`) alone; it has the user's uncommitted docs.
+- The redesign was built on `codex/ios-experiment` (worktree `/home/jhaney/Work/neighborwalk-redesign`) and is meant to merge into the iOS release branch `codex/neighborwalk-ios` (worktree `/home/jhaney/Work/neighborwalk-pilot-ios`).
 
 ### What "iOS" means in this codebase
 
@@ -78,7 +78,7 @@ Check each item against the current Apple Human Interface Guidelines page when y
 
 ## General design workflow
 
-These are condensed from the project's workflow file (`DESIGN.md` in the release worktree), and they still apply:
+These are condensed from the project's full workflow file, `docs/design/workflow.md` on `codex/neighborwalk-ios`, and they still apply:
 
 1. Understand the task, the user of the screen and its primary action. Reuse the existing system.
 2. Research in proportion to the change. Use Mobbin for new or unfamiliar interactions (6–12 relevant screens), and look at the real screenshots. Don't send private data to design services.
