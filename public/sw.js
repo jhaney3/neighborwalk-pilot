@@ -6,10 +6,10 @@ const STATIC_DESTINATIONS = new Set(["style", "script", "worker", "image", "font
 const PUBLIC_PAGES = new Set(["/", "/how-it-works", "/pricing", "/trust", "/help", "/pilot", "/privacy", "/terms", "/demo"]);
 function preparedAppPath(pathname) {
   const parts = pathname.split("/").filter(Boolean).slice(1);
-  if (!pathname.startsWith("/app/") || !["today", "outreach", "locations", "people", "followups", "guides", "leader", "settings", "more", "recovery", "data"].includes(parts[0])) return false;
+  if (!pathname.startsWith("/app/") || !["today", "outreach", "locations", "people", "followups", "leader", "settings", "more", "recovery", "data"].includes(parts[0])) return false;
   if (parts.length === 1) return true;
   if (!/^[A-Za-z0-9_-]{1,240}$/.test(parts[1] || "")) return false;
-  return (parts.length === 2 && ["outreach", "people", "locations", "followups", "guides"].includes(parts[0]))
+  return (parts.length === 2 && ["outreach", "people", "locations", "followups"].includes(parts[0]))
     || (parts.length === 3 && parts[0] === "outreach" && parts[2] === "field");
 }
 

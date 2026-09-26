@@ -31,9 +31,10 @@ function memberLabel(member: Member) {
   return member.display_name?.trim() || member.member_email?.split("@")[0] || "Church member";
 }
 
-export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDeleteTeam, onAuthenticate, onAccessChanged }: {
+export function MembersPanel({ membership, teams, showTeams = true, onAddTeam, onUpdateTeam, onDeleteTeam, onAuthenticate, onAccessChanged }: {
   membership: WorkspaceMembership;
   teams: Team[];
+  showTeams?: boolean;
   onAddTeam: (update: TeamUpdate) => Promise<unknown>;
   onUpdateTeam: (teamId: string, update: TeamUpdate) => Promise<unknown>;
   onDeleteTeam: (teamId: string) => Promise<unknown>;
@@ -236,7 +237,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
 
       {invitations.length > 0 && <div className="pending-invitations"><div className="member-card-heading"><span><Link2 size={17} /></span><div><strong>Pending invitations</strong><small>Unused links expire after 7 days.</small></div></div><div>{invitations.map((invitation) => <div className="pending-invitation-row" key={invitation.id}><p><strong>{invitation.invited_email}</strong><small>{invitation.role} · expires {new Date(invitation.expires_at).toLocaleDateString()}</small></p><button className="button quiet" disabled={busy} onClick={() => void revokeInvitation(invitation.id)}>Revoke</button></div>)}</div></div>}
 
-      <div className="group-management">
+      {showTeams && <div className="group-management">
         <div className="section-heading"><div><p className="eyebrow">Field organization</p><h2>Teams</h2></div><button className="button quiet small" onClick={() => setEditingTeam("new")}><Plus size={14} /> New group</button></div>
         <p className="section-description">Saved teams are a starting point. At each walk you can mix people however you like.</p>
         <div className="group-list">
@@ -247,7 +248,7 @@ export function MembersPanel({ membership, teams, onAddTeam, onUpdateTeam, onDel
           </article>)}
           {!teams.length && <div className="member-empty"><Users size={16} /> No groups yet. Create one when your team is ready.</div>}
         </div>
-      </div>
+      </div>}
 
       {editingTeam && <TeamEditor
         team={editingTeam === "new" ? undefined : editingTeam}

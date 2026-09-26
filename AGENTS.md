@@ -18,3 +18,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Never merge the full web and iOS branches merely to synchronize a feature. Preserve deliberate platform, navigation, styling, authentication, build, and release differences.
 - Do not copy generated output, dependency directories, native build artifacts, or environment files between worktrees.
 - Use the Node version declared in `mise.toml`. Run `npm run lint`, `npm run typecheck`, and relevant tests for changed behavior; run `npm run mobile:build:sample` and relevant mobile browser tests for release-sensitive iOS changes.
+
+## UI and design workflow
+
+Before changing UI, UX, navigation, UI copy, accessibility, or visual styling, read `DESIGN.md` in the repository root. It points to the locked redesign (`docs/design/redesign-walkthrough.html`), the build plan, and the final check that every screen must pass. The current redesign targets the iOS app only.
+
+Report missing tools and unperformed checks honestly. Backend-only work does not require this workflow.

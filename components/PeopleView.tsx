@@ -1,57 +1,24 @@
 "use client";
 
-import { groupBy } from "../lib/collections";
-import { personTimeline } from "../lib/person-timeline";
-import { lastRecordedContact } from "../lib/encounter-history";
-import { indexCurrentRecords, recordFamilyIds } from "../lib/record-aliases";
-import { ContactRestrictions } from "./ContactRestrictions";
-import { contactRestricted, type RestrictionActions } from "../lib/contact-restrictions";
-import { useAsyncAction } from "../lib/use-async-action";
+import { Check, ChevronLeft, ChevronRight, Ellipsis, FileText, LockKeyhole, MapPin, MessageCircle, MessageSquare, Phone, Plus, Search, X } from "lucide-react";
+import { useId, useMemo, useState } from "react";
 import { calendarDate, calendarDaysFromNow, formatCalendarDate } from "../lib/calendar";
-import { navigateTabs } from "../lib/tab-navigation";
-
-import {
-  ArrowLeft,
-  CalendarClock,
-  CheckCircle2,
-  ChevronRight,
-  CircleUserRound,
-  Clock3,
-  Edit3,
-  Info,
-  LockKeyhole,
-  Mail,
-  Map as MapIcon,
-  MapPin,
-  MessageCircle,
-  NotebookPen,
-  PauseCircle,
-  Phone,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Trash2,
-  UserRound,
-  Users,
-} from "lucide-react";
-import { useId, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  discipleshipStageLabels,
-  discipleshipStageValues,
-  faithStatusLabels,
-  faithStatusValues,
-  outcomeValues,
-  personNoteKindLabels,
-  formatPhoneNumber,
-  type DiscipleshipStage,
-  type FollowUp,
-  type NeighborWalkData,
-  type PersonNoteKind,
-  type Resident,
-  type ResidentInput,
-} from "../lib/domain";
-import { MapCanvas } from "./MapCanvas";
-import { ListGroup, ListRow, Modal, useConfirm } from "./ui";
+import { contactRestricted, type RestrictionActions } from "../lib/contact-restrictions";
+import { communityConversations } from "../lib/conversations";
+import { formatPhoneNumber, outcomeMeta, type FollowUp, type NeighborWalkData, type PersonNoteKind, type Property, type Resident, type ResidentInput } from "../lib/domain";
+import { reviewedEncounter } from "../lib/encounter-history";
+import { activeFollowUpOwner } from "../lib/follow-up-filters";
+import { relativeDueLabel } from "../lib/follow-up-groups";
+import { houseLabel } from "../lib/pin-counts";
+import { residentInput } from "../lib/resident-input";
+import { indexCurrentRecords, recordFamilyIds } from "../lib/record-aliases";
+import { useAsyncAction } from "../lib/use-async-action";
+import { selectionTick } from "../mobile/haptics";
+import { visitDetailLine } from "./HomeSheet";
+import { HistoryList, outcomeWord, type HistoryEntry } from "./OutcomeGrid";
+import { ContactBlock } from "./PinSheet";
+import { ActionSheet, Sheet, useFocusOnMount } from "./Sheet";
+import { SegmentedControl, initials, useConfirm } from "./ui";
 
 export type PeopleViewProps = {
   data: NeighborWalkData;
@@ -61,461 +28,433 @@ export type PeopleViewProps = {
   restrictionActions: RestrictionActions;
   onSelectResident?: (id?: string) => void;
   onOpenProperty: (propertyId: string) => void;
+  onOpenFollowUp: (taskId: string) => void;
   onUpsertResident: (propertyId: string | undefined, input: ResidentInput, residentId?: string) => Promise<string>;
-  onDeleteResident: (residentId: string) => Promise<unknown>;
   onAddPersonNote: (residentId: string, kind: PersonNoteKind, body: string) => Promise<unknown>;
   onDeletePersonNote: (noteId: string) => Promise<unknown>;
   onAddPersonFollowUp: (residentId: string, note: string, date: string) => Promise<unknown>;
-  onOpenFollowUps: (residentId: string) => void;
   onHandoff?: (id: string, action: "request" | "accept" | "decline" | "cancel", owner?: string) => Promise<unknown>;
   embedded?: boolean;
-  renderPersonFollowUps?: (residentId: string) => ReactNode;
   initialAddPerson?: boolean;
   onAddPersonClosed?: () => void;
 };
 
-type PersonEditorState = "new" | Resident | null;
-type SortMode = "next_step" | "recent" | "name";
-type ProfilePanel = "followups" | "activity" | "details";
+type Filter = "mine" | "everyone" | "due";
+const filterLabels: Record<Filter, string> = { mine: "Mine", everyone: "Everyone", due: "Follow-up due" };
+const channelWord = { visit: "Visit", call: "Call", text: "Text", email: "Email", other: "Follow-up" } as const;
 
-const profilePanels: ProfilePanel[] = ["followups", "activity", "details"];
-
-function residentInput(resident: Resident, patch: Partial<ResidentInput> = {}): ResidentInput {
-  return {
-    name: resident.name,
-    faithStatus: resident.faithStatus,
-    discipleshipStage: resident.discipleshipStage,
-    assignedVolunteerId: resident.assignedVolunteerId,
-    sharedWithVolunteerIds: resident.sharedWithVolunteerIds,
-    sharedWithTeamIds: resident.sharedWithTeamIds,
-    status: resident.status,
-    phone: resident.phone,
-    email: resident.email,
-    preferredContact: resident.preferredContact,
-    lastContactAt: resident.lastContactAt,
-    ...patch,
-  };
+/** "Yesterday" → "yesterday", but weekdays and dates keep their capitals. */
+function dueWords(dueDate: string, today: string) {
+  const label = relativeDueLabel(dueDate, today);
+  return ["Today", "Yesterday", "Tomorrow"].includes(label) ? label.toLowerCase() : label;
 }
 
-function personInitials(name?: string) {
-  if (!name) return "?";
-  return name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+function nextOpenFollowUp(data: NeighborWalkData, family: Set<string>) {
+  return data.followUps.filter((task) => task.status === "scheduled" && Boolean(task.residentId && family.has(task.residentId))).sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0];
 }
 
-function dueState(followUp: FollowUp | undefined, timezone: string) {
-  if (!followUp || followUp.status !== "scheduled") return "none" as const;
-  const today = calendarDate(new Date(), timezone);
-  const due = calendarDate(followUp.dueAt, timezone);
-  if (due < today) return "overdue" as const;
-  const upcoming = calendarDaysFromNow(7, timezone);
-  return due <= upcoming ? "soon" as const : "later" as const;
-}
-
-export function PeopleView({
-  data,
-  canManage,
-  activeVolunteerId,
-  initialSelectedResidentId,
-  onSelectResident,
-  onOpenProperty,
-  onUpsertResident,
-  onDeleteResident,
-  onAddPersonNote,
-  onDeletePersonNote,
-  onAddPersonFollowUp,
-  onOpenFollowUps,
-  onHandoff,
-  restrictionActions,
-  embedded,
-  renderPersonFollowUps,
-  initialAddPerson,
-  onAddPersonClosed,
-}: PeopleViewProps) {
+/** People (PE1): search, three chips, the conversations row, then everyone
+ * with their street and when they're due. A person opens their page (PE3). */
+export function PeopleView(props: PeopleViewProps) {
+  const { data, activeVolunteerId, initialSelectedResidentId, onSelectResident, embedded, initialAddPerson, onAddPersonClosed } = props;
   const [query, setQuery] = useState("");
-  const [stage, setStage] = useState<"all" | DiscipleshipStage>("all");
-  const [owner, setOwner] = useState<"all" | "mine">("all");
-  const [status, setStatus] = useState<"active" | "paused" | "archived" | "all">("active");
-  const [sort, setSort] = useState<SortMode>("next_step");
+  const [filter, setFilter] = useState<Filter>("mine");
+  const [conversations, setConversations] = useState(false);
+  const [adding, setAdding] = useState(Boolean(initialAddPerson));
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(initialSelectedResidentId ?? null);
   const selectedId = onSelectResident ? initialSelectedResidentId : localSelectedId;
-  const setSelectedId = (id: string | null) => onSelectResident ? onSelectResident(id ?? undefined) : setLocalSelectedId(id);
-  const [editor, setEditor] = useState<PersonEditorState>(initialAddPerson ? "new" : null);
-
-  const closeEditor = () => {
-    setEditor(null);
-    onAddPersonClosed?.();
-  };
-
-  const volunteers = useMemo(() => new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer])), [data.volunteers]);
-  const properties = useMemo(() => indexCurrentRecords(data.properties), [data.properties]);
+  const select = (id: string | null) => onSelectResident ? onSelectResident(id ?? undefined) : setLocalSelectedId(id);
+  const timezone = data.church.timezone;
+  const today = calendarDate(new Date(), timezone);
+  const weekOut = calendarDaysFromNow(7, timezone);
   const people = useMemo(() => indexCurrentRecords(data.residents), [data.residents]);
-  const notesByResident = useMemo(() => {
-    const grouped = groupBy(data.personNotes, (note) => people.get(note.residentId)?.id);
-    for (const notes of grouped.values()) notes.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-    return grouped;
-  }, [data.personNotes, people]);
-  const followUpsByResident = useMemo(() => {
-    const grouped = groupBy(data.followUps, (followUp) => people.get(followUp.residentId ?? "")?.id);
-    for (const followUps of grouped.values()) followUps.sort((left, right) => left.dueAt.localeCompare(right.dueAt));
-    return grouped;
-  }, [data.followUps, people]);
+  const homes = useMemo(() => indexCurrentRecords(data.properties), [data.properties]);
+  const away = useMemo(() => communityConversations(data), [data]);
+  const closeAdd = () => { setAdding(false); onAddPersonClosed?.(); };
 
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return data.residents
-      .filter((resident) => !resident.mergedIntoId)
-      .filter((resident) => status === "all" || resident.status === status)
-      .filter((resident) => stage === "all" || resident.discipleshipStage === stage)
-      .filter((resident) => owner === "all" || resident.assignedVolunteerId === activeVolunteerId)
-      .filter((resident) => {
-        if (!normalized) return true;
-        const property = properties.get(resident.propertyId ?? "");
-        const noteText = (notesByResident.get(resident.id) ?? []).map((note) => note.body).join(" ");
-        const followUpText = (followUpsByResident.get(resident.id) ?? []).map((followUp) => followUp.note).join(" ");
-        return [resident.name, resident.phone, resident.email, followUpText, property?.address, volunteers.get(resident.assignedVolunteerId)?.name, noteText]
-          .some((value) => value?.toLowerCase().includes(normalized));
-      })
-      .sort((left, right) => {
-        if (sort === "name") return (left.name ?? "").localeCompare(right.name ?? "");
-        if (sort === "recent") return right.updatedAt.localeCompare(left.updatedAt);
-        const leftDue = followUpsByResident.get(left.id)?.find((followUp) => followUp.status === "scheduled")?.dueAt ?? "9999";
-        const rightDue = followUpsByResident.get(right.id)?.find((followUp) => followUp.status === "scheduled")?.dueAt ?? "9999";
-        return leftDue.localeCompare(rightDue) || right.updatedAt.localeCompare(left.updatedAt);
-      });
-  }, [activeVolunteerId, data.residents, followUpsByResident, notesByResident, owner, properties, query, sort, stage, status, volunteers]);
+  const rows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const digits = needle.replace(/\D/g, "");
+    return data.residents.filter((person) => !person.mergedIntoId).map((person) => {
+      const next = nextOpenFollowUp(data, recordFamilyIds(data.residents, person.id));
+      return { person, home: homes.get(person.propertyId ?? ""), next, due: next ? calendarDate(next.dueAt, timezone) : undefined };
+    }).filter(({ person, home, due }) => {
+      // Archived people leave the lists but can still be found by search.
+      if (person.status === "archived" && !needle) return false;
+      if (filter === "mine" && person.assignedVolunteerId !== activeVolunteerId) return false;
+      if (filter === "due" && !(due && due <= weekOut)) return false;
+      if (!needle) return true;
+      return [person.name, home?.address].some((value) => value?.toLowerCase().includes(needle)) || Boolean(digits.length >= 3 && person.phone?.replace(/\D/g, "").includes(digits));
+    }).sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999") || (a.person.name ?? "").localeCompare(b.person.name ?? ""));
+  }, [activeVolunteerId, data, filter, homes, query, timezone, weekOut]);
 
   const selected = people.get(selectedId ?? "");
-  const filterCount = Number(owner !== "all") + Number(stage !== "all") + Number(status !== "active") + Number(sort !== "next_step");
+  const className = embedded ? "people-view people-view-embedded" : "content-view people-view";
+  const addSheet = adding && <PersonFormSheet data={data} activeVolunteerId={activeVolunteerId} onSave={props.onUpsertResident} onSaved={(id) => { closeAdd(); select(id); }} onClose={closeAdd} />;
 
-  const saveResident = async (propertyId: string | undefined, input: ResidentInput) => {
-    const editing = editor && editor !== "new" ? editor : undefined;
-    const residentId = await onUpsertResident(propertyId, input, editing?.id);
-    setSelectedId(residentId);
-    closeEditor();
-  };
+  if (selectedId) return <section className={className}>
+    {selected ? <PersonPage key={selected.id} {...props} resident={selected} onBack={() => select(null)} />
+      : <><div className="screen-top"><button type="button" className="round-button float" aria-label="Back to people" onClick={() => select(null)}><ChevronLeft size={22} aria-hidden="true" /></button></div>
+        <p className="inline-notice">This person may be archived, or not shared with you. Reconnect, or ask your leader.</p></>}
+  </section>;
 
-  return (
-    <section className={`${embedded ? "people-view people-view-embedded" : "content-view people-view"}${selectedId ? " has-selected-person" : ""}`}>
+  if (conversations) return <section className={`${className} people-conversations`} aria-labelledby="people-conversations-title">
+    <div className="screen-top"><button type="button" className="round-button float" aria-label="Back to people" onClick={() => setConversations(false)}><ChevronLeft size={22} aria-hidden="true" /></button></div>
+    <h1 className="screen-title" id="people-conversations-title">Conversations</h1>
+    <p className="mono-meta screen-kicker">Away from doors · {away.length}</p>
+    {away.length ? <HistoryList timezone={timezone} label="Conversations away from doors" entries={away.map((entry) => {
+      const visit = reviewedEncounter(entry.visit);
+      const personId = entry.visit.residentId;
+      return { id: entry.visit.id, at: visit.recordedAt, color: outcomeMeta[visit.outcome].color, title: `${entry.personName ?? "Unnamed"} · ${entry.where}`,
+        detail: [visit.outcome === "follow_up" ? "Follow-up" : outcomeWord[visit.outcome as keyof typeof outcomeWord] ?? outcomeMeta[visit.outcome].label, visitDetailLine(visit)].filter(Boolean).join(" · "),
+        onOpen: personId && people.has(personId) ? () => { setConversations(false); select(personId); } : undefined };
+    })} /> : <p className="home-empty">Tap + to log a conversation from a meal, a service day or anywhere else.</p>}
+  </section>;
 
-      <div className="people-toolbar">
-        <div className="people-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search people" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people" /></div>
-        <details className="people-filter-disclosure"><summary><SlidersHorizontal size={15} aria-hidden="true" /> Filter &amp; sort{filterCount > 0 && <span>{filterCount}</span>}</summary><div className="people-filters">
-          <label>Owner<select aria-label="Filter by owner" value={owner} onChange={(event) => setOwner(event.target.value as typeof owner)}><option value="all">Every owner</option><option value="mine">My people</option></select></label>
-          {data.church.pathwayEnabled && <label>Relationship stage<select aria-label="Filter by stage" value={stage} onChange={(event) => setStage(event.target.value as typeof stage)}><option value="all">Every stage</option>{discipleshipStageValues.map((value) => <option key={value} value={value}>{discipleshipStageLabels[value]}</option>)}</select></label>}
-          <label>Status<select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option><option value="all">Any status</option></select></label>
-          <label>Sort by<select aria-label="Sort people" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}><option value="next_step">Follow-up date</option><option value="recent">Recently updated</option><option value="name">Name</option></select></label>
-        </div></details>
-        <button className="button primary people-new-button" onClick={() => setEditor("new")}><Plus size={15} /> Add person</button>
-      </div>
-
-      <div className={`people-workbench${selectedId ? " has-profile" : ""}`}>
-        <section className="people-directory" aria-label="People directory">
-          <div className="people-directory-label"><span>{filtered.length} {filtered.length === 1 ? "person" : "people"}</span>{owner === "mine" && <small>Yours</small>}</div>
-          <div className="people-directory-list">
-            {filtered.map((resident) => {
-              const property = properties.get(resident.propertyId ?? "");
-              const ownerRecord = volunteers.get(resident.assignedVolunteerId);
-              const nextFollowUp = followUpsByResident.get(resident.id)?.find((followUp) => followUp.status === "scheduled");
-              const nextStepState = dueState(nextFollowUp, data.church.timezone);
-              const isSelected = selected?.id === resident.id;
-              return (
-                <button aria-pressed={isSelected} className={`person-list-card${isSelected ? " active" : ""}`} key={resident.id} onClick={() => setSelectedId(resident.id)}>
-                  <span className="person-list-avatar" aria-hidden="true">{personInitials(resident.name)}</span>
-                  <span className="person-list-copy">
-                    <span className="person-list-heading"><span><strong>{resident.name || "Name not provided"}</strong><em className={`person-status-dot ${resident.status}`} title={resident.status} aria-label={resident.status} /></span>{nextFollowUp && <span className={`person-next-date ${nextStepState}`}><Clock3 size={11} /> {nextStepState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "short", day: "numeric" })}</span>}</span>
-                    <span className="person-list-address"><MapPin size={12} /> {property?.address ?? "No address provided"}</span>
-                    {isSelected && <span className="person-list-selected-detail"><span><UserRound size={12} /> {ownerRecord?.name ?? "Unknown owner"}</span><p>{nextFollowUp?.note || "No open follow-up planned."}</p></span>}
-                  </span>
-                  <ChevronRight size={16} aria-hidden="true" />
-                </button>
-              );
-            })}
-            {!filtered.length && <div className="people-empty"><Users size={23} /><strong>No people match these filters</strong><span>Try a broader search or add a new person.</span><button className="button quiet small" onClick={() => { setQuery(""); setOwner("all"); setStage("all"); setStatus("all"); }}>Clear filters</button></div>}
-          </div>
-        </section>
-
-        {selected ? (
-          <PersonProfile
-            key={selected.id}
-            resident={selected}
-            data={data}
-            canManage={canManage}
-            activeVolunteerId={activeVolunteerId}
-            onBack={() => setSelectedId(null)}
-            onEdit={() => setEditor(selected)}
-            onOpenProperty={() => { if (selected.propertyId) onOpenProperty(selected.propertyId); }}
-            onChangeStage={(nextStage) => onUpsertResident(selected.propertyId, residentInput(selected, { discipleshipStage: nextStage }), selected.id)}
-            onChangeOwner={(assignedVolunteerId) => onHandoff ? onHandoff(selected.id, "request", assignedVolunteerId) : Promise.reject(new Error("Care handoffs require a connected workspace."))}
-            onHandoffResponse={onHandoff ? (response) => onHandoff(selected.id, response) : undefined}
-            onChangeStatus={(nextStatus) => onUpsertResident(selected.propertyId, residentInput(selected, { status: nextStatus }), selected.id)}
-            onAddFollowUp={(note, date) => onAddPersonFollowUp(selected.id, note, date)}
-            onOpenFollowUps={() => onOpenFollowUps(selected.id)}
-            onAddNote={(kind, body) => onAddPersonNote(selected.id, kind, body)}
-            onDeleteNote={onDeletePersonNote}
-            restrictionActions={restrictionActions}
-            followUps={renderPersonFollowUps?.(selected.id)}
-          />
-        ) : <div className="people-profile-empty" role={selectedId ? "status" : undefined}><CircleUserRound size={32} /><strong>{selectedId ? "This person is unavailable" : "Select a person"}</strong><span>{selectedId ? "They may be archived or shared with someone else. Reconnect, or ask your leader." : "Their follow-ups and notes will show here."}</span>{selectedId && <button className="button quiet" onClick={() => setSelectedId(null)}>Back to people</button>}</div>}
-      </div>
-
-      {editor && <Modal title={editor === "new" ? "Add a person" : `Edit ${editor.name || "person"}`} description="Only what helps you care for them well." wide onClose={closeEditor}><PersonEditor resident={editor === "new" ? undefined : editor} data={data} activeVolunteerId={activeVolunteerId} onCancel={closeEditor} onSave={saveResident} onDelete={editor !== "new" && (canManage || editor.assignedVolunteerId === activeVolunteerId) ? async () => { await onDeleteResident(editor.id); setSelectedId(null); closeEditor(); } : undefined} /></Modal>}
-    </section>
-  );
+  return <section className={`${className} people-list`} aria-labelledby="people-title">
+    <div className="people-top"><h1 className="tab-title" id="people-title">People</h1><button type="button" className="round-button ink" aria-label="Add person" onClick={() => setAdding(true)}><Plus size={22} aria-hidden="true" /></button></div>
+    <label className="search-box"><Search size={18} aria-hidden="true" /><input type="search" aria-label="Search people" enterKeyHint="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, street or phone" /></label>
+    <div className="chip-row" role="group" aria-label="Show">
+      {(Object.keys(filterLabels) as Filter[]).map((key) => <button key={key} type="button" className="pill-chip" aria-pressed={filter === key} onClick={() => { selectionTick(); setFilter(key); }}>{filterLabels[key]}</button>)}
+    </div>
+    <div className="grouped-rows">
+      <button type="button" className="grouped-row" onClick={() => setConversations(true)}><MessageSquare size={19} aria-hidden="true" /><span className="grouped-row-text"><strong className="wrap">Conversations away from doors</strong></span><span className="mono-meta">{away.length}</span><ChevronRight size={17} aria-hidden="true" /></button>
+    </div>
+    <div className="list-section-head"><h2 className="mono-meta">{rows.length} {rows.length === 1 ? "person" : "people"}</h2><span className="mono-meta">Due first</span></div>
+    {rows.length ? <div className="grouped-rows">{rows.map(({ person, home, due }) => {
+      const late = Boolean(due && due < today);
+      const line = [home ? houseLabel(home.address, home.unit) : undefined, due ? `due ${dueWords(due, today)}` : undefined, person.status !== "active" ? person.status : undefined].filter(Boolean).join(" · ");
+      return <button key={person.id} type="button" className="grouped-row person-row" onClick={() => select(person.id)}>
+        <span className="avatar-dot" aria-hidden="true">{initials(person.name || "?").slice(0, 1)}</span>
+        <span className="grouped-row-text"><strong>{person.name || "Unnamed"}</strong><small className={late ? "danger" : undefined}>{line || "No home yet"}</small></span>
+        <ChevronRight size={17} aria-hidden="true" />
+      </button>;
+    })}</div> : <p className="home-empty">{query ? "No one matches that search." : filter === "mine" ? "People you meet and care for show up here." : filter === "due" ? "No follow-ups due this week." : "People you meet show up here."}</p>}
+    {addSheet}
+  </section>;
 }
 
-function PersonProfile({ resident, data, canManage, activeVolunteerId, onBack, onEdit, onOpenProperty, onChangeStage, onChangeOwner, onHandoffResponse, onChangeStatus, onAddFollowUp, onOpenFollowUps, onAddNote, onDeleteNote, restrictionActions, followUps }: {
-  resident: Resident;
-  data: NeighborWalkData;
-  canManage: boolean;
-  activeVolunteerId: string;
-  onBack: () => void;
-  onEdit: () => void;
-  onOpenProperty: () => void;
-  onChangeStage: (stage: DiscipleshipStage) => Promise<unknown>;
-  onChangeOwner: (volunteerId: string) => Promise<unknown>;
-  onHandoffResponse?: (action: "accept" | "decline" | "cancel") => Promise<unknown>;
-  onChangeStatus: (status: Resident["status"]) => Promise<unknown>;
-  onAddFollowUp: (note: string, date: string) => Promise<unknown>;
-  onOpenFollowUps: () => void;
-  onAddNote: (kind: PersonNoteKind, body: string) => Promise<unknown>;
-  onDeleteNote: (noteId: string) => Promise<unknown>;
-  restrictionActions: RestrictionActions;
-  followUps?: ReactNode;
-}) {
-  const confirm = useConfirm();
-  const [noteBody, setNoteBody] = useState("");
-  const [noteKind, setNoteKind] = useState<PersonNoteKind>("general");
-  const [panel, setPanel] = useState<ProfilePanel>("followups");
-  const tabsId = useId();
-  const followUpsTab = useRef<HTMLButtonElement>(null);
+type PageSheet = "menu" | "privacy" | "access" | "owner" | "note" | "edit" | "followup" | { noteId: string } | null;
+
+/** The person page (PE3, PE4): who they are, how to reach them, their open
+ * follow-up as the offset card, then one timeline of everything. */
+function PersonPage({ resident, data, canManage, activeVolunteerId, restrictionActions, onBack, onOpenProperty, onOpenFollowUp, onUpsertResident, onAddPersonNote, onDeletePersonNote, onAddPersonFollowUp, onHandoff }: PeopleViewProps & { resident: Resident; onBack: () => void }) {
+  const [sheet, setSheet] = useState<PageSheet>(null);
   const action = useAsyncAction();
-  const handoffQueued = data.sync.commands?.some((q) => q.command.operations.some((op) => op.entityType === "handoff" && op.entityId === resident.id));
-  const followUpChannel = resident.preferredContact === "none" ? "other" : resident.preferredContact;
-  const noContact = contactRestricted(data, resident.id, "other");
-  const followUpRestricted = contactRestricted(data, resident.id, followUpChannel, resident.propertyId);
-  const property = indexCurrentRecords(data.properties).get(resident.propertyId ?? "");
+  const timezone = data.church.timezone;
+  const today = calendarDate(new Date(), timezone);
+  const family = recordFamilyIds(data.residents, resident.id);
+  const home = indexCurrentRecords(data.properties).get(resident.propertyId ?? "");
   const owner = data.volunteers.find((volunteer) => volunteer.id === resident.assignedVolunteerId);
   const pendingOwner = data.volunteers.find((volunteer) => volunteer.id === resident.pendingOwnerId);
-  const isHandoffRecipient = resident.pendingOwnerId === activeVolunteerId;
-  const timeline = personTimeline(data, resident.id);
-  const lastContact = lastRecordedContact(data, resident.id);
-  const family = recordFamilyIds(data.residents, resident.id);
-  const originalProfiles = data.residents.filter((person) => person.id !== resident.id && family.has(person.id));
-  const personFollowUps = data.followUps.filter((followUp) => Boolean(followUp.residentId && family.has(followUp.residentId))).sort((left, right) => left.dueAt.localeCompare(right.dueAt));
-  const openFollowUps = personFollowUps.filter((followUp) => followUp.status === "scheduled");
-  const nextFollowUp = openFollowUps[0];
-  const nextState = dueState(nextFollowUp, data.church.timezone);
-  const stageIndex = discipleshipStageValues.indexOf(resident.discipleshipStage);
-  const noteValid = noteBody.trim().length > 0 && noteBody.length <= data.church.noteCharacterLimit;
   const canEdit = canManage || resident.assignedVolunteerId === activeVolunteerId;
-  const sharedCount = resident.sharedWithTeamIds.length + resident.sharedWithVolunteerIds.length;
-  const accessSummary = sharedCount
-    ? `Shared with ${sharedCount} more ${sharedCount === 1 ? "person or team" : "people or teams"}`
-    : "Visible to their owner and church leaders";
-  const lastContactDate = lastContact
-    ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: data.church.timezone }).format(new Date(lastContact.at))
-    : null;
-  const selectPanel = (index: number) => {
-    const nextPanel = profilePanels[index];
-    if (nextPanel) setPanel(nextPanel);
-  };
-  const showFollowUps = () => {
-    setPanel("followups");
-    window.requestAnimationFrame(() => {
-      const tab = followUpsTab.current;
-      if (!tab) return;
-      tab.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-      tab.focus({ preventScroll: true });
-    });
-  };
+  const name = resident.name || "Unnamed";
+  const next = nextOpenFollowUp(data, family);
+  const met = data.visits.filter((visit) => visit.residentId && family.has(visit.residentId)).map((visit) => visit.recordedAt).sort()[0] ?? resident.createdAt;
+  const canText = Boolean(resident.phone) && !contactRestricted(data, resident.id, "text");
+  const canCall = Boolean(resident.phone) && !contactRestricted(data, resident.id, "call");
+  const noContact = contactRestricted(data, resident.id, "other");
+  const entries = personHistory(data, resident.id, (noteId) => setSheet({ noteId }));
+  const noteToArchive = sheet && typeof sheet === "object" ? data.personNotes.find((note) => note.id === sheet.noteId) : undefined;
 
-  return (
-    <article className="person-profile">
-      <header className="person-profile-header">
-        <button className="person-profile-back" onClick={onBack}><ArrowLeft size={16} /> People</button>
-        <div className="person-profile-identity">
-          <span className="person-profile-avatar" aria-hidden="true">{personInitials(resident.name)}</span>
-          <div className="person-profile-heading-copy"><div className="person-profile-heading-line"><h2>{resident.name || "Name not provided"}</h2>{resident.status !== "active" && <span className={`person-profile-status ${resident.status}`}>{resident.status === "paused" ? "Paused" : "Archived"}</span>}</div><small className="person-privacy-summary"><LockKeyhole size={12} /> {accessSummary}</small></div>
-          {canEdit && <button className="button quiet small person-profile-edit" aria-label="Edit profile" onClick={onEdit}><Edit3 size={14} /><span>Edit profile</span></button>}
-        </div>
-      </header>
+  return <article className="fu-detail person-page" aria-labelledby="person-page-title">
+    <div className="screen-top">
+      <button type="button" className="round-button float" aria-label="Back to people" onClick={onBack}><ChevronLeft size={22} aria-hidden="true" /></button>
+      <button type="button" className="round-button float" aria-label={`Options for ${name}`} onClick={() => setSheet("menu")}><Ellipsis size={20} aria-hidden="true" /></button>
+    </div>
+    <header className="fu-detail-person">
+      <span className="fu-detail-avatar" aria-hidden="true">{initials(name).slice(0, 1)}</span>
+      <div><h1 id="person-page-title">{name}</h1><p className="mono-meta">{[home ? houseLabel(home.address, home.unit) : undefined, `Met ${formatCalendarDate(calendarDate(met, timezone), { month: "short", day: "numeric" })}`, resident.status !== "active" ? resident.status : undefined].filter(Boolean).join(" · ")}</p></div>
+    </header>
 
-      {followUpRestricted && <p role="status" className="inline-notice person-safety-notice">{noContact ? "Don’t contact. No new follow-ups." : `They asked not to be contacted by ${followUpChannel}.`} Only a leader can change this.</p>}
-      <ListGroup className="person-profile-facts">
-        {!contactRestricted(data, resident.id, "call") && resident.phone && <a className="list-row" href={`tel:${resident.phone}`}><span className="list-row-icon" aria-hidden="true"><Phone /></span><span className="list-row-text"><span className="list-row-title">{formatPhoneNumber(resident.phone)}</span><span className="list-row-subtitle">{resident.preferredContact === "call" ? "Phone, preferred" : "Phone"}</span></span></a>}
-        {!contactRestricted(data, resident.id, "email") && resident.email && <a className="list-row" href={`mailto:${resident.email}`}><span className="list-row-icon" aria-hidden="true"><Mail /></span><span className="list-row-text"><span className="list-row-title">{resident.email}</span><span className="list-row-subtitle">{resident.preferredContact === "email" ? "Email, preferred" : "Email"}</span></span></a>}
-        {property && <ListRow icon={<MapPin />} title={`${property.address}${property.unit ? `, ${property.unit}` : ""}`} subtitle="Home" onClick={onOpenProperty} />}
-        <ListRow className="person-last-contact" icon={<Info />} title={lastContactDate ? `Last contact ${lastContactDate}` : "No contact yet"} subtitle={resident.legacyCreatorAccess ? "Whoever added them can still see this profile" : undefined} />
-      </ListGroup>
-      {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+    {(canText || canCall) && <div className="wd-buttons person-reach">
+      {canText && <a className="button-outline" href={`sms:${resident.phone}`}><MessageCircle size={17} aria-hidden="true" />Text</a>}
+      {canCall && <a className="button-outline" href={`tel:${resident.phone}`}><Phone size={17} aria-hidden="true" />Call</a>}
+    </div>}
+    {noContact && <p role="status" className="inline-notice">They asked not to be contacted. Only a leader can change this.</p>}
 
-      <div className="person-care-grid">
-        <section className={`care-next-card ${nextState}`}>
-          {nextFollowUp ? <button type="button" className="care-next-summary" onClick={showFollowUps} aria-label={`Open follow-ups for ${resident.name || "this person"}`}>
-            <span className="care-next-heading"><span className="profile-section-label">Next step</span><em><CalendarClock size={12} /> {nextState === "overdue" ? "Overdue · " : ""}{formatCalendarDate(calendarDate(nextFollowUp.dueAt, data.church.timezone), { month: "long", day: "numeric" })}</em></span>
-            <span className="care-next-copy">{nextFollowUp.note || "Follow up with this person."}</span>
-            {openFollowUps.length > 1 && <span className="care-next-count">{openFollowUps.length - 1} more open {openFollowUps.length === 2 ? "task" : "tasks"}</span>}
-            <span className="care-next-disclosure">View follow-ups <ChevronRight size={14} aria-hidden="true" /></span>
-          </button> : <><div><span className="profile-section-label">Next step</span></div><p className="care-next-empty">Nothing planned.</p></>}
-          <div className="care-next-actions">{canEdit && !followUpRestricted && <FollowUpPlanner timezone={data.church.timezone} defaultDays={data.church.defaultFollowUpDays} noteLimit={data.church.noteCharacterLimit} onSave={onAddFollowUp} />}{!followUps && <button onClick={onOpenFollowUps}>Open follow-ups <ChevronRight size={13} /></button>}</div>
-        </section>
-        <section className="care-owner-card list-group-rows">
-          <ListRow className="care-owner-identity" icon={<span className="care-owner-avatar">{personInitials(owner?.name)}</span>} title={owner?.name ?? "Choose an owner"} subtitle="Owner" />
-          {resident.pendingOwnerId ? <div className="handoff-panel">
-            <div className="handoff-panel-heading"><span><Clock3 size={15} /></span><div><strong>{isHandoffRecipient ? "Handoff requested" : `Waiting on ${pendingOwner?.name ?? "recipient"}`}</strong><small>{isHandoffRecipient ? "You’ve been asked to take over." : "Waiting for them to accept."}</small></div></div>
-            <p>{owner?.name ?? "Current owner"} remains responsible until {isHandoffRecipient ? "you accept" : "the handoff is accepted"}.</p>
-            {onHandoffResponse && (isHandoffRecipient
-              ? <div className="handoff-panel-actions"><button disabled={action.busy || handoffQueued} className="button primary small" onClick={() => void action.run(() => onHandoffResponse("accept"))}>Accept</button><button disabled={action.busy || handoffQueued} className="button quiet small" onClick={() => void action.run(() => onHandoffResponse("decline"))}>Decline</button></div>
-              : canEdit && <div className="handoff-panel-actions"><button className="button quiet small" disabled={action.busy || handoffQueued} onClick={() => void action.run(() => onHandoffResponse("cancel"))}>Cancel request</button></div>)}</div>
-            : canEdit && <details className="care-owner-handoff"><summary>Change owner</summary><label><span>Hand off to</span><select value="" disabled={action.busy || handoffQueued} onChange={(event) => { const id = event.target.value; if (id) void confirm({ title: "Ask them to take over?", message: "You stay responsible until they accept. Then your open follow-ups move to them.", confirmLabel: "Send request" }).then((confirmed) => { if (confirmed) void action.run(() => onChangeOwner(id)); }); }}><option value="">Choose a recipient</option>{data.volunteers.filter((v) => v.active && v.id !== resident.assignedVolunteerId).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label></details>}
-          {handoffQueued && <p role="status">Handoff saved. It will send when you’re back online.</p>}
-        </section>
-      </div>
+    {resident.pendingOwnerId === activeVolunteerId && onHandoff && <div className="fu-detail-accept">
+      <p>{owner?.name ?? "Their owner"} asked you to take over caring for {name}.</p>
+      <div className="wd-buttons"><button type="button" className="button-outline" disabled={action.busy} onClick={() => void action.run(() => onHandoff(resident.id, "decline"))}>Decline</button><button type="button" className="button-ink" disabled={action.busy} onClick={() => void action.run(() => onHandoff(resident.id, "accept"))}>Accept</button></div>
+    </div>}
 
-      <div className="person-profile-tabs" role="tablist" tabIndex={-1} aria-label="Profile sections" onKeyDown={(event) => navigateTabs(event, selectPanel)}>
-        <button ref={followUpsTab} id={`${tabsId}-followups-tab`} type="button" role="tab" aria-controls={`${tabsId}-followups-panel`} aria-selected={panel === "followups"} tabIndex={panel === "followups" ? 0 : -1} onClick={() => setPanel("followups")}>Follow-ups{openFollowUps.length > 0 && <span>{openFollowUps.length}</span>}</button>
-        <button id={`${tabsId}-activity-tab`} type="button" role="tab" aria-controls={`${tabsId}-activity-panel`} aria-selected={panel === "activity"} tabIndex={panel === "activity" ? 0 : -1} onClick={() => setPanel("activity")}>Activity<span>{timeline.length}</span></button>
-        <button id={`${tabsId}-details-tab`} type="button" role="tab" aria-controls={`${tabsId}-details-panel`} aria-selected={panel === "details"} tabIndex={panel === "details" ? 0 : -1} onClick={() => setPanel("details")}>Details</button>
-      </div>
+    {next && <NextFollowUpCard task={next} data={data} today={today} activeVolunteerId={activeVolunteerId} onOpen={() => onOpenFollowUp(next.id)} />}
 
-      <section id={`${tabsId}-followups-panel`} role="tabpanel" aria-labelledby={`${tabsId}-followups-tab`} className="person-profile-panel person-profile-followups" hidden={panel !== "followups"}>
-        <div className="person-profile-followups-heading"><div><h3>Follow-ups</h3></div></div>
-        {followUps ?? <div className="person-tab-empty"><CalendarClock size={22} /><p>See every follow-up for this person.</p><button className="button quiet small" onClick={onOpenFollowUps}>Open follow-ups</button></div>}
-      </section>
-
-      <section id={`${tabsId}-activity-panel`} role="tabpanel" aria-labelledby={`${tabsId}-activity-tab`} className="person-profile-panel person-notes-section" hidden={panel !== "activity"}>
-        <div className="person-notes-heading"><div><h3>Activity</h3></div><span>{timeline.length}</span></div>
-        <div className="person-note-composer">
-          <div><MessageCircle size={17} /><strong>Add a note</strong><small>Notes stay with this person.</small></div>
-          <label>Note kind<select disabled={action.busy} value={noteKind} onChange={(event) => setNoteKind(event.target.value as PersonNoteKind)}>{Object.entries(personNoteKindLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
-          <div className="person-note-fields"><textarea aria-label="Care note" disabled={action.busy} rows={3} maxLength={data.church.noteCharacterLimit + 1} value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder="What should you remember for next time?" /></div>
-          <div><span className={noteBody.length > data.church.noteCharacterLimit ? "over" : ""}>{data.church.noteCharacterLimit - noteBody.length} characters remaining</span><button className="button primary small" disabled={!noteValid || action.busy} onClick={() => void action.run(() => onAddNote(noteKind, noteBody), () => setNoteBody(""))}><NotebookPen size={14} /> Save note</button></div>
-        </div>
-        <div className="person-timeline">
-          {timeline.map((note) => {
-            const author = data.volunteers.find((volunteer) => volunteer.id === note.actorId);
-            const canDelete = Boolean(note.noteId) && (canManage || note.actorId === activeVolunteerId);
-            return <article className="person-timeline-entry general" key={note.id}><span className="person-timeline-mark"><MessageCircle size={14} /></span><div><div><span>{note.title}</span><time>{new Intl.DateTimeFormat("en-US", { timeZone: data.church.timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(note.at))}</time></div>{note.body && <p>{note.body}</p>}<footer><span>{author?.name ?? "Church record"}</span>{canDelete && <button onClick={() => { void confirm({ title: "Archive this note?", message: "It leaves the profile but stays in the church record.", confirmLabel: "Archive", destructive: true }).then((confirmed) => { if (confirmed) void action.run(() => onDeleteNote(note.noteId!)); }); }} aria-label="Archive note"><Trash2 size={12} /></button>}</footer></div></article>;
-          })}
-          {!timeline.length && <div className="person-timeline-empty"><NotebookPen size={22} /><strong>No activity yet</strong><span>Add the first note above.</span></div>}
-        </div>
-      </section>
-
-      <section id={`${tabsId}-details-panel`} role="tabpanel" aria-labelledby={`${tabsId}-details-tab`} className="person-profile-panel person-profile-details" hidden={panel !== "details"}>
-        {data.church.pathwayEnabled && <section className="discipleship-path" aria-label="Discipleship relationship stage">
-          <div><span className="profile-section-label">Relationship path</span><small>Shared context, never a score.</small></div>
-          <div className="discipleship-path-rail">
-            {discipleshipStageValues.map((stage, index) => <button key={stage} disabled={!canEdit} className={`${index < stageIndex ? "passed" : ""}${stage === resident.discipleshipStage ? " current" : ""}`} onClick={() => void action.run(() => onChangeStage(stage))} aria-current={stage === resident.discipleshipStage ? "step" : undefined}><span>{index < stageIndex ? <CheckCircle2 size={13} /> : index + 1}</span><small>{discipleshipStageLabels[stage]}</small></button>)}
-          </div>
-        </section>}
-        <section className="person-access-card"><span className="profile-section-label">Profile access</span><div><LockKeyhole size={16} aria-hidden="true" /><strong>{accessSummary}</strong></div><p>{resident.legacyCreatorAccess ? "Historical creator access remains until an accepted care handoff." : "Explicit sharing can be reviewed and changed in Edit profile."}</p></section>
-        {originalProfiles.length > 0 && <details className="today-card person-original-profiles"><summary>Preserved original profiles ({originalProfiles.length})</summary><p>Details from records that were combined into this one. Their history appears below.</p>{originalProfiles.map((original) => <section key={original.id}><h3>{original.name || "Historical unnamed person"}</h3><dl><div><dt>Original record</dt><dd>{original.id}</dd></div><div><dt>Historical phone</dt><dd>{original.phone || "Not recorded"}</dd></div><div><dt>Historical email</dt><dd>{original.email || "Not recorded"}</dd></div><div><dt>Combined after review</dt><dd>{original.mergedAt ? new Date(original.mergedAt).toLocaleDateString() : "See audit history"}</dd></div>{data.church.pathwayEnabled && <><div><dt>Historical faith context</dt><dd>{faithStatusLabels[original.faithStatus]}</dd></div><div><dt>Historical pathway</dt><dd>{discipleshipStageLabels[original.discipleshipStage]}</dd></div></>}</dl></section>)}</details>}
-        <footer className="person-profile-footer">
-          <div><PauseCircle size={14} /><span><strong>Status</strong><small>Paused people still show in search. Archived people don’t.</small></span></div>
-          <div className="person-profile-footer-actions"><select aria-label="Status" value={resident.status} disabled={!canEdit} onChange={(event) => { const status = event.target.value as Resident["status"]; void action.run(() => onChangeStatus(status)); }}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select><ContactRestrictions data={data} residentId={resident.id} canManage={canManage} actions={restrictionActions} /></div>
-        </footer>
-      </section>
-    </article>
-  );
-}
-
-function FollowUpPlanner({ defaultDays, noteLimit, timezone, onSave }: { timezone: string; defaultDays: number; noteLimit: number; onSave: (note: string, date: string) => Promise<unknown> }) {
-  const [editing, setEditing] = useState(false);
-  const action = useAsyncAction();
-  const [note, setNote] = useState("");
-  const [dueDate, setDueDate] = useState(calendarDaysFromNow(defaultDays, timezone));
-  const valid = Boolean(note.trim() && dueDate && note.length <= noteLimit);
-  if (!editing) return <button onClick={() => setEditing(true)}>Plan follow-up <Plus size={13} /></button>;
-  return <div className="next-step-inline-editor">
-    <label><span>What needs to happen?</span><input maxLength={noteLimit + 1} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Invite them for coffee" /></label>
-    <label><span>Due date</span><input type="date" min={calendarDate(new Date(), timezone)} value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
-    <div><button className="button quiet small" onClick={() => { setNote(""); setDueDate(calendarDaysFromNow(defaultDays, timezone)); setEditing(false); }}>Cancel</button><button className="button primary small" disabled={!valid || action.busy} onClick={() => void action.run(() => onSave(note.trim(), dueDate), () => { setNote(""); setEditing(false); })}>Add follow-up</button></div>
+    <div className="grouped-rows">
+      <button type="button" className="grouped-row" onClick={() => setSheet(canEdit && onHandoff && !pendingOwner ? "owner" : "privacy")}><span className="avatar-dot small" aria-hidden="true">{owner ? initials(owner.name) : "?"}</span><span className="grouped-row-text"><small className="mono-meta">Owner</small><strong>{owner?.name ?? "No owner"}</strong>{pendingOwner && <small>Waiting on {pendingOwner.name} to accept</small>}</span><ChevronRight size={17} aria-hidden="true" /></button>
+      {home ? <button type="button" className="grouped-row" onClick={() => onOpenProperty(home.id)}><MapPin size={19} aria-hidden="true" /><span className="grouped-row-text"><small className="mono-meta">Home</small><strong>{home.address}{home.unit ? ` · ${home.unit}` : ""}</strong></span><ChevronRight size={17} aria-hidden="true" /></button>
+        : canEdit && <button type="button" className="grouped-row" onClick={() => setSheet("edit")}><MapPin size={19} aria-hidden="true" /><span className="grouped-row-text"><small className="mono-meta">Home</small><strong className="quiet">Choose a home</strong></span><ChevronRight size={17} aria-hidden="true" /></button>}
+    </div>
     {action.error && <p role="alert" className="inline-error">{action.error}</p>}
-  </div>;
+
+    <section className="person-history" aria-labelledby="person-timeline-title">
+      <h2 id="person-timeline-title">Timeline</h2>
+      <button type="button" className="search-box note-row" onClick={() => setSheet("note")}><FileText size={18} aria-hidden="true" /><span>Add a note</span></button>
+      {entries.length ? <HistoryList timezone={timezone} label={`Timeline for ${name}`} entries={entries} /> : <p className="home-empty">Visits, conversations and notes show up here.</p>}
+    </section>
+
+    {sheet === "menu" && <ActionSheet title={name} closeLabel="Close" onClose={() => setSheet(null)} actions={[
+      ...(canEdit ? [{ label: "Edit person", onSelect: () => setSheet("edit") }] : []),
+      { label: "Add a note", onSelect: () => setSheet("note") },
+      ...(canEdit && !next && !noContact ? [{ label: "Plan a follow-up", onSelect: () => setSheet("followup") }] : []),
+      { label: "Privacy and status", onSelect: () => setSheet("privacy") },
+    ]} />}
+    {sheet === "privacy" && <PrivacySheet resident={resident} data={data} canManage={canManage} canEdit={canEdit} restrictionActions={restrictionActions} onUpsertResident={onUpsertResident} onHandoff={onHandoff} onAccess={() => setSheet("access")} onOwner={() => setSheet("owner")} onClose={() => setSheet(null)} />}
+    {sheet === "access" && <AccessSheet resident={resident} data={data} canEdit={canEdit} onSave={(patch) => onUpsertResident(resident.propertyId, residentInput(resident, patch), resident.id)} onClose={() => setSheet("privacy")} />}
+    {sheet === "owner" && <OwnerSheet resident={resident} data={data} onRequest={(id) => onHandoff ? onHandoff(resident.id, "request", id) : Promise.reject(new Error("Hand-offs need a connected church."))} onClose={() => setSheet(null)} />}
+    {sheet === "note" && <NoteSheet data={data} resident={resident} onSave={(kind, body) => onAddPersonNote(resident.id, kind, body)} onClose={() => setSheet(null)} />}
+    {sheet === "edit" && <PersonFormSheet data={data} resident={resident} activeVolunteerId={activeVolunteerId} onSave={onUpsertResident} onSaved={() => setSheet(null)} onClose={() => setSheet(null)} />}
+    {sheet === "followup" && <PlanFollowUpSheet data={data} name={name} onSave={(note, date) => onAddPersonFollowUp(resident.id, note, date)} onClose={() => setSheet(null)} />}
+    {noteToArchive && <ActionSheet title={noteToArchive.kind === "prayer" ? "Prayer request" : "Note"} closeLabel="Cancel" onClose={() => setSheet(null)} actions={[
+      { label: "Archive note", destructive: true, disabled: !(canManage || noteToArchive.authorId === activeVolunteerId), onSelect: () => { setSheet(null); void action.run(() => onDeletePersonNote(noteToArchive.id)); } },
+    ]} />}
+  </article>;
 }
 
-function PersonEditor({ resident, data, activeVolunteerId, onCancel, onSave, onDelete }: {
-  resident?: Resident; data: NeighborWalkData; activeVolunteerId: string; onCancel: () => void;
-  onSave: (propertyId: string | undefined, input: ResidentInput) => Promise<unknown>; onDelete?: () => Promise<unknown>;
-}) {
-  const confirm = useConfirm();
-  const propertySelectId = useId();
-  const [propertyId, setPropertyId] = useState(resident?.propertyId ?? "");
-  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
-  const [reviewedMove, setReviewedMove] = useState(false);
-  const [moveReason, setMoveReason] = useState("");
-  const [name, setName] = useState(resident?.name ?? "");
-  const [faithStatus, setFaithStatus] = useState(resident?.faithStatus ?? "not_discussed");
-  const [discipleshipStage, setDiscipleshipStage] = useState(resident?.discipleshipStage ?? "new_connection");
-  const assignedVolunteerId = resident?.assignedVolunteerId ?? activeVolunteerId;
-  const [status, setStatus] = useState(resident?.status ?? "active");
-  const [phone, setPhone] = useState(resident?.phone ?? "");
-  const [email, setEmail] = useState(resident?.email ?? "");
-  const [preferredContact, setPreferredContact] = useState(resident?.preferredContact ?? "none");
-  const [contactPermission, setContactPermission] = useState(resident?.contactPermission ?? "not_recorded");
-  const [sharedWithVolunteerIds, setSharedWithVolunteerIds] = useState(resident?.sharedWithVolunteerIds ?? []);
-  const [sharedWithTeamIds, setSharedWithTeamIds] = useState(resident?.sharedWithTeamIds ?? []);
+function NextFollowUpCard({ task, data, today, activeVolunteerId, onOpen }: { task: FollowUp; data: NeighborWalkData; today: string; activeVolunteerId: string; onOpen: () => void }) {
+  const due = calendarDate(task.dueAt, data.church.timezone);
+  const late = due < today;
+  const owner = activeFollowUpOwner(task, data);
+  return <button type="button" className="fu-detail-card offset-card porch person-next" onClick={onOpen}>
+    <span className={`mono-meta${late ? " danger" : ""}`}>{[`Due ${dueWords(due, today)}`, channelWord[task.channel ?? "visit"], owner ? owner.id === activeVolunteerId ? "You" : owner.name : "No owner"].join(" · ")}</span>
+    <span className="fu-detail-note">{task.note || "Visit requested"}</span>
+    <span className="mono-meta hedge">Open follow-up ›</span>
+  </button>;
+}
+
+/** One timeline for a person: notes, visits, conversations and follow-up
+ * history, in the shared history component. */
+function personHistory(data: NeighborWalkData, residentId: string, onNote: (noteId: string) => void): HistoryEntry[] {
+  const family = recordFamilyIds(data.residents, residentId);
+  const names = new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer.name]));
+  const quiet = "var(--hairline-strong)";
+  const followUpWords: Record<string, string> = { created: "Follow-up created", rescheduled: "Snoozed", completed: "Follow-up done", cancelled: "Follow-up cancelled", accepted: "Follow-up accepted", declined: "Follow-up given back", reassigned: "Follow-up handed off" };
+  const limitWords = { all: "All contact", visit: "Don’t visit", call: "Don’t call", text: "Don’t text", email: "Don’t email" } as const;
+  const notes = data.personNotes.filter((note) => family.has(note.residentId)).map((note): HistoryEntry => ({
+    id: `note:${note.id}`, at: note.createdAt, icon: <FileText size={14} />, title: note.kind === "prayer" ? "Prayer request" : "Note", detail: note.body, onOpen: () => onNote(note.id) }));
+  const visits = data.visits.filter((visit) => Boolean(visit.residentId && family.has(visit.residentId))).flatMap((original): HistoryEntry[] => {
+    const visit = reviewedEncounter(original);
+    if (visit.voided) return [];
+    const word = outcomeWord[visit.outcome as keyof typeof outcomeWord] ?? outcomeMeta[visit.outcome].label;
+    const door = (visit.context ?? "door") === "door";
+    const title = [door && visit.outcome === "conversation" ? `${word} at the door` : word, door ? undefined : original.placeLabel, names.get(original.volunteerId)].filter(Boolean).join(" · ");
+    return [{ id: `visit:${original.id}`, at: original.recordedAt, color: outcomeMeta[visit.outcome].color, title, detail: visitDetailLine(visit) }];
+  });
+  const followUps = data.followUps.filter((task) => Boolean(task.residentId && family.has(task.residentId))).flatMap((task) => task.history.map((entry): HistoryEntry => ({
+    id: `task:${task.id}:${entry.id}`, at: entry.createdAt, color: quiet,
+    title: `${followUpWords[entry.action] ?? "Follow-up updated"}${entry.action === "rescheduled" && entry.dueAt ? ` to ${formatCalendarDate(calendarDate(entry.dueAt, data.church.timezone), { weekday: "short", day: "numeric" })}` : ""}`,
+    detail: entry.action === "created"
+      ? [channelWord[task.channel ?? "visit"], entry.dueAt ? `due ${formatCalendarDate(calendarDate(entry.dueAt, data.church.timezone), { month: "short", day: "numeric" })}` : undefined, names.get(entry.actorId)].filter(Boolean).join(" · ")
+      : entry.note })));
+  const limits = (data.restrictions ?? []).filter((limit) => Boolean(limit.residentId && family.has(limit.residentId))).flatMap((limit): HistoryEntry[] => [
+    { id: `limit:${limit.id}`, at: limit.createdAt, color: quiet, title: `${limitWords[limit.channel]} turned on`, detail: limit.reason },
+    ...(limit.correctedAt ? [{ id: `limit-off:${limit.id}`, at: limit.correctedAt, color: quiet, title: `${limitWords[limit.channel]} turned off`, detail: limit.correctionReason }] : []),
+  ]);
+  const handoffs = data.audit.filter((entry) => entry.entityType === "handoff" && family.has(entry.entityId)).map((entry): HistoryEntry => ({
+    id: `handoff:${entry.id}`, at: entry.createdAt, color: quiet, title: `Care hand-off ${entry.action.replace("handoff.", "")}`, detail: names.get(entry.actorId) }));
+  return [...notes, ...visits, ...followUps, ...limits, ...handoffs].sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
+}
+
+function SheetHead({ id, title, onClose }: { id: string; title: string; onClose: () => void }) {
+  return <div className="home-sheet-head"><h2 className="pin-title" id={id}>{title}</h2><button type="button" className="round-line" aria-label="Close" onClick={onClose}><X size={18} aria-hidden="true" /></button></div>;
+}
+
+function whoCanSee(resident: Resident, data: NeighborWalkData) {
+  const owner = data.volunteers.find((volunteer) => volunteer.id === resident.assignedVolunteerId)?.name ?? "Their owner";
+  const more = resident.sharedWithVolunteerIds.length + resident.sharedWithTeamIds.length;
+  return { owner, more };
+}
+
+/** Add a note (PE5): Note or Prayer request, and who will see it. */
+function NoteSheet({ data, resident, onSave, onClose }: { data: NeighborWalkData; resident: Resident; onSave: (kind: PersonNoteKind, body: string) => Promise<unknown>; onClose: () => void }) {
+  const [kind, setKind] = useState<"general" | "prayer">("general");
+  const [body, setBody] = useState("");
   const action = useAsyncAction();
-  const toggle = (values: string[], value: string) => values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
-  const contactValid = preferredContact === "email" ? Boolean(email.trim()) : ["text", "call"].includes(preferredContact) ? Boolean(phone.trim()) : true;
-  const moving = Boolean(resident && (resident.propertyId ?? "") !== propertyId);
-  const movingTasks = resident ? data.followUps.filter((task) => task.residentId === resident.id && task.status === "scheduled").length : 0;
-  return <><form className="person-editor-form form-stack" aria-busy={action.busy} onSubmit={(event) => {
-    event.preventDefault();
-    if (moving && (!reviewedMove || moveReason.trim().length < 3)) return;
-    void action.run(() => onSave(propertyId || undefined, { name: name.trim() || undefined, faithStatus, discipleshipStage, assignedVolunteerId,
-      sharedWithVolunteerIds: sharedWithVolunteerIds.filter((id) => id !== assignedVolunteerId), sharedWithTeamIds, status, phone: phone.trim() || undefined,
-      email: email.trim() || undefined, preferredContact, contactPermission, lastContactAt: resident?.lastContactAt, changeReason: moving ? moveReason.trim() : undefined }));
-  }}>
-    <div className="person-editor-grid">
-      <label>Name<input value={name} required={!resident} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="First name, or a kind description" /></label>
-      <div className="person-location-field"><label htmlFor={propertySelectId}>Home or place to meet (optional)</label><div className="person-location-control"><select id={propertySelectId} value={propertyId} onChange={(e) => { setPropertyId(e.target.value); setReviewedMove(false); }}><option value="">No address provided</option>{data.properties.filter((p) => !p.mergedIntoId).map((p) => <option key={p.id} value={p.id}>{p.address}{p.unit ? " · " + p.unit : ""}</option>)}</select><button type="button" className="person-location-map-button" aria-label="Choose a location on the map" title="Choose a location on the map" onClick={() => setLocationPickerOpen(true)}><MapIcon size={19} aria-hidden="true" /></button></div></div>
-      <label>Phone (optional)<input type="tel" autoComplete="off" value={phone} maxLength={40} minLength={3} onChange={(e) => setPhone(e.target.value)} /></label>
-      <label>Email (optional)<input type="email" autoComplete="off" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} /></label>
-      <label>Preferred contact<select value={preferredContact} onChange={(e) => setPreferredContact(e.target.value as Resident["preferredContact"])}><option value="none">Not discussed</option><option value="call">Phone call</option><option value="text">Text message</option><option value="email">Email</option></select></label>
-      <label>Contact request<select value={contactPermission} disabled={resident?.contactPermission === "do_not_contact"} onChange={(e) => setContactPermission(e.target.value as NonNullable<Resident["contactPermission"]>)}><option value="not_recorded">Not asked yet</option><option value="requested">They asked us to reach out</option><option value="do_not_contact">Do not contact</option></select></label>
-      <label>Status<select value={status} onChange={(e) => setStatus(e.target.value as Resident["status"])}><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label>
-      {data.church.pathwayEnabled && <><label>Faith, in their words (optional)<select value={faithStatus} onChange={(e) => setFaithStatus(e.target.value as Resident["faithStatus"])}>{faithStatusValues.map((v) => <option key={v} value={v}>{faithStatusLabels[v]}</option>)}</select></label><label>Relationship stage<select value={discipleshipStage} onChange={(e) => setDiscipleshipStage(e.target.value as DiscipleshipStage)}>{discipleshipStageValues.map((v) => <option key={v} value={v}>{discipleshipStageLabels[v]}</option>)}</select></label></>}
-    </div>
-    {moving && <section className="inline-notice"><h3>Confirm the new location</h3><p>{movingTasks} open next {movingTasks === 1 ? "step follows" : "steps follow"} the person to the selected location. Historical encounters and completed or cancelled tasks keep their original location. Location-specific restrictions stay with the original location; person-specific restrictions stay with the person.</p><label>Why is it changing?<textarea required minLength={3} maxLength={500} value={moveReason} onChange={(event) => setMoveReason(event.target.value)} placeholder="For example: they gave us a new address." /></label><label><input type="checkbox" required checked={reviewedMove} onChange={(event) => setReviewedMove(event.target.checked)} /> I have reviewed this location change and its open next steps.</label></section>}
-    <p><strong>Owner:</strong> {data.volunteers.find((v) => v.id === assignedVolunteerId)?.name ?? "You"}. Ownership changes through an accepted care handoff.</p>
-    <details className="person-sharing-section"><summary>Who can see this profile?</summary>
-      <p>Their owner and church leaders can see it. Share only with people helping care for them.</p>
-      <fieldset><legend>Specific people</legend>{data.volunteers.filter((v) => v.active && v.id !== assignedVolunteerId).map((v) => <label key={v.id}><input type="checkbox" checked={sharedWithVolunteerIds.includes(v.id)} onChange={() => setSharedWithVolunteerIds((ids) => toggle(ids, v.id))} /> {v.name}</label>)}</fieldset>
-      {!!data.teams.length && <fieldset><legend>Groups</legend>{data.teams.map((t) => <label key={t.id}><input type="checkbox" checked={sharedWithTeamIds.includes(t.id)} onChange={() => setSharedWithTeamIds((ids) => toggle(ids, t.id))} /> {t.name}</label>)}</fieldset>}
-    </details>
-    {!contactValid && <p className="inline-error">Add a phone number or email for that contact method.</p>}
-    {action.error && <p className="inline-error" role="alert">{action.error}</p>}
-    <div className="modal-actions split"><div>{onDelete && <button type="button" className="button danger" disabled={action.busy} onClick={() => { void confirm({ title: "Archive this person?", message: "Their open follow-ups are cancelled. Their history stays in the church record.", confirmLabel: "Archive", destructive: true }).then((confirmed) => { if (confirmed) void action.run(onDelete); }); }}>Archive person</button>}</div><div><button type="button" className="button quiet" disabled={action.busy} onClick={onCancel}>Cancel</button><button className="button primary" disabled={action.busy || !contactValid || (moving && (!reviewedMove || moveReason.trim().length < 3))}>{action.busy ? "Saving…" : "Save person"}</button></div></div>
-  </form>{locationPickerOpen && <PersonLocationPicker data={data} propertyId={propertyId} onClose={() => setLocationPickerOpen(false)} onSelect={(id) => { setPropertyId(id); setReviewedMove(false); setLocationPickerOpen(false); }} />}</>;
+  const titleId = useId();
+  const field = useFocusOnMount<HTMLTextAreaElement>();
+  const { owner, more } = whoCanSee(resident, data);
+  const limit = data.church.noteCharacterLimit;
+  return <Sheet className="home-sheet form" modal labelledBy={titleId} onDismiss={action.busy ? () => undefined : onClose}>
+    <SheetHead id={titleId} title="Add a note" onClose={onClose} />
+    <SegmentedControl label="Kind of note" value={kind} onChange={setKind} options={[{ value: "general", label: "Note" }, { value: "prayer", label: "Prayer request" }]} />
+    <textarea ref={field} className="note-field" aria-label={kind === "prayer" ? "Prayer request" : "Note"} rows={4} maxLength={limit + 1} value={body} onChange={(event) => setBody(event.target.value)} placeholder={kind === "prayer" ? "What should the church pray for?" : "What should you remember for next time?"} />
+    <p className="mono-meta privacy-line"><LockKeyhole size={12} aria-hidden="true" /> {owner} and church leaders{more ? ` and ${more} more` : ""} can see this</p>
+    {body.length > limit && <p className="inline-error">Keep it under {limit} characters.</p>}
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+    <button type="button" className="walk-save" disabled={action.busy || !body.trim() || body.length > limit} onClick={() => void action.run(() => onSave(kind, body.trim()), onClose)}>{action.busy ? "Saving…" : "Save note"}</button>
+  </Sheet>;
 }
 
-function PersonLocationPicker({ data, propertyId, onClose, onSelect }: {
-  data: NeighborWalkData;
-  propertyId: string;
-  onClose: () => void;
-  onSelect: (propertyId: string) => void;
-}) {
-  const mappedProperties = useMemo(() => data.properties.filter((property) => !property.mergedIntoId && property.coordinates && property.territoryId), [data.properties]);
-  const territories = useMemo(() => data.territories.filter((territory) => territory.kind !== "list" && territory.center && territory.boundary.length >= 3 && mappedProperties.some((property) => property.territoryId === territory.id)), [data.territories, mappedProperties]);
-  const currentProperty = mappedProperties.find((property) => property.id === propertyId);
-  const initialTerritoryId = currentProperty?.territoryId && territories.some((territory) => territory.id === currentProperty.territoryId)
-    ? currentProperty.territoryId
-    : territories.some((territory) => territory.id === data.preferences.activeTerritoryId)
-      ? data.preferences.activeTerritoryId
-      : territories[0]?.id ?? "";
-  const [territoryId, setTerritoryId] = useState(initialTerritoryId);
-  const [selectedPropertyId, setSelectedPropertyId] = useState(currentProperty?.territoryId === initialTerritoryId ? currentProperty.id : "");
-  const territory = territories.find((candidate) => candidate.id === territoryId);
-  const territoryProperties = mappedProperties.filter((property) => property.territoryId === territoryId);
-  const selectedProperty = mappedProperties.find((property) => property.id === selectedPropertyId);
+type LimitChannel = "text" | "call" | "visit";
+const limitRows: Array<[LimitChannel, string, string]> = [["text", "Don’t text", "They asked not to be texted"], ["call", "Don’t call", "They asked not to be called"], ["visit", "Don’t visit", "They asked not to be visited"]];
 
-  return <Modal title="Choose a location" description="Pick a saved home or place on the map." wide onClose={onClose}>
-    <div className="person-location-picker">
-      {territories.length > 1 && <label>Map area<select value={territoryId} onChange={(event) => { setTerritoryId(event.target.value); setSelectedPropertyId(""); }}>{territories.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></label>}
-      {territory ? <div className="person-location-map"><MapCanvas territory={territory} properties={territoryProperties} selectedPropertyId={selectedPropertyId || null} visibleOutcomes={new Set(outcomeValues)} searchTarget={null} addMode={false} drawMode={false} drawShape="polygon" draftBoundary={[]} compactMarkers={data.preferences.compactMapMarkers} mapStyleUrl={data.preferences.mapStyleUrl} onSelectProperty={setSelectedPropertyId} onAddIntent={() => undefined} onAssociatePropertiesWithParcel={() => undefined} onDrawShapeChange={() => undefined} onDraftBoundaryChange={() => undefined} onViewportChange={() => undefined} /></div> : <div className="person-location-map-empty"><MapIcon size={28} aria-hidden="true" /><strong>No places on the map yet</strong><span>Add one on the map first, or choose an address from the list.</span></div>}
-      <div className="person-location-selection" aria-live="polite"><MapPin size={18} aria-hidden="true" /><span>{selectedProperty ? <><strong>{selectedProperty.address}</strong>{selectedProperty.unit && <small>{selectedProperty.unit}</small>}</> : <><strong>Select a marker</strong><small>Tap the place that belongs with this person.</small></>}</span></div>
-      <div className="modal-actions"><button type="button" className="button quiet" onClick={onClose}>Cancel</button><button type="button" className="button primary" disabled={!selectedProperty} onClick={() => selectedProperty && onSelect(selectedProperty.id)}>Use this place</button></div>
+/** Privacy and status (PE6): who can see them, the owner, their status, and
+ * contact limits as switches. Only a leader can turn a limit off. */
+function PrivacySheet({ resident, data, canManage, canEdit, restrictionActions, onUpsertResident, onHandoff, onAccess, onOwner, onClose }: {
+  resident: Resident; data: NeighborWalkData; canManage: boolean; canEdit: boolean; restrictionActions: RestrictionActions;
+  onUpsertResident: PeopleViewProps["onUpsertResident"]; onHandoff: PeopleViewProps["onHandoff"]; onAccess: () => void; onOwner: () => void; onClose: () => void;
+}) {
+  const action = useAsyncAction();
+  const titleId = useId();
+  const [cancelAsk, setCancelAsk] = useState(false);
+  const { owner, more } = whoCanSee(resident, data);
+  const name = resident.name || "this person";
+  const pendingOwner = data.volunteers.find((volunteer) => volunteer.id === resident.pendingOwnerId);
+  const family = recordFamilyIds(data.residents, resident.id);
+  const active = (channel: LimitChannel | "all") => (data.restrictions ?? []).find((limit) => limit.active && limit.residentId && family.has(limit.residentId) && limit.channel === channel);
+  const blocked = resident.contactPermission === "do_not_contact" || Boolean(active("all"));
+  const toggle = (channel: LimitChannel, on: boolean, reason: string) => {
+    selectionTick();
+    const current = active(channel);
+    void action.run(() => on ? restrictionActions.add({ residentId: resident.id, channel, reason }) : current ? restrictionActions.lift(current.id, "Turned off in Privacy and status") : Promise.resolve());
+  };
+  return <Sheet className="home-sheet form" modal labelledBy={titleId} onDismiss={action.busy ? () => undefined : onClose}>
+    <SheetHead id={titleId} title={resident.name || "Privacy and status"} onClose={onClose} />
+    <div className="grouped-rows">
+      <button type="button" className="grouped-row" disabled={!canEdit} onClick={onAccess}><LockKeyhole size={19} aria-hidden="true" /><span className="grouped-row-text"><strong>Who can see {resident.name || "them"}</strong><small>{owner} (owner) and church leaders{more ? ` + ${more}` : ""}</small></span><ChevronRight size={17} aria-hidden="true" /></button>
+      {pendingOwner
+        ? <button type="button" className="grouped-row" disabled={!canEdit || !onHandoff} onClick={() => setCancelAsk(true)}><span className="avatar-dot small" aria-hidden="true">{initials(pendingOwner.name)}</span><span className="grouped-row-text"><strong>Waiting on {pendingOwner.name}</strong><small>They need to accept</small></span><ChevronRight size={17} aria-hidden="true" /></button>
+        : <button type="button" className="grouped-row" disabled={!canEdit || !onHandoff} onClick={onOwner}><span className="avatar-dot small" aria-hidden="true">{initials(owner)}</span><span className="grouped-row-text"><strong>Change owner</strong></span><ChevronRight size={17} aria-hidden="true" /></button>}
     </div>
-  </Modal>;
+    <h3 className="mono-meta sheet-label" id={`${titleId}-status`}>Status</h3>
+    <SegmentedControl label={`Status of ${name}`} value={resident.status} onChange={(status) => { if (canEdit) void action.run(() => onUpsertResident(resident.propertyId, residentInput(resident, { status }), resident.id)); }}
+      options={[{ value: "active", label: "Active", disabled: !canEdit }, { value: "paused", label: "Paused", disabled: !canEdit }, { value: "archived", label: "Archived", disabled: !canEdit }]} />
+    <h3 className="mono-meta sheet-label">Contact limits</h3>
+    <div className="grouped-rows">
+      {limitRows.map(([channel, label, reason]) => {
+        const on = blocked || Boolean(active(channel));
+        const locked = blocked || (on && !canManage) || action.busy;
+        return <div key={channel} className="grouped-row"><span className="grouped-row-text" id={`${titleId}-${channel}`}><strong>{label}</strong></span><input type="checkbox" role="switch" aria-labelledby={`${titleId}-${channel}`} checked={on} disabled={locked} onChange={(event) => toggle(channel, event.target.checked, reason)} /></div>;
+      })}
+    </div>
+    <p className="list-group-footer">{blocked ? "They asked not to be contacted at all. Only a leader can change this." : "Turning one on hides that way of reaching them everywhere. Only a leader can turn one off."}</p>
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+    {cancelAsk && pendingOwner && onHandoff && <ActionSheet title={`Stop asking ${pendingOwner.name} to take over?`} onClose={() => setCancelAsk(false)} actions={[
+      { label: "Cancel hand-off", destructive: true, onSelect: () => { setCancelAsk(false); void action.run(() => onHandoff(resident.id, "cancel")); } },
+    ]} closeLabel="Keep waiting" />}
+  </Sheet>;
+}
+
+/** Who can see (from PE6): the owner and leaders always; share with others
+ * helping care for them. */
+function AccessSheet({ resident, data, canEdit, onSave, onClose }: { resident: Resident; data: NeighborWalkData; canEdit: boolean; onSave: (patch: Pick<ResidentInput, "sharedWithVolunteerIds" | "sharedWithTeamIds">) => Promise<unknown>; onClose: () => void }) {
+  const [people, setPeople] = useState(resident.sharedWithVolunteerIds);
+  const [teams, setTeams] = useState(resident.sharedWithTeamIds);
+  const action = useAsyncAction();
+  const titleId = useId();
+  const { owner } = whoCanSee(resident, data);
+  const flip = (list: string[], id: string) => list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
+  const others = data.volunteers.filter((volunteer) => volunteer.active && volunteer.id !== resident.assignedVolunteerId && volunteer.role !== "leader");
+  const savedTeams = data.teams;
+  return <Sheet className="home-sheet form" modal detent="medium" labelledBy={titleId} onDismiss={action.busy ? () => undefined : onClose}>
+    <SheetHead id={titleId} title={`Who can see ${resident.name || "them"}`} onClose={onClose} />
+    <p className="sheet-copy">{owner} (owner) and church leaders can always see them. Share only with people helping care for them.</p>
+    {others.length > 0 && <><h3 className="mono-meta sheet-label">People</h3><div className="grouped-rows" role="group" aria-label="Share with people">
+      {others.map((volunteer) => <button key={volunteer.id} type="button" className="grouped-row" role="checkbox" aria-checked={people.includes(volunteer.id)} disabled={!canEdit} onClick={() => setPeople((list) => flip(list, volunteer.id))}><span className="avatar-dot small" aria-hidden="true">{initials(volunteer.name)}</span><span className="grouped-row-text"><strong>{volunteer.name}</strong></span>{people.includes(volunteer.id) && <Check size={19} className="row-check" aria-hidden="true" />}</button>)}
+    </div></>}
+    {savedTeams.length > 0 && <><h3 className="mono-meta sheet-label">Teams</h3><div className="grouped-rows" role="group" aria-label="Share with teams">
+      {savedTeams.map((team) => <button key={team.id} type="button" className="grouped-row" role="checkbox" aria-checked={teams.includes(team.id)} disabled={!canEdit} onClick={() => setTeams((list) => flip(list, team.id))}><span className="grouped-row-text"><strong>{team.name}</strong><small>{team.memberIds.length} people</small></span>{teams.includes(team.id) && <Check size={19} className="row-check" aria-hidden="true" />}</button>)}
+    </div></>}
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+    {canEdit && <button type="button" className="walk-save" disabled={action.busy} onClick={() => void action.run(() => onSave({ sharedWithVolunteerIds: people, sharedWithTeamIds: teams }), onClose)}>{action.busy ? "Saving…" : "Save"}</button>}
+  </Sheet>;
+}
+
+/** Change owner (from PE6): starts a hand-off the new owner must accept. */
+function OwnerSheet({ resident, data, onRequest, onClose }: { resident: Resident; data: NeighborWalkData; onRequest: (volunteerId: string) => Promise<unknown>; onClose: () => void }) {
+  const action = useAsyncAction();
+  const titleId = useId();
+  const confirm = useConfirm();
+  const choices = data.volunteers.filter((volunteer) => volunteer.active && volunteer.id !== resident.assignedVolunteerId);
+  const ask = (volunteerId: string, name: string) => void confirm({ title: `Ask ${name} to take over?`, message: "You stay responsible until they accept. Then the open follow-ups move to them.", confirmLabel: "Send request" })
+    .then((yes) => { if (yes) void action.run(() => onRequest(volunteerId), onClose); });
+  return <Sheet className="home-sheet form" modal detent="medium" labelledBy={titleId} onDismiss={action.busy ? () => undefined : onClose}>
+    <SheetHead id={titleId} title="Change owner" onClose={onClose} />
+    <p className="sheet-copy">They’ll need to accept. You stay responsible until they do.</p>
+    <div className="grouped-rows">
+      {choices.map((volunteer) => <button key={volunteer.id} type="button" className="grouped-row" disabled={action.busy} onClick={() => ask(volunteer.id, volunteer.name)}><span className="avatar-dot small" aria-hidden="true">{initials(volunteer.name)}</span><span className="grouped-row-text"><strong>{volunteer.name}</strong>{volunteer.role === "leader" && <small>Leader</small>}</span><ChevronRight size={17} aria-hidden="true" /></button>)}
+    </div>
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+  </Sheet>;
+}
+
+/** Plan a follow-up from the person's ⋯, when nothing is open. */
+function PlanFollowUpSheet({ data, name, onSave, onClose }: { data: NeighborWalkData; name: string; onSave: (note: string, date: string) => Promise<unknown>; onClose: () => void }) {
+  const timezone = data.church.timezone;
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState(calendarDaysFromNow(data.church.defaultFollowUpDays, timezone));
+  const action = useAsyncAction();
+  const titleId = useId();
+  const field = useFocusOnMount<HTMLTextAreaElement>();
+  return <Sheet className="home-sheet form" modal labelledBy={titleId} onDismiss={action.busy ? () => undefined : onClose}>
+    <SheetHead id={titleId} title="Plan a follow-up" onClose={onClose} />
+    <label className="pin-field"><span className="mono-meta">What needs to happen?</span><textarea ref={field} rows={2} maxLength={data.church.noteCharacterLimit} value={note} onChange={(event) => setNote(event.target.value)} placeholder={`Check in with ${name}`} /></label>
+    <label className="pin-field"><span className="mono-meta">Due</span><input type="date" min={calendarDate(new Date(), timezone)} value={date} onChange={(event) => setDate(event.target.value)} /></label>
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+    <button type="button" className="walk-save" disabled={action.busy || !note.trim() || !date} onClick={() => void action.run(() => onSave(note.trim(), date), onClose)}>{action.busy ? "Saving…" : "Add follow-up"}</button>
+  </Sheet>;
+}
+
+/** Edit person (PE7) and Add person (PE8): name, home, and the same contact
+ * block as the door. Also opened from a home's "+ Add" with the home filled in. */
+export function PersonFormSheet({ data, resident, initialPropertyId, activeVolunteerId, onSave, onSaved, onClose }: {
+  data: NeighborWalkData; resident?: Resident; initialPropertyId?: string; activeVolunteerId: string;
+  onSave: (propertyId: string | undefined, input: ResidentInput, residentId?: string) => Promise<string>;
+  onSaved: (residentId: string) => void; onClose: () => void;
+}) {
+  const [name, setName] = useState(resident?.name ?? "");
+  const [propertyId, setPropertyId] = useState(resident?.propertyId ?? initialPropertyId ?? "");
+  const hadContact = Boolean(resident?.phone) && resident?.preferredContact !== "none";
+  const [stayInTouch, setStayInTouch] = useState(resident ? hadContact : true);
+  const [phone, setPhone] = useState(resident?.phone ? formatPhoneNumber(resident.phone) : "");
+  const [method, setMethod] = useState<"text" | "call">(resident?.preferredContact === "call" ? "call" : "text");
+  const [picking, setPicking] = useState(false);
+  const action = useAsyncAction();
+  const titleId = useId();
+  const nameId = useId();
+  const home = indexCurrentRecords(data.properties).get(propertyId);
+  const hasPhone = stayInTouch && phone.trim().length >= 3;
+  const valid = Boolean(name.trim() || hasPhone) && (!stayInTouch || !phone.trim() || phone.trim().length >= 3);
+  const save = () => action.run(async () => {
+    const contact = { phone: hasPhone ? phone.trim() : undefined, preferredContact: hasPhone ? method : "none" as const };
+    const moved = Boolean(resident && (resident.propertyId ?? "") !== propertyId);
+    const input: ResidentInput = resident
+      ? residentInput(resident, { name: name.trim() || undefined, ...contact, contactPermission: resident.contactPermission === "do_not_contact" ? "do_not_contact" : hasPhone ? "requested" : resident.contactPermission, changeReason: moved ? "Home changed in Edit person" : undefined })
+      : { name: name.trim() || undefined, faithStatus: "not_discussed", discipleshipStage: "new_connection", assignedVolunteerId: activeVolunteerId, sharedWithVolunteerIds: [], sharedWithTeamIds: [], status: "active", ...contact, contactPermission: hasPhone ? "requested" : "not_recorded" };
+    onSaved(await onSave(propertyId || undefined, input, resident?.id));
+  });
+
+  if (picking) return <HomePicker data={data} currentId={propertyId} onPick={(id) => { setPropertyId(id); setPicking(false); }} onClose={() => setPicking(false)} />;
+  return <Sheet className="home-sheet form" modal labelledBy={titleId} onDismiss={action.busy ? () => undefined : onClose}>
+    <SheetHead id={titleId} title={resident ? `Edit ${resident.name || "person"}` : "New person"} onClose={onClose} />
+    <h3 className="mono-meta sheet-label" id={nameId}>Name</h3>
+    <input className="sheet-input" aria-labelledby={nameId} value={name} maxLength={120} enterKeyHint="done" autoComplete="off" onChange={(event) => setName(event.target.value)} placeholder="Name, or a short description" />
+    <h3 className="mono-meta sheet-label">Home</h3>
+    <div className="grouped-rows">
+      {home ? <div className="grouped-row"><MapPin size={19} aria-hidden="true" /><span className="grouped-row-text"><strong>{home.address}{home.unit ? ` · ${home.unit}` : ""}</strong></span><button type="button" className="mono-meta hedge row-link" aria-label={`Change home, now ${home.address}`} onClick={() => setPicking(true)}>Change</button></div>
+        : <button type="button" className="grouped-row" onClick={() => setPicking(true)}><MapPin size={19} aria-hidden="true" /><span className="grouped-row-text"><strong className="quiet">Choose a home</strong></span><ChevronRight size={17} aria-hidden="true" /></button>}
+    </div>
+    <ContactBlock stayInTouch={stayInTouch} phone={phone} method={method} onStayInTouch={setStayInTouch} onPhone={setPhone} onMethod={setMethod} />
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+    <button type="button" className="walk-save" disabled={action.busy || !valid} onClick={() => void save()}>{action.busy ? "Saving…" : resident ? "Save" : "Add person"}</button>
+  </Sheet>;
+}
+
+/** Choose a home: pinned homes, searched by street. */
+function HomePicker({ data, currentId, onPick, onClose }: { data: NeighborWalkData; currentId: string; onPick: (propertyId: string) => void; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const titleId = useId();
+  const field = useFocusOnMount<HTMLInputElement>();
+  const needle = query.trim().toLowerCase();
+  const homes = data.properties.filter((property: Property) => !property.mergedIntoId && (!needle || `${property.address} ${property.unit ?? ""}`.toLowerCase().includes(needle)))
+    .sort((a, b) => a.address.localeCompare(b.address, undefined, { numeric: true })).slice(0, 60);
+  return <Sheet className="home-sheet form" modal detent="large" labelledBy={titleId} onDismiss={onClose}>
+    <SheetHead id={titleId} title="Choose a home" onClose={onClose} />
+    <label className="search-box"><Search size={18} aria-hidden="true" /><input ref={field} type="search" aria-label="Search homes" enterKeyHint="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Street or number" /></label>
+    <div className="grouped-rows">
+      {currentId && <button type="button" className="grouped-row" onClick={() => onPick("")}><span className="grouped-row-text"><strong>No home</strong><small>Met somewhere else</small></span></button>}
+      {homes.map((property) => <button key={property.id} type="button" className="grouped-row" aria-pressed={property.id === currentId} onClick={() => onPick(property.id)}><MapPin size={19} aria-hidden="true" /><span className="grouped-row-text"><strong>{property.address}{property.unit ? ` · ${property.unit}` : ""}</strong></span>{property.id === currentId && <Check size={19} className="row-check" aria-hidden="true" />}</button>)}
+    </div>
+    {!homes.length && <p className="home-empty">No pinned home matches. Drop a pin on the map first.</p>}
+  </Sheet>;
 }

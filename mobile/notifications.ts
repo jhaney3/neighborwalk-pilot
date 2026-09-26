@@ -12,7 +12,7 @@ import type { NeighborWalkData } from "../lib/domain";
 
 const REMINDER_SOURCE = "neighborwalk-device-reminder-v1";
 const MAX_DEVICE_REMINDERS = 60;
-const FOLLOW_UP_HOUR = 9;
+export const FOLLOW_UP_HOUR = 9;
 const WALK_NOTICE_MILLISECONDS = 60 * 60 * 1000;
 
 export type DeviceNotificationAdapter = Pick<typeof LocalNotifications,

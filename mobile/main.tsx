@@ -40,6 +40,10 @@ import "../app/styles/shell.css";
 import "../app/styles/conversations.css";
 import "../app/styles/walk-setup.css";
 import "../app/styles/walk-target-planner.css";
+import "../app/styles/walk-mode.css";
+import "../app/styles/followups.css";
+import "../app/styles/walk-page.css";
+import "../app/styles/pins.css";
 import "./native.css";
 
 installMobileColorTheme();

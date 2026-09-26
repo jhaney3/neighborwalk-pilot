@@ -3,7 +3,7 @@
 .content-view { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding: 28px clamp(20px, 4vw, 48px) 56px; }
 .view-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .view-heading > div:first-child { min-width: 0; }
-.view-heading h1 { margin: 0; font-size: var(--fs-large-title); line-height: var(--lh-large-title); font-weight: 600; overflow-wrap: anywhere; }
+.view-heading h1 { margin: 0; font-size: 36px; line-height: 1.05; font-weight: 850; letter-spacing: -.025em; overflow-wrap: anywhere; }
 .view-heading .eyebrow { margin-bottom: 4px; }
 .view-heading > div:first-child > p:last-child { max-width: 560px; margin: 6px 0 0; color: var(--label-2); font-size: var(--fs-subhead); line-height: var(--lh-subhead); }
 .view-heading > .button { flex: none; margin-top: 2px; }

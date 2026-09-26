@@ -23,7 +23,7 @@ export function legacyAppPath(search: string, hash: string, standalone = false):
   const params = new URLSearchParams(search);
   if (params.has("invite") || params.has("code") || params.has("error_description") || /(?:access_token|error_description|type=recovery|code=)/.test(hash)) return "/login" + search + hash;
   const requested = params.get("view");
-  const aliases: Record<string, AppView> = { map: "map", people: "people", followups: "followups", guide: "guide", leader: "leader", settings: "settings" };
+  const aliases: Record<string, AppView> = { map: "map", people: "people", followups: "followups", guide: "more", leader: "leader", settings: "settings" };
   if (requested && aliases[requested]) return appHref(aliases[requested]);
   return standalone ? appHref("today") : null;
 }

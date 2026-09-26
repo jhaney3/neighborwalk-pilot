@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Check, LoaderCircle, Redo2, Trash2, Undo2, Waypoints, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, LoaderCircle, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Feature, FeatureCollection, Geometry, Point } from "geojson";
 import type { Map as MapLibreMap, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
@@ -8,14 +8,14 @@ import type { Coordinates, Territory } from "../lib/domain";
 import { drawingBoundaryReady, drawingGestureIntent, drawingInstruction, moveDrawingCorner, rectangleBoundary, rectangleHasArea, undoDrawingPoint, type MapDrawingMode } from "../lib/map-drawing";
 import { MAPLIBRE_WORKER_URL } from "../lib/map-worker";
 import type { ParcelFeatureCollection } from "../lib/parcels";
-import { clipLineToBoundary, closeRing, connectedStreetIds, mapLineOffsetForSide, polygonInsideBoundary, polygonSelfIntersects, polygonsOverlap, streetSidePolygons, streetsWithinMeters } from "../lib/planning-geometry";
-import { EMPTY_PLANNING_PARCELS, EMPTY_STREETS, loadPlanningLayers, loadingPlanningParcelLayer, loadingPlanningStreetLayer, planningAvailabilityMessage, planningLayerMatchesIdentity, type PlanningParcelLayer, type PlanningStreetLayer } from "../lib/planning-loader";
+import { clipLineToBoundary, closeRing, mapLineOffsetForSide, polygonInsideBoundary, polygonSelfIntersects, polygonsOverlap, streetSidePolygons } from "../lib/planning-geometry";
+import { EMPTY_PLANNING_PARCELS, EMPTY_STREETS, loadPlanningLayers, loadingPlanningParcelLayer, loadingPlanningStreetLayer, planningLayerMatchesIdentity, type PlanningParcelLayer, type PlanningStreetLayer } from "../lib/planning-loader";
 import { OVERTURE_TRANSPORTATION_SOURCE, streetSegmentDisplayLines, streetSegmentLines, type StreetSegmentCollection } from "../lib/street-segments";
 import { applyParcelSelectionOverrides, parcelInsideZone, planningDatasetIdentity, planningParcelDisplayCollection, planningParcelRoster, polygonParcelKeys, snapshotParcelFeatureCollection, STREET_PARCEL_CORRIDOR_METERS, streetParcelKeys, toggleParcelSelectionOverride } from "../lib/target-parcels";
 import type { WalkTargetGeometry, WalkTargetInput } from "../lib/walk-targets";
 import { compactToastMessage } from "../lib/toasts";
-import { MapDrawingModeControl } from "./MapDrawingModeControl";
 import { randomUuid } from "../lib/platform";
+import { coveredStreetIds } from "../lib/street-coverage";
 
 export type WalkTargetDraft = WalkTargetInput & { clientId: string; id?: string };
 export type PlanningMapData = { streets: StreetSegmentCollection; parcels: ParcelFeatureCollection; parcelRevision?: string; parcelComplete: boolean; fromCache?: boolean };
@@ -35,7 +35,30 @@ export type WalkTargetPlannerProps = {
 
 type Mode = "select" | "polygon" | "rectangle" | "streets";
 type DraftKind = MapDrawingMode | "streets";
-const TARGET_COLORS = ["#286c59", "#a9660d", "#376f9e", "#95598a", "#8a593e"];
+const TARGET_COLORS = ["#2d5a45", "#6b91ad", "#b98a3a", "#95598a", "#8a593e"];
+const NEW_ROUTE = "new-route";
+
+/** "Route A", "Route B"… the first letter no route uses yet. */
+function nextRouteName(targets: WalkTargetDraft[]) {
+  const used = new Set(targets.map((target) => target.name));
+  for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") if (!used.has(`Route ${letter}`)) return `Route ${letter}`;
+  return `Route ${targets.length + 1}`;
+}
+
+function lineMiles(lines: { coordinates: number[][] }[]) {
+  let meters = 0;
+  for (const line of lines) for (let index = 1; index < line.coordinates.length; index += 1) {
+    const [lng1, lat1] = line.coordinates[index - 1], [lng2, lat2] = line.coordinates[index];
+    const dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    meters += 6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  return meters / 1609.34;
+}
+
+function shortStreetName(name: string) {
+  return name.replace(/\b(Street|Avenue|Boulevard|Road|Drive|Lane|Court)\b$/, (word) => ({ Street: "St", Avenue: "Ave", Boulevard: "Blvd", Road: "Rd", Drive: "Dr", Lane: "Ln", Court: "Ct" })[word] ?? word);
+}
 const PLANNING_LOAD_TIMEOUT_MS = 20_000;
 const EMPTY_PARCEL_KEYS = new Set<string>();
 
@@ -61,26 +84,14 @@ function streetDisplayCollection(streets: StreetSegmentCollection, boundary: Coo
     .map((geometry, index): Feature<Geometry> => ({ type: "Feature", id: `${feature.properties.id}-display-${index}`, geometry, properties: feature.properties }))));
 }
 
-function layerSummary(label: string, status: PlanningStreetLayer["status"] | PlanningParcelLayer["status"], count: number, noun: string) {
-  if (status === "loading") return `${label}: loading…`;
-  if (status === "unavailable") return `${label}: unavailable`;
-  if (status === "cached") return `${label}: ${count} cached ${noun}${count === 1 ? "" : "s"} (view only)`;
-  if (status === "incomplete") return `${label}: ${count} ${noun}${count === 1 ? "" : "s"} in an incomplete result`;
-  if (status === "empty") return `${label}: no ${noun}s found`;
-  return `${label}: ${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-function planningLayerSummary(label: "Streets" | "Parcels", layer: PlanningStreetLayer | PlanningParcelLayer, count: number, noun: string) {
-  const availabilityMessage = planningAvailabilityMessage(layer.availability, label === "Parcels" ? "parcels" : "streets");
-  if (availabilityMessage) return availabilityMessage;
-  return layerSummary(label, layer.status, count, noun);
-}
-
 export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedTargetId, mapStyleUrl, onSelectedTargetChange, onChange, loadPlanningData, visitedParcelKeys = EMPTY_PARCEL_KEYS, demo, readOnly = false }: WalkTargetPlannerProps) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const stateRef = useRef({ mode: "select" as Mode, points: [] as Coordinates[], streets: EMPTY_STREETS, parcels: EMPTY_PLANNING_PARCELS,
-    connected: false, streetIds: new Set<string>(), automaticParcelIds: new Set<string>(), parcelIds: new Set<string>(), claimedParcelIds: new Set<string>(), visitedParcelKeys, targets, selectedTargetId, parentTerritory, readOnly });
+    connected: false, streetIds: new Set<string>(), automaticParcelIds: new Set<string>(), parcelIds: new Set<string>(), claimedParcelIds: new Set<string>(), visitedParcelKeys, coveredStreets: new Set<string>(), targets, selectedTargetId, parentTerritory, readOnly });
+  // The map's click handler reaches the latest tap handlers through these.
+  const tapStreetRef = useRef<(streetId: string) => void>(() => undefined);
+  const tapParcelRef = useRef<(parcelId: string) => void>(() => undefined);
   const dragVertex = useRef<number | null>(null);
   const rectangleStart = useRef<Coordinates | null>(null);
   const rectanglePointerStart = useRef<[number, number] | null>(null);
@@ -97,6 +108,9 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
   const [parcelOverrides, setParcelOverrides] = useState<Map<string, boolean>>(new Map());
   const [overlapNotice, setOverlapNotice] = useState<{ id: number; message: string }>();
   const [connected, setConnected] = useState(false);
+  // Taps on streets go to the route being edited: an existing route, or a new one.
+  const [editingId, setEditingId] = useState<string>(() => selectedTargetId ?? targets[0]?.clientId ?? NEW_ROUTE);
+  const editing = targets.find((target) => target.clientId === editingId);
   const planningIdentity = useMemo(() => planningDatasetIdentity(parentTerritory.id, parentTerritory.boundary), [parentTerritory.boundary, parentTerritory.id]);
   const currentStreetLayer = planningLayerMatchesIdentity(streetLayer.identity, planningIdentity) ? streetLayer : loadingPlanningStreetLayer(planningIdentity);
   const currentParcelLayer = planningLayerMatchesIdentity(parcelLayer.identity, planningIdentity) ? parcelLayer : loadingPlanningParcelLayer(planningIdentity);
@@ -116,7 +130,8 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
     ? "Some map data didn’t load. Try again to add routes."
     : "";
   const chosenStreetLines = useMemo(() => streets.features.filter((feature) => streetIds.has(feature.properties.id)).flatMap(streetSegmentLines), [streetIds, streets.features]);
-  const claimedParcelIds = useMemo(() => new Set(targets.flatMap((target) => target.parcels.map((parcel) => `${parcel.countyFips}:${parcel.gislink}`))), [targets]);
+  // The route being edited doesn't block its own homes.
+  const claimedParcelIds = useMemo(() => new Set(targets.filter((target) => target.clientId !== editingId).flatMap((target) => target.parcels.map((parcel) => `${parcel.countyFips}:${parcel.gislink}`))), [editingId, targets]);
   const candidateAutomaticParcelIds = useMemo(() => {
     if (!currentParcelLayer.complete) return new Set<string>();
     if ((draftKind === "polygon" || draftKind === "rectangle") && points.length >= 3) return polygonParcelKeys(eligibleParcels, points);
@@ -125,8 +140,6 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
   }, [chosenStreetLines, currentParcelLayer.complete, draftKind, eligibleParcels, parentTerritory.boundary, points]);
   const automaticParcelIds = useMemo(() => new Set([...candidateAutomaticParcelIds].filter((id) => !claimedParcelIds.has(id))), [candidateAutomaticParcelIds, claimedParcelIds]);
   const parcelIds = useMemo(() => new Set([...applyParcelSelectionOverrides(automaticParcelIds, parcelOverrides)].filter((id) => !claimedParcelIds.has(id))), [automaticParcelIds, claimedParcelIds, parcelOverrides]);
-  const excludedParcelCount = useMemo(() => [...candidateAutomaticParcelIds].filter((id) => claimedParcelIds.has(id)).length, [candidateAutomaticParcelIds, claimedParcelIds]);
-  const visitedParcelCount = useMemo(() => eligibleParcels.features.filter((feature) => visitedParcelKeys.has(`${feature.properties.countyFips}:${feature.properties.gislink}`)).length, [eligibleParcels.features, visitedParcelKeys]);
 
   useEffect(() => {
     if (!overlapNotice) return;
@@ -134,7 +147,9 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
     return () => window.clearTimeout(timeout);
   }, [overlapNotice]);
 
-  useEffect(() => { stateRef.current = { mode, points, streets, parcels: displayedParcels, connected, streetIds, automaticParcelIds, parcelIds, claimedParcelIds, visitedParcelKeys, targets, selectedTargetId, parentTerritory, readOnly }; }, [automaticParcelIds, claimedParcelIds, connected, displayedParcels, mode, parentTerritory, parcelIds, points, readOnly, selectedTargetId, streetIds, streets, targets, visitedParcelKeys]);
+  // Streets already walked are drawn dashed, so leaders plan around what's left.
+  const coveredStreets = useMemo(() => readOnly ? new Set<string>() : coveredStreetIds(streets, displayedParcels, visitedParcelKeys), [displayedParcels, readOnly, streets, visitedParcelKeys]);
+  useEffect(() => { stateRef.current = { mode, points, streets, parcels: displayedParcels, connected, streetIds, automaticParcelIds, parcelIds, claimedParcelIds, visitedParcelKeys, coveredStreets, targets, selectedTargetId, parentTerritory, readOnly }; }, [automaticParcelIds, claimedParcelIds, connected, coveredStreets, displayedParcels, mode, parentTerritory, parcelIds, points, readOnly, selectedTargetId, streetIds, streets, targets, visitedParcelKeys]);
   const updateSource = useCallback((id: string, data: FeatureCollection) => {
     const source = mapRef.current?.getSource(id) as { setData: (data: FeatureCollection) => void } | undefined;
     source?.setData(data);
@@ -192,21 +207,21 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
     void import("maplibre-gl").then((maplibre) => {
       if (disposed || !container.current) return;
       maplibre.setWorkerUrl(MAPLIBRE_WORKER_URL);
-      const map = new maplibre.Map({ container: container.current, style: mapStyleUrl, center: parentTerritory.center, zoom: parentTerritory.zoom, cooperativeGestures: true });
+      const map = new maplibre.Map({ container: container.current, style: mapStyleUrl, center: parentTerritory.center, zoom: parentTerritory.zoom, cooperativeGestures: true, attributionControl: { compact: true } });
       mapRef.current = map;
-      map.addControl(new maplibre.NavigationControl({ showCompass: false }), "bottom-right");
       const configure = () => {
         const addSource = (id: string) => { if (!map.getSource(id)) map.addSource(id, { type: "geojson", data: collection([]) }); };
         ["plan-parent", "plan-targets", "plan-draft", "plan-streets", "plan-parcels"].forEach(addSource);
         const add = (layer: Parameters<MapLibreMap["addLayer"]>[0]) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
         add({ id: "plan-parent-fill", type: "fill", source: "plan-parent", paint: { "fill-color": ["get", "color"], "fill-opacity": .06 } });
         add({ id: "plan-parent-line", type: "line", source: "plan-parent", paint: { "line-color": ["get", "color"], "line-width": 3 } });
-        add({ id: "plan-parcels-fill", type: "fill", source: "plan-parcels", paint: { "fill-color": ["case", ["==", ["get", "chosen"], true], "#e9a84a", ["==", ["get", "previouslyVisited"], true], "#286c59", ["==", ["get", "claimed"], true], "#6f7773", "#315c50"], "fill-opacity": ["case", ["==", ["get", "chosen"], true], .3, ["==", ["get", "previouslyVisited"], true], .28, ["==", ["get", "claimed"], true], .12, .04] } });
+        add({ id: "plan-parcels-fill", type: "fill", source: "plan-parcels", paint: { "fill-color": ["case", ["==", ["get", "chosen"], true], "#2d5a45", ["==", ["get", "previouslyVisited"], true], "#286c59", ["==", ["get", "claimed"], true], "#6f7773", "#315c50"], "fill-opacity": ["case", ["==", ["get", "chosen"], true], .1, ["==", ["get", "previouslyVisited"], true], .28, ["==", ["get", "claimed"], true], .12, .04] } });
         add({ id: "plan-parcels-line", type: "line", source: "plan-parcels", paint: { "line-color": ["case", ["==", ["get", "previouslyVisited"], true], "#174d3f", "#56776c"], "line-width": ["case", ["==", ["get", "previouslyVisited"], true], 2.25, 1] } });
         add({ id: "plan-streets-hit", type: "line", source: "plan-streets", paint: { "line-color": "#000", "line-opacity": .01, "line-width": 18 } });
-        add({ id: "plan-streets-line", type: "line", source: "plan-streets", paint: { "line-color": ["case", ["==", ["get", "chosen"], true], "#e28f16", "#53796d"], "line-width": ["case", ["==", ["get", "chosen"], true], 7, 2], "line-opacity": ["case", ["==", ["get", "chosen"], true], .9, .55] } });
-        add({ id: "plan-target-fill", type: "fill", source: "plan-targets", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": ["get", "color"], "fill-opacity": ["case", ["get", "selected"], .34, .18] } });
-        add({ id: "plan-target-line", type: "line", source: "plan-targets", filter: ["!=", ["get", "displayKind"], "side-fill"], paint: { "line-color": ["get", "color"], "line-width": ["case", ["get", "selected"], 6, 4], "line-offset": ["case", ["==", ["get", "side"], "left"], mapLineOffsetForSide("left"), ["==", ["get", "side"], "right"], mapLineOffsetForSide("right"), 0] } });
+        add({ id: "plan-streets-line", type: "line", source: "plan-streets", filter: ["any", ["==", ["get", "chosen"], true], ["!=", ["get", "covered"], true]], paint: { "line-color": ["case", ["==", ["get", "chosen"], true], ["coalesce", ["get", "chosenColor"], "#2d5a45"], "#53796d"], "line-width": ["case", ["==", ["get", "chosen"], true], 8, 2], "line-opacity": ["case", ["==", ["get", "chosen"], true], 1, .45] } });
+        add({ id: "plan-streets-covered", type: "line", source: "plan-streets", filter: ["all", ["!=", ["get", "chosen"], true], ["==", ["get", "covered"], true]], paint: { "line-color": "#8b918a", "line-width": 3, "line-opacity": .95, "line-dasharray": [1.4, 1.2] } });
+        add({ id: "plan-target-fill", type: "fill", source: "plan-targets", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": ["get", "color"], "fill-opacity": ["case", ["get", "selected"], .3, .12] } });
+        add({ id: "plan-target-line", type: "line", source: "plan-targets", filter: ["!=", ["get", "displayKind"], "side-fill"], paint: { "line-color": ["get", "color"], "line-width": ["case", ["get", "selected"], 8, 6], "line-opacity": ["case", ["get", "selected"], 1, .45], "line-offset": ["case", ["==", ["get", "side"], "left"], mapLineOffsetForSide("left"), ["==", ["get", "side"], "right"], mapLineOffsetForSide("right"), 0] } });
         add({ id: "plan-draft-fill", type: "fill", source: "plan-draft", paint: { "fill-color": "#e9a84a", "fill-opacity": .22 } });
         add({ id: "plan-draft-line", type: "line", source: "plan-draft", paint: { "line-color": "#9c6411", "line-width": 3 } });
         add({ id: "plan-draft-point-hit", type: "circle", source: "plan-draft", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": 18, "circle-color": "#9c6411", "circle-opacity": .01 } });
@@ -216,13 +231,19 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
         updateSource("plan-parent", collection([{ type: "Feature", properties: { color: current.parentTerritory.color }, geometry: polygon(current.parentTerritory.boundary) }]));
         updateSource("plan-targets", targetFeatures(current.targets, current.selectedTargetId));
         updateSource("plan-draft", draftFeatures(current.points));
-        updateSource("plan-streets", { ...displayStreets, features: displayStreets.features.map((feature) => ({ ...feature, properties: { ...feature.properties, chosen: current.streetIds.has(String(feature.properties?.id)) } })) });
+        updateSource("plan-streets", { ...displayStreets, features: displayStreets.features.map((feature) => ({ ...feature, properties: { ...feature.properties, chosen: current.streetIds.has(String(feature.properties?.id)), covered: current.coveredStreets.has(String(feature.properties?.id)) } })) });
         updateSource("plan-parcels", planningParcelDisplayCollection(current.parcels, current.parcelIds, current.claimedParcelIds, current.visitedParcelKeys, current.readOnly));
         setStatus("ready");
       };
       map.on("style.load", configure);
       let styleReady = false;
-      map.once("load", () => { styleReady = true; });
+      map.once("load", () => {
+        styleReady = true;
+        // Keep the map credits behind their info button.
+        const attribution = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+        attribution?.classList.remove("maplibregl-compact-show");
+        attribution?.removeAttribute("open");
+      });
       map.on("error", (event) => { if (event.error && !styleReady) setStatus("error"); });
       const startDrawingGesture = (event: MapMouseEvent | MapTouchEvent) => {
         if ("points" in event && event.points.length !== 1) return;
@@ -284,16 +305,13 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
         if (current.mode === "streets") {
           const street = map.queryRenderedFeatures(event.point, { layers: ["plan-streets-hit"] })[0];
           const streetId = String(street?.properties?.id ?? "");
-          if (streetId) {
-            setStreetIds((chosen) => { const next = new Set(chosen); const candidates = current.streets.features.flatMap((feature) => streetSegmentLines(feature).map((geometry) => ({ id: feature.properties.id, name: feature.properties.name, geometry }))); const ids = current.connected ? connectedStreetIds(streetId, candidates) : [streetId]; const remove = next.has(streetId); ids.forEach((value) => remove ? next.delete(value) : next.add(value)); return next; });
-            return;
-          }
+          if (streetId) { tapStreetRef.current(streetId); return; }
           const hit = map.queryRenderedFeatures(event.point, { layers: ["plan-parcels-fill"] })[0]; const props = hit?.properties; if (!props || !current.streetIds.size) return;
           const countyFips = String(Reflect.get(props, "countyFips") ?? ""); const gislink = String(Reflect.get(props, "gislink") ?? "");
           const id = `${countyFips}:${gislink}`;
           if (current.claimedParcelIds.has(id)) { setOverlapNotice({ id: Date.now(), message: "Already included" }); return; }
           setOverlapNotice(undefined);
-          setParcelOverrides((overrides) => toggleParcelSelectionOverride(overrides, id, current.automaticParcelIds));
+          tapParcelRef.current(id);
         }
       });
     }).catch(() => setStatus("error"));
@@ -310,69 +328,117 @@ export function WalkTargetPlanner({ parentTerritory, eventId, targets, selectedT
   useEffect(() => {
     mapRef.current?.jumpTo({ center: [parentLongitude, parentLatitude], zoom: parentTerritory.zoom });
   }, [parentLatitude, parentLongitude, parentTerritory.zoom]);
-  useEffect(() => updateSource("plan-targets", targetFeatures(targets, selectedTargetId)), [selectedTargetId, targets, updateSource]);
+  // The route being edited by streets draws from the live selection, not its saved line.
+  useEffect(() => updateSource("plan-targets", targetFeatures(targets.filter((target) => !(target.clientId === editingId && draftKind === "streets")), editingId)), [draftKind, editingId, targets, updateSource]);
   useEffect(() => updateSource("plan-draft", draftFeatures(points)), [points, updateSource]);
-  useEffect(() => { const display = streetDisplayCollection(streets, parentTerritory.boundary); updateSource("plan-streets", { ...display, features: display.features.map((feature) => ({ ...feature, properties: { ...feature.properties, chosen: streetIds.has(String(feature.properties?.id)) } })) }); }, [parentTerritory.boundary, streetIds, streets, updateSource]);
+  const editingColor = editing?.color ?? TARGET_COLORS[targets.length % TARGET_COLORS.length];
+  useEffect(() => { const display = streetDisplayCollection(streets, parentTerritory.boundary); updateSource("plan-streets", { ...display, features: display.features.map((feature) => ({ ...feature, properties: { ...feature.properties, chosen: streetIds.has(String(feature.properties?.id)), chosenColor: editingColor, covered: coveredStreets.has(String(feature.properties?.id)) } })) }); }, [coveredStreets, editingColor, parentTerritory.boundary, streetIds, streets, updateSource]);
   useEffect(() => updateSource("plan-parcels", planningParcelDisplayCollection(displayedParcels, parcelIds, claimedParcelIds, visitedParcelKeys, readOnly)), [claimedParcelIds, displayedParcels, parcelIds, readOnly, updateSource, visitedParcelKeys]);
 
-  const duplicateStreet = useMemo(() => targets.some((target) => target.streetSelection?.segmentIds.some((id) => streetIds.has(id))), [streetIds, targets]);
-  const overlapsArea = useMemo(() => points.length >= 3 && targets.some((target) => target.geometry.type === "Polygon" && polygonsOverlap(points, target.geometry.coordinates[0])), [points, targets]);
+  /** Save the route being edited from a set of streets: every tap updates it. */
+  const commitStreets = (nextIds: Set<string>, overrides = parcelOverrides) => {
+    if (readOnly || !planningComplete) return;
+    const chosen = streets.features.filter((feature) => nextIds.has(feature.properties.id));
+    if (!chosen.length) {
+      if (editing) { onChange(targets.filter((target) => target.clientId !== editing.clientId)); setEditingId(NEW_ROUTE); onSelectedTargetChange(undefined); }
+      return;
+    }
+    const lines = chosen.flatMap(streetSegmentLines);
+    const automatic = new Set([...streetParcelKeys(eligibleParcels, lines, parentTerritory.boundary, STREET_PARCEL_CORRIDOR_METERS, "both")].filter((id) => !claimedParcelIds.has(id)));
+    const ids = new Set([...applyParcelSelectionOverrides(automatic, overrides)].filter((id) => !claimedParcelIds.has(id)));
+    const base = editing ?? { clientId: `draft-${randomUuid()}`, eventId, territoryId: parentTerritory.id, name: nextRouteName(targets), color: TARGET_COLORS[targets.length % TARGET_COLORS.length] };
+    const target: WalkTargetDraft = { ...base, selectionKind: "streets",
+      geometry: { type: "MultiLineString", coordinates: lines.map((line) => line.coordinates.map((position) => [position[0], position[1]] as Coordinates)) },
+      streetSelection: { side: "both", corridorMeters: STREET_PARCEL_CORRIDOR_METERS, source: OVERTURE_TRANSPORTATION_SOURCE, sourceRevision: streets.metadata?.release ?? "unknown", segmentIds: [...nextIds], streetNames: [...new Set(chosen.flatMap((feature) => feature.properties.name ? [feature.properties.name] : []))] },
+      parcels: planningParcelRoster(ids, automatic, eligibleParcels, parcelRevision, "street_auto") };
+    onChange(editing ? targets.map((item) => item.clientId === editing.clientId ? target : item) : [...targets, target]);
+    if (!editing) { setEditingId(target.clientId); onSelectedTargetChange(target.clientId); }
+  };
+  const tapStreet = (streetId: string) => {
+    const owner = targets.find((target) => target.clientId !== editingId && target.streetSelection?.segmentIds.includes(streetId));
+    if (owner) { setOverlapNotice({ id: Date.now(), message: `That street is on ${owner.name}` }); return; }
+    const next = new Set(streetIds);
+    if (next.has(streetId)) next.delete(streetId); else next.add(streetId);
+    setStreetIds(next);
+    commitStreets(next);
+  };
+  const tapParcel = (id: string) => {
+    const overrides = toggleParcelSelectionOverride(parcelOverrides, id, automaticParcelIds);
+    setParcelOverrides(overrides);
+    commitStreets(streetIds, overrides);
+  };
+  useEffect(() => { tapStreetRef.current = tapStreet; tapParcelRef.current = tapParcel; });
+  const beginEditing = (id: string) => {
+    const target = targets.find((item) => item.clientId === id);
+    setEditingId(id); onSelectedTargetChange(target?.clientId);
+    suppressMapClick.current = false; setPoints([]); setParcelOverrides(new Map()); setOverlapNotice(undefined);
+    setDraftKind("streets"); setMode("streets"); setStreetIds(new Set(target?.streetSelection?.segmentIds ?? []));
+  };
+  const drawArea = () => { suppressMapClick.current = false; setDraftKind("polygon"); setMode("polygon"); setPoints([]); setStreetIds(new Set()); setParcelOverrides(new Map()); setOverlapNotice(undefined); };
+  // Start on streets once the neighborhood's streets load.
+  const [startedFor, setStartedFor] = useState("");
+  if (!readOnly && streetInspectable && startedFor !== planningIdentity) {
+    setStartedFor(planningIdentity);
+    const target = targets.find((item) => item.clientId === editingId);
+    setDraftKind(target && target.selectionKind !== "streets" ? undefined : "streets");
+    setMode(target && target.selectionKind !== "streets" ? "select" : "streets");
+    setStreetIds(new Set(target?.streetSelection?.segmentIds ?? []));
+  }
+
+  const duplicateStreet = useMemo(() => targets.some((target) => target.clientId !== editingId && target.streetSelection?.segmentIds.some((id) => streetIds.has(id))), [editingId, streetIds, targets]);
+  const overlapsArea = useMemo(() => points.length >= 3 && targets.some((target) => target.clientId !== editingId && target.geometry.type === "Polygon" && polygonsOverlap(points, target.geometry.coordinates[0])), [editingId, points, targets]);
   const error = useMemo(() => draftKind === "streets" && duplicateStreet ? "That street is already on another route."
     : points.length > 0 && draftKind === "rectangle" && !rectangleHasArea(points) ? "Clear the rectangle and press-drag diagonally to draw it again."
       : points.length > 0 && draftKind === "polygon" && points.length < 3 ? "Add at least three corners."
         : points.length >= 3 && polygonSelfIntersects(points) ? "This boundary crosses itself."
           : points.length >= 3 && !polygonInsideBoundary(points, parentTerritory.boundary) ? "Keep every corner inside the neighborhood."
             : overlapsArea ? "This overlaps another route." : "", [draftKind, duplicateStreet, overlapsArea, parentTerritory.boundary, points]);
-  const suggestions = useMemo(() => streetIds.size ? streetsWithinMeters([...streetIds][0], streets.features.flatMap((feature) => streetSegmentLines(feature).map((geometry) => ({ id: feature.properties.id, name: feature.properties.name, geometry }))), 100).filter((id) => !streetIds.has(id)).slice(0, 8) : [], [streetIds, streets.features]);
-  const hasCurrentSelection = points.length > 0 || streetIds.size > 0 || parcelOverrides.size > 0;
-  const clearSelection = () => {
-    suppressMapClick.current = false;
-    rectangleStart.current = null; rectanglePointerStart.current = null; dragVertex.current = null;
-    setPoints([]); setStreetIds(new Set()); setParcelOverrides(new Map()); setOverlapNotice(undefined);
-  };
-  const addTarget = () => {
-    if (!draftKind || !planningComplete) return;
-    let geometry: WalkTargetGeometry; let selectionKind: WalkTargetInput["selectionKind"];
-    if (draftKind === "streets") { const chosen = streets.features.filter((feature) => streetIds.has(feature.properties.id)); if (!chosen.length) return; geometry = { type: "MultiLineString", coordinates: chosen.flatMap(streetSegmentLines).map((line) => line.coordinates.map((position) => [position[0], position[1]] as Coordinates)) }; selectionKind = "streets"; }
-    else { if (!drawingBoundaryReady(points, draftKind) || error) return; geometry = polygon(points); selectionKind = draftKind; }
-    if (!parcelIds.size) return;
-    const clientId = `draft-${randomUuid()}`; const color = TARGET_COLORS[targets.length % TARGET_COLORS.length];
-    const chosenStreets = streets.features.filter((feature) => streetIds.has(feature.properties.id));
-    const target: WalkTargetDraft = { clientId, eventId, territoryId: parentTerritory.id, name: selectionKind === "streets" ? chosenStreets[0]?.properties.name ?? `Route ${targets.length + 1}` : `Route ${targets.length + 1}`, color, selectionKind, geometry,
-      streetSelection: selectionKind === "streets" ? { side: "both", corridorMeters: STREET_PARCEL_CORRIDOR_METERS, source: OVERTURE_TRANSPORTATION_SOURCE, sourceRevision: streets.metadata?.release ?? "unknown", segmentIds: [...streetIds], streetNames: [...new Set(chosenStreets.flatMap((feature) => feature.properties.name ? [feature.properties.name] : []))] } : undefined,
-      parcels: planningParcelRoster(parcelIds, automaticParcelIds, eligibleParcels, parcelRevision, selectionKind === "streets" ? "street_auto" : "polygon_auto") };
-    onChange([...targets, target]); onSelectedTargetChange(clientId); setPoints([]); setStreetIds(new Set()); setParcelOverrides(new Map()); setOverlapNotice(undefined); setDraftKind(undefined); setMode("select");
-  };
-  const addWhole = () => { if (!planningComplete) return; const ids = new Set(eligibleParcels.features.map((feature) => `${feature.properties.countyFips}:${feature.properties.gislink}`)); if (!ids.size) return; const clientId = `draft-${randomUuid()}`; onChange([...targets, { clientId, eventId, territoryId: parentTerritory.id, name: parentTerritory.name, color: TARGET_COLORS[targets.length % TARGET_COLORS.length], selectionKind: "whole_zone", geometry: polygon(parentTerritory.boundary), parcels: planningParcelRoster(ids, ids, eligibleParcels, parcelRevision, "polygon_auto") }]); onSelectedTargetChange(clientId); };
 
-  return <section className="walk-target-planner" aria-label={`Routes in ${parentTerritory.name}`}>
-    <div className="walk-target-tools" role="toolbar" aria-label="Route drawing tools">
-      <MapDrawingModeControl value={draftKind === "rectangle" || draftKind === "polygon" ? draftKind : undefined} disabled={readOnly || !planningComplete || targets.some((target) => target.selectionKind === "whole_zone")} onChange={(drawingMode) => { if (drawingMode === draftKind) return; suppressMapClick.current = false; setDraftKind(drawingMode); setMode(drawingMode); setPoints([]); setStreetIds(new Set()); setParcelOverrides(new Map()); setOverlapNotice(undefined); }} />
-      <button type="button" className={draftKind === "streets" ? "active" : ""} disabled={readOnly || !streetInspectable || targets.some((target) => target.selectionKind === "whole_zone")} onClick={() => { if (draftKind === "streets") return; suppressMapClick.current = false; setDraftKind("streets"); setMode("streets"); setPoints([]); setParcelOverrides(new Map()); setOverlapNotice(undefined); }}><Waypoints size={16}/> Streets</button>
-      <button type="button" disabled={readOnly || !planningComplete || targets.length > 0} onClick={addWhole}>Whole zone</button>
-    </div>
-    <div className={`walk-target-map-wrap${mode === "polygon" || mode === "rectangle" ? " map-drawing-active" : ""}`}><div ref={container} className="walk-target-map" role="application" aria-label="Route map"/>{status !== "ready" && <div className={`walk-target-state ${status}`}>{status === "loading" ? <LoaderCircle className="spin"/> : <AlertTriangle/>}<span>{status === "loading" ? "Loading planning map…" : "The map didn’t load. Try again."}</span></div>}{overlapNotice && <div key={overlapNotice.id} className="walk-target-map-toast" role="status"><AlertTriangle size={16} aria-hidden="true"/>{compactToastMessage(overlapNotice.message)}</div>}</div>
-    {!readOnly && <div className="walk-target-options" aria-live="polite">
-      <span>{planningLayerSummary("Streets", currentStreetLayer, streets.features.length, "section")}</span>
-      <span>{planningLayerSummary("Parcels", currentParcelLayer, eligibleParcels.features.length, "residential parcel")}</span>
-      {visitedParcelCount > 0 && <span>Previously visited: {visitedParcelCount} green {visitedParcelCount === 1 ? "parcel" : "parcels"}</span>}
-      {retryAvailable && <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry</button>}
+
+  const commitArea = () => {
+    if (!planningComplete || (draftKind !== "polygon" && draftKind !== "rectangle") || !drawingBoundaryReady(points, draftKind) || error || !parcelIds.size) return;
+    const base = editing ?? { clientId: `draft-${randomUuid()}`, eventId, territoryId: parentTerritory.id, name: nextRouteName(targets), color: TARGET_COLORS[targets.length % TARGET_COLORS.length] };
+    const target: WalkTargetDraft = { ...base, selectionKind: draftKind, geometry: polygon(points), streetSelection: undefined, parcels: planningParcelRoster(parcelIds, automaticParcelIds, eligibleParcels, parcelRevision, "polygon_auto") };
+    onChange(editing ? targets.map((item) => item.clientId === editing.clientId ? target : item) : [...targets, target]);
+    setEditingId(target.clientId); onSelectedTargetChange(target.clientId);
+    setPoints([]); setParcelOverrides(new Map()); setDraftKind(undefined); setMode("select");
+  };
+
+  const editingName = editing?.name ?? nextRouteName(targets);
+  const routeLine = (target: WalkTargetDraft) => {
+    if (target.selectionKind === "streets" && target.streetSelection) {
+      const lines = streets.features.filter((feature) => target.streetSelection!.segmentIds.includes(feature.properties.id)).flatMap(streetSegmentLines);
+      const miles = lineMiles(lines.length ? lines : target.geometry.type === "MultiLineString" ? target.geometry.coordinates.map((coordinates) => ({ coordinates })) : []);
+      return `${target.streetSelection.streetNames.map(shortStreetName).join(", ") || "Streets"} · ${miles.toFixed(1)} mi`;
+    }
+    return `${target.selectionKind === "whole_zone" ? "Whole neighborhood" : "An area"} · ${target.parcels.length} ${target.parcels.length === 1 ? "home" : "homes"}`;
+  };
+  const areaMode = mode === "polygon" || mode === "rectangle";
+
+  return <section className="walk-target-planner routes-layout" aria-label={`Routes in ${parentTerritory.name}`}>
+    {!readOnly && <div className="route-chips" role="group" aria-label="Routes">
+      {targets.map((target) => <button type="button" key={target.clientId} aria-pressed={target.clientId === editingId} style={target.clientId === editingId ? { background: target.color, borderColor: target.color } : undefined} onClick={() => beginEditing(target.clientId)}>{target.name}</button>)}
+      {editingId === NEW_ROUTE && <button type="button" aria-pressed="true" style={{ background: editingColor, borderColor: editingColor }}>{editingName}</button>}
+      {editingId !== NEW_ROUTE && <button type="button" onClick={() => beginEditing(NEW_ROUTE)}>+ Route</button>}
     </div>}
-    {mode === "polygon" && <p className="walk-target-instruction">{drawingInstruction("polygon", points)} Undo removes the last corner.</p>}
-    {mode === "rectangle" && <p className="walk-target-instruction">{drawingInstruction("rectangle", points)} Clear it before drawing a replacement.</p>}
-    {draftKind === "streets" && <div className="walk-target-options"><label><input type="checkbox" checked={connected} onChange={(event) => setConnected(event.target.checked)}/> Also select connected sections of the same named road</label></div>}
-    {draftKind === "streets" && streetIds.size > 0 && <p className="walk-target-instruction" aria-live="polite">
-      {parcelIds.size} residential {parcelIds.size === 1 ? "parcel" : "parcels"} selected. Tap a parcel to add or remove it.
-    </p>}
-    {excludedParcelCount > 0 && <p className="walk-target-feedback" role="status">{excludedParcelCount} {excludedParcelCount === 1 ? "parcel is" : "parcels are"} already in another target and {excludedParcelCount === 1 ? "was" : "were"} left out.</p>}
-    {suggestions.length > 0 && <div className="walk-target-suggestions"><span>Within 100 m:</span>{suggestions.map((id) => <button type="button" key={id} onClick={() => setStreetIds((ids) => new Set([...ids, id]))}>{streets.features.find((feature) => feature.properties.id === id)?.properties.name ?? "Unnamed section"}</button>)}</div>}
-    {(error || inventoryMessage) && <p className="walk-target-feedback" role="alert">{error || inventoryMessage}</p>}
-    {mode !== "select" && <div className="walk-target-edit-actions">{draftKind === "polygon" && <button type="button" disabled={!points.length} onClick={() => setPoints((current) => undoDrawingPoint(current, "polygon"))}><Undo2 size={15}/> Undo</button>}<button type="button" disabled={!hasCurrentSelection} onClick={clearSelection}><X size={15}/> Clear selection</button><button type="button" disabled={!suggestions.length} onClick={() => suggestions.forEach((id) => setStreetIds((current) => new Set([...current, id])))}><Redo2 size={15}/> Add suggestions</button><button type="button" className="button primary" disabled={Boolean(error) || !planningComplete || !parcelIds.size || (draftKind === "streets" ? !streetIds.size : !draftKind || !drawingBoundaryReady(points, draftKind))} onClick={addTarget}><Check size={15}/> Add target</button></div>}
-    <ul className="walk-target-list">{targets.map((target) => {
-      const persisted = Boolean(target.id);
-      return <li key={target.clientId} className={target.clientId === selectedTargetId ? "selected" : ""}><button type="button" onClick={() => onSelectedTargetChange(target.clientId)}><i style={{ background: target.color }}/><span><strong>{target.name}</strong><small>{target.selectionKind.replace("_", " ")} · {target.parcels.length} parcels</small></span></button>{!readOnly && <button type="button" aria-label={`Remove ${target.name}`} disabled={persisted} title={persisted ? "Saved routes can’t be removed here." : undefined} onClick={() => { onChange(targets.filter((item) => item.clientId !== target.clientId)); if (selectedTargetId === target.clientId) onSelectedTargetChange(undefined); }}><Trash2 size={17} aria-hidden="true" /></button>}</li>;
-    })}</ul>
+    <div className={`walk-target-map-wrap${areaMode ? " map-drawing-active" : ""}`}><div ref={container} className="walk-target-map" role="application" aria-label="Route map"/>{status !== "ready" && <div className={`walk-target-state ${status}`}>{status === "loading" ? <LoaderCircle className="spin"/> : <AlertTriangle/>}<span>{status === "loading" ? "Loading the map…" : "The map didn’t load. Try again."}</span></div>}{overlapNotice && <div key={overlapNotice.id} className="walk-target-map-toast" role="status"><AlertTriangle size={16} aria-hidden="true"/>{compactToastMessage(overlapNotice.message)}</div>}</div>
+    {!readOnly && (areaMode
+      ? <p className="mono-meta route-hint" aria-live="polite">{drawingInstruction("polygon", points)}</p>
+      : <p className="mono-meta route-hint" aria-live="polite">Tap streets to add them to {editingName} · dashed = walked recently</p>)}
+    {(error || inventoryMessage) && <p className="walk-target-feedback" role="alert">{error || inventoryMessage}{retryAvailable && <> <button type="button" className="text-button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></>}</p>}
+    {areaMode && !readOnly && <div className="sheet-actions route-area-actions"><button type="button" className="walk-save quiet" disabled={!points.length} onClick={() => setPoints((current) => undoDrawingPoint(current, "polygon"))}><Undo2 size={16} aria-hidden="true" /> Undo</button><button type="button" className="walk-save" disabled={Boolean(error) || !planningComplete || !parcelIds.size || !drawingBoundaryReady(points, "polygon")} onClick={commitArea}><Check size={16} aria-hidden="true" /> Use this area</button></div>}
+    {targets.length > 0 && <div className="grouped-rows route-rows">{targets.map((target) => {
+      const current = target.clientId === editingId;
+      return <button type="button" key={target.clientId} className="grouped-row" aria-current={current || undefined} onClick={() => !readOnly && beginEditing(target.clientId)}>
+        <i className="color-bar" style={{ background: target.color }} aria-hidden="true" />
+        <span className="grouped-row-text"><strong>{target.name}</strong><small>{routeLine(target)}</small></span>
+        {current && !readOnly ? <span className="mono-meta hedge">Editing</span> : <ChevronRight size={17} aria-hidden="true" />}
+      </button>;
+    })}</div>}
+    {!readOnly && (areaMode
+      ? <button type="button" className="mono-meta hedge route-switch" onClick={() => beginEditing(editingId)}>Tap streets instead ›</button>
+      : <button type="button" className="mono-meta hedge route-switch" disabled={!planningComplete} onClick={drawArea}>Draw an area instead ›</button>)}
     {!readOnly && targets.some((target) => target.id) && <p className="walk-target-feedback">Saved routes can’t be removed here. Change them from the walk page.</p>}
-    {streets.metadata && <small className="walk-target-attribution">{streets.metadata.attribution} · source {streets.metadata.release}{streets.metadata.truncated ? " · incomplete result" : ""}</small>}
+    {streets.metadata && <small className="walk-target-attribution">{streets.metadata.attribution}</small>}
   </section>;
 }

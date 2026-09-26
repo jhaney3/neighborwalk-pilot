@@ -470,3 +470,125 @@ export function createSeedData(): NeighborWalkData {
     updatedAt: now,
   };
 }
+
+/** The sample church as the app shows it: the live walk started a little over
+ * an hour ago, tonight's doors are spread through it, an earlier walk left
+ * smaller pins behind, and walks are coming up. Tests use `createSeedData`,
+ * which stays fixed to the church calendar. */
+export function createLiveSample(now = new Date()): NeighborWalkData {
+  const data = createSeedData();
+  const minute = 60_000;
+  const start = new Date(Math.floor((now.getTime() - 72 * minute) / minute) * minute);
+  const at = (minutes: number) => new Date(start.getTime() + minutes * minute).toISOString();
+  const walk = data.events.find((event) => event.id === EVENT_ID)!;
+  walk.name = "Saturday outreach";
+  walk.startsAt = start.toISOString();
+  walk.endsAt = at(150);
+  const east = data.territories[0];
+  const west = data.territories[1];
+  const north = data.walkTargets.find((target) => target.id === "target_demo_crockett_north")!;
+  const center = east.center!;
+
+  // More doors on Crockett north, knocked tonight by Erica, Maya and Jordan.
+  const extra: Array<[number, number, string, Exclude<NeighborWalkData["properties"][number]["currentOutcome"], "unvisited">, string]> = [
+    [-0.0033, 0.0010, "201 Perry Boulevard", "conversation", "volunteer_erica"],
+    [-0.0019, 0.0011, "207 Perry Boulevard", "no_answer", "volunteer_maya"],
+    [-0.0005, 0.0010, "211 Gaines Street", "conversation", "volunteer_maya"],
+    [0.0010, 0.0011, "213 Gaines Street", "no_answer", "volunteer_erica"],
+    [0.0024, 0.0010, "217 Gaines Street", "conversation", "volunteer_jordan"],
+    [-0.0026, 0.0031, "402 Perry Boulevard", "do_not_visit", "volunteer_jordan"],
+    [0.0002, 0.0030, "221 Gaines Street", "no_answer", "volunteer_erica"],
+    [0.0030, 0.0031, "229 Gaines Street", "no_answer", "volunteer_jordan"],
+  ];
+  extra.forEach(([dx, dy, address, outcome, volunteerId], index) => {
+    const id = `property_live_${index + 1}`;
+    const parcel = { countyFips: DEMO_COUNTY_FIPS, gislink: `099LIVE${String(index + 1).padStart(3, "0")}` };
+    const coordinates: Coordinates = [center[0] + dx, center[1] + dy];
+    data.properties.push({ id, churchId: CHURCH_ID, territoryId: east.id, address, coordinates, parcel, currentOutcome: outcome, visitCount: 1, createdAt: at(0), updatedAt: at(0), source: "map", createdByVolunteerId: volunteerId });
+    north.parcels.push({ ...parcel, datasetRevision: DEMO_PARCEL_REVISION, inclusionSource: "manual_add", representativePoint: coordinates });
+    data.visits.push({ id: `visit_live_${index + 1}`, churchId: CHURCH_ID, eventId: EVENT_ID, territoryId: east.id, propertyId: id, targetId: north.id, targetParcel: parcel, volunteerId, outcome, recordedAt: at(0), deviceId: "demo-device" });
+  });
+
+  // Tonight's doors, oldest first, from a few minutes in until a few minutes ago.
+  const tonight = data.visits.filter((visit) => visit.eventId === EVENT_ID).sort((a, b) => a.recordedAt.localeCompare(b.recordedAt) || a.id.localeCompare(b.id));
+  const step = Math.max(2, Math.floor(62 / Math.max(1, tonight.length)));
+  tonight.forEach((visit, index) => { visit.recordedAt = at(6 + index * step); });
+
+  // An earlier walk: the rest of the neighborhood, and Westside.
+  const earlierId = "event_late_summer";
+  const earlier = (days: number, hour: number, minutes = 0) => dayAt(days, hour, minutes);
+  data.events.push({ id: earlierId, churchId: CHURCH_ID, name: "Late summer walk", startsAt: earlier(-26, 9, 30), endsAt: earlier(-26, 11, 30), status: "completed", timezone: "America/Chicago", meetingPoint: "Church welcome table, north entrance", leaderContact: "Erica at the welcome table", debrief: "Start on Perry. Gaines was mostly no answer before 10." });
+  const westHomes: Array<[number, number, string]> = [[-0.0012, 0.0008, "118 Westview Drive"], [0.0004, 0.0009, "124 Westview Drive"], [0.0016, -0.0006, "131 Westview Drive"]];
+  westHomes.forEach(([dx, dy, address], index) => data.properties.push({ id: `property_west_${index + 1}`, churchId: CHURCH_ID, territoryId: west.id, address, coordinates: [west.center![0] + dx, west.center![1] + dy], currentOutcome: "unvisited", visitCount: 0, createdAt: earlier(-26, 9), updatedAt: earlier(-26, 9), source: "map" }));
+  const earlierVisits: Array<[string, Exclude<NeighborWalkData["properties"][number]["currentOutcome"], "unvisited">, string, number]> = [
+    ["property_demo_05", "no_answer", "volunteer_noah", 10], ["property_demo_06", "conversation", "volunteer_sam", 14],
+    ["property_demo_10", "no_answer", "volunteer_ruth", 20], ["property_demo_12", "do_not_visit", "volunteer_noah", 25],
+    ["property_demo_13", "conversation", "volunteer_sam", 31], ["property_demo_14", "no_answer", "volunteer_ruth", 36],
+    ["property_demo_15", "declined", "volunteer_noah", 42], ["property_demo_16", "no_answer", "volunteer_sam", 47],
+    ["property_demo_09", "conversation", "volunteer_erica", 55], ["property_demo_01", "no_answer", "volunteer_eli", 60],
+    ["property_west_1", "conversation", "volunteer_erica", 70], ["property_west_2", "no_answer", "volunteer_eli", 76], ["property_west_3", "declined", "volunteer_erica", 81],
+  ];
+  earlierVisits.forEach(([propertyId, outcome, volunteerId, minutes], index) => {
+    const home = data.properties.find((property) => property.id === propertyId)!;
+    const recordedAt = earlier(-26, 9, 30 + minutes);
+    data.visits.push({ id: `visit_earlier_${index + 1}`, churchId: CHURCH_ID, eventId: earlierId, territoryId: home.territoryId, propertyId, volunteerId, outcome, objectiveNote: propertyId === "property_demo_09" ? "Met Tasha" : undefined, recordedAt, deviceId: "demo-device" });
+    home.visitCount += 1;
+    if (home.currentOutcome === "unvisited") { home.currentOutcome = outcome; home.lastVisitedAt = recordedAt; home.updatedAt = recordedAt; }
+  });
+  for (const home of data.properties) {
+    const latest = data.visits.filter((visit) => visit.propertyId === home.id).sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0];
+    if (latest) { home.lastVisitedAt = latest.recordedAt; home.updatedAt = latest.recordedAt; }
+  }
+
+  // Walks coming up: one ready with invitations out, and a draft.
+  const ready = "event_westside_prayer";
+  data.events.push(
+    { id: ready, churchId: CHURCH_ID, name: "Westside prayer walk", startsAt: dayAt(2, 9, 30), endsAt: dayAt(2, 11, 30), status: "ready", timezone: "America/Chicago", purpose: "Pray for the neighborhood and listen well.", meetingPoint: "Church welcome table", leaderContact: "Erica" },
+    { id: "event_shoal_creek", churchId: CHURCH_ID, name: "Shoal Creek fall walk", startsAt: dayAt(9, 9, 30), endsAt: dayAt(9, 11, 30), status: "draft", timezone: "America/Chicago", purpose: "Meet our neighbors.", meetingPoint: "Church welcome table", leaderContact: "Erica" },
+  );
+  const westParcels = data.properties.filter((property) => property.territoryId === west.id);
+  westParcels.forEach((home, index) => { home.parcel = { countyFips: DEMO_COUNTY_FIPS, gislink: `099WEST${String(index + 1).padStart(3, "0")}` }; });
+  data.walkTargets.push({ id: "target_westside_prayer", churchId: CHURCH_ID, eventId: ready, territoryId: west.id, name: "Westside loop", color: "#6b91ad", selectionKind: "rectangle",
+    geometry: { type: "Polygon", coordinates: [boundary(west.center!, 0.0024, 0.0017)] },
+    parcels: westParcels.map((home) => ({ ...home.parcel!, datasetRevision: DEMO_PARCEL_REVISION, inclusionSource: "polygon_auto" as const, representativePoint: home.coordinates })),
+    rosterState: "frozen", frozenAt: dayAt(-1, 18) });
+  data.assignments = [...(data.assignments ?? []), { id: "assignment_westside_prayer", churchId: CHURCH_ID, eventId: ready, territoryId: west.id, targetId: "target_westside_prayer", assignedTeamId: "team_priscilla", status: "assigned" }];
+  const replies: Array<[string, NeighborWalkData["outingParticipants"][number]["status"]]> = [["volunteer_erica", "going"], ["volunteer_maya", "invited"], ["volunteer_jordan", "going"], ["volunteer_sam", "not_going"], ["volunteer_ruth", "going"], ["volunteer_noah", "going"], ["volunteer_eli", "invited"]];
+  replies.forEach(([volunteerId, status], index) => data.outingParticipants.push({ id: `participant_westside_${index}`, churchId: CHURCH_ID, eventId: ready, volunteerId, status }));
+  // Tonight's crews are named for their routes; the church's saved teams are separate.
+  for (const team of data.teams) {
+    const assignment = data.assignments?.find((item) => item.assignedTeamId === team.id && item.targetId);
+    const target = data.walkTargets.find((item) => item.id === assignment?.targetId);
+    if (target) team.name = `${target.name} crew`;
+  }
+  data.teams.push(
+    { id: "team_saved_barnabas", churchId: CHURCH_ID, name: "Team Barnabas", memberIds: ["volunteer_erica", "volunteer_maya", "volunteer_jordan"], territoryIds: [], status: "ready" },
+    { id: "team_saved_priscilla", churchId: CHURCH_ID, name: "Team Priscilla", memberIds: ["volunteer_sam", "volunteer_ruth"], territoryIds: [], status: "ready" },
+  );
+  // Two follow-ups from the earlier walk that still need an owner (the Open queue).
+  const dolores = { id: "resident_live_dolores", churchId: CHURCH_ID, name: "Dolores", faithStatus: "not_discussed" as const, discipleshipStage: "new_connection" as const, assignedVolunteerId: "volunteer_erica", createdByVolunteerId: "volunteer_erica", sharedWithVolunteerIds: [], sharedWithTeamIds: [], status: "active" as const, phone: "5550100199", preferredContact: "call" as const, contactPermission: "requested" as const, lastContactAt: earlier(-26, 10, 50), createdAt: earlier(-26, 10, 50), updatedAt: earlier(-26, 10, 50) };
+  data.residents.push(dolores);
+  const openTask = (id: string, fields: Partial<NeighborWalkData["followUps"][number]>, note: string, due: number) => ({ id, churchId: CHURCH_ID, eventId: earlierId, dueAt: calendarDaysFromNow(due, DEFAULT_CHURCH_TIMEZONE), status: "scheduled" as const, note, acceptance: "accepted" as const,
+    history: [{ id: `${id}_created`, action: "created" as const, note, dueAt: calendarDaysFromNow(due, DEFAULT_CHURCH_TIMEZONE), actorId: "volunteer_noah", createdAt: earlier(-26, 10, 55) }], createdAt: earlier(-26, 10, 55), ...fields });
+  data.followUps.push(
+    openTask("followup_live_open_home", { propertyId: "property_demo_10", channel: "visit" }, "Bring the pantry schedule", 1),
+    openTask("followup_live_open_dolores", { residentId: dolores.id, channel: "call" }, "Pray before her surgery", 4),
+  );
+  // Erica cares for the people she met; Tasha gave a cell for texts.
+  for (const person of data.residents) {
+    if (["resident_demo_elena", "resident_demo_marcus"].includes(person.id)) person.assignedVolunteerId = "volunteer_erica";
+    if (person.id === "resident_demo_tasha") Object.assign(person, { phone: "5550142231", preferredContact: "text" });
+  }
+  const metTasha = data.visits.find((visit) => visit.id === "visit_earlier_9");
+  if (metTasha) metTasha.residentId = "resident_demo_tasha";
+  // Conversations logged with + away from doors.
+  const away: Array<[string, NeighborWalkData["visits"][number]["context"], string, string | undefined, "conversation" | "follow_up", string | undefined, NeighborWalkData["visits"][number]["needs"], number]> = [
+    ["visit_away_lot", "other", "Church lot", "resident_demo_marcus", "conversation", "Asked about the pantry", ["food"], -3],
+    ["visit_away_drive", "service", "Food drive", dolores.id, "follow_up", "Pray before surgery", ["prayer", "health"], -5],
+    ["visit_away_meal", "community_meal", "Community meal", "resident_demo_elena", "conversation", "Came with her aunt", undefined, -8],
+    ["visit_away_store", "other", "Corner store", undefined, "conversation", undefined, undefined, -11],
+  ];
+  away.forEach(([id, context, placeLabel, residentId, outcome, objectiveNote, needs, days]) => data.visits.push({ id, churchId: CHURCH_ID, residentId, context, placeLabel, volunteerId: "volunteer_erica", outcome, objectiveNote, needs, recordedAt: dayAt(days, 12, 15), deviceId: "demo-device" }));
+  data.audit = data.visits.map((visit) => ({ id: `audit_${visit.id}`, action: "visit.recorded", entityType: "visit" as const, entityId: visit.id, actorId: visit.volunteerId, createdAt: visit.recordedAt, summary: `${visit.outcome.replaceAll("_", " ")} recorded` }));
+  return data;
+}

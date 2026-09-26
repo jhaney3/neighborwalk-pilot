@@ -1,0 +1,1087 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeighborWalk Walkthrough</title>
+<style>
+@font-face { font-family: "Schibsted Grotesk"; src: url("../../app/fonts/schibsted-grotesk-latin-var.woff2") format("woff2"); font-weight: 400 900; }
+@font-face { font-family: "IBM Plex Mono"; src: url("../../app/fonts/ibm-plex-mono-latin-400.woff2") format("woff2"); font-weight: 400; }
+@font-face { font-family: "IBM Plex Mono"; src: url("../../app/fonts/ibm-plex-mono-latin-500.woff2") format("woff2"); font-weight: 500; }
+@font-face { font-family: "IBM Plex Mono"; src: url("../../app/fonts/ibm-plex-mono-latin-600.woff2") format("woff2"); font-weight: 600; }
+:root {
+  --page: #faf9f5; --panel: #fff; --line: #e4e5dd; --line-strong: #d3d7cc; --muted: #5f675f; --faint: #8b918a;
+  --ink: #1b231e; --paper: #fdfdfa; --grouped: #f2f3ed; --hedge: #2d5a45; --hedge-tint: #cfe0d4; --porch: #e3a33b; --porch-tint: #f5d9a6; --alert: #b0402e; --alert-tint: #f6e1dc;
+  --o-no: #6b91ad; --o-talk: #4d977e; --o-fu: #e9a84a; --o-dec: #d2aaa6; --o-dnv: #666f6b;
+  --display: "Schibsted Grotesk", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 var(--sans); }
+.D { font-family: var(--display); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 120px; }
+a { color: var(--hedge); }
+
+/* ===== document chrome ===== */
+.topnav { position: sticky; top: 0; z-index: 50; background: rgba(250,249,245,.94); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.topnav .in { max-width: 1180px; margin: 0 auto; padding: 10px 20px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.topnav b { font: 800 16px/1 var(--display); }
+.topnav nav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+.topnav nav a { font: 500 11.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); text-decoration: none; padding: 6px 8px; border-radius: 8px; }
+.topnav nav a:hover { background: var(--grouped); color: var(--ink); }
+.progress { display: flex; align-items: center; gap: 8px; font: 500 12px/1 var(--mono); color: var(--muted); }
+.progress .bar { width: 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.progress .bar i { display: block; height: 100%; background: var(--hedge); width: 0; transition: width .2s; }
+.progress a { font: 600 12px/1 var(--sans); color: var(--hedge); }
+
+header.doc h1 { font: 850 clamp(34px, 5vw, 52px)/1 var(--display); letter-spacing: -.02em; margin: 18px 0 8px; }
+header.doc .lede { color: var(--muted); font-size: 17px; max-width: 780px; margin: 0; }
+.kicker { font: 500 12px/1.3 var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
+.intro { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 26px 0 8px; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; }
+.box h2 { font: 800 19px/1.2 var(--display); margin: 0 0 8px; }
+.box ul, .box ol { margin: 0; padding-left: 20px; }
+.box li { margin-bottom: 5px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.kind { display: inline-flex; align-items: center; font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .04em; padding: 5px 8px; border-radius: 7px; border: 1.3px solid currentColor; white-space: nowrap; }
+.kind.new { color: var(--hedge); } .kind.revised { color: #9a6512; } .kind.check { color: #3f6f9e; }
+
+.area { margin-top: 56px; }
+.area > h2 { font: 850 32px/1.05 var(--display); letter-spacing: -.02em; margin: 0 0 6px; }
+.area > p { color: var(--muted); max-width: 800px; margin: 0 0 14px; }
+
+.scr { display: grid; grid-template-columns: 318px minmax(0, 1fr); gap: 28px; padding: 26px 0; border-top: 1px solid var(--line); scroll-margin-top: 70px; }
+.scr.done-lock .scr-body { opacity: .9; }
+.scr-body h3 { font: 800 24px/1.1 var(--display); letter-spacing: -.01em; margin: 8px 0 6px; }
+.scr-id { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.scr-id .id { font: 600 13px/1 var(--mono); background: var(--ink); color: #fff; padding: 5px 8px; border-radius: 7px; }
+.replaces { font-size: 13px; color: var(--faint); margin: 0 0 10px; }
+.why { margin: 0 0 12px; padding-left: 20px; }
+.why li { margin-bottom: 5px; }
+.q { background: #fff8ea; border: 1px solid var(--porch-tint); border-radius: 14px; padding: 12px 14px; margin: 0 0 12px; }
+.q .qt { font-weight: 700; margin-bottom: 6px; }
+.q label { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 5px 0; cursor: pointer; }
+.q input { margin-top: 3px; }
+.verdict { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+.verdict button { font: 650 14px/1 var(--sans); padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--line-strong); background: #fff; color: var(--ink); cursor: pointer; }
+.verdict button[aria-pressed="true"][data-v="lock"] { background: var(--hedge); border-color: var(--hedge); color: #fff; }
+.verdict button[aria-pressed="true"][data-v="change"] { background: var(--porch); border-color: var(--ink); color: var(--ink); }
+.verdict button[aria-pressed="true"][data-v="cut"] { background: var(--alert); border-color: var(--alert); color: #fff; }
+.notes-label { font: 500 11.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--faint); display: block; margin-bottom: 6px; }
+textarea.note { width: 100%; min-height: 76px; resize: vertical; font: 15px/1.45 var(--sans); padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line-strong); background: #fff; color: var(--ink); }
+textarea.note:focus, .final textarea:focus { outline: none; border-color: var(--ink); }
+
+.final { margin-top: 64px; background: var(--panel); border: 1.5px solid var(--ink); border-radius: 22px; padding: 22px; box-shadow: 4px 5px 0 0 var(--hedge-tint), 4px 5px 0 1.5px var(--ink); }
+.final h2 { font: 850 30px/1.05 var(--display); margin: 0 0 6px; }
+.final textarea { width: 100%; font: 15px/1.45 var(--sans); padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line-strong); }
+.final textarea#general { min-height: 100px; }
+.final textarea#prompt { min-height: 360px; font: 13px/1.5 var(--mono); background: var(--grouped); }
+.final .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+.final button { font: 700 15px/1 var(--sans); padding: 13px 18px; border-radius: 14px; border: 1.5px solid var(--ink); background: var(--ink); color: #fff; cursor: pointer; }
+.final button.quiet { background: #fff; color: var(--ink); }
+.final .stat { font: 500 12.5px/1.4 var(--mono); color: var(--muted); }
+.copied { color: var(--hedge); font-weight: 700; }
+
+.locked-list { columns: 2 260px; margin: 0; padding-left: 20px; }
+.kind.locked { color: #fff; background: var(--hedge); border-color: var(--hedge); }
+.kind.cutk { color: var(--alert); }
+.variants { display: flex; gap: 22px; flex-wrap: wrap; }
+.variants figure { margin: 0; }
+.variants figcaption { font: 700 14px/1.3 var(--display); margin-top: 10px; text-align: center; }
+.scr.wide { grid-template-columns: 1fr; }
+.changes { background: #eef4ef; border: 1px solid var(--hedge-tint); border-radius: 14px; padding: 10px 14px; margin: 0 0 12px; font-size: 14px; }
+.changes b { font: 600 11.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--hedge); display: block; margin-bottom: 5px; }
+.changes ul { margin: 0; padding-left: 18px; }
+details.lockedarea { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+details.lockedarea > summary { cursor: pointer; font: 700 16px/1.3 var(--display); color: var(--hedge); list-style: none; padding: 6px 0; }
+details.lockedarea > summary::before { content: "▸ "; }
+details.lockedarea[open] > summary::before { content: "▾ "; }
+.reopen { font: 600 13px/1 var(--sans); padding: 8px 12px; border-radius: 10px; border: 1.5px solid var(--line-strong); background: #fff; cursor: pointer; }
+.cutlist { color: var(--muted); font-size: 14px; margin-top: 10px; }
+@media (max-width: 760px) { .scr { grid-template-columns: 1fr; } .scr-phone { justify-self: center; } }
+
+/* ===== phone (from the locked board) ===== */
+.ph { width: 300px; height: 640px; border-radius: 44px; border: 9px solid #1d1f1c; background: var(--paper); position: relative; overflow: hidden; color: var(--ink); font: 15px/1.45 var(--sans); box-shadow: 0 18px 40px -20px rgba(27,35,30,.5); }
+.ph .sb { position: relative; z-index: 8; height: 36px; display: flex; justify-content: space-between; align-items: center; padding: 8px 24px 0; font: 600 12.5px/1 var(--sans); }
+.ph .sb::after { content: ""; position: absolute; left: 50%; top: 8px; width: 80px; height: 23px; border-radius: 12px; background: #1d1f1c; transform: translateX(-50%); }
+.ph .body { padding: 0 14px; position: relative; }
+.ph .dim { position: absolute; inset: 0; background: rgba(27,35,30,.38); z-index: 5; }
+svg.i { width: 18px; height: 18px; flex: 0 0 auto; }
+.topbar { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 8px; gap: 8px; }
+.cap-btn { height: 34px; border-radius: 17px; background: #fff; box-shadow: 0 2px 10px -4px rgba(0,0,0,.2); display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; font: 500 10.5px/1 var(--mono); text-transform: uppercase; white-space: nowrap; }
+.cap-btn.lg { font: 750 13px/1 var(--display); text-transform: none; border: 1.5px solid var(--ink); box-shadow: none; }
+.rnd { width: 34px; height: 34px; border-radius: 50%; background: #fff; box-shadow: 0 2px 10px -4px rgba(0,0,0,.2); display: grid; place-items: center; font: 700 11px/1 var(--sans); flex: 0 0 auto; }
+.rnd.av { background: var(--hedge-tint); color: var(--hedge); }
+.rnd.line { box-shadow: none; border: 1.5px solid var(--ink); }
+.H1 { font-family: var(--display); font-weight: 850; font-size: 36px; line-height: 1; letter-spacing: -.02em; margin: 4px 0 10px; }
+.H2 { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.1; letter-spacing: -.01em; }
+.H3 { font-family: var(--display); font-weight: 750; font-size: 16px; line-height: 1.15; }
+.m { font: 500 9.5px/1.3 var(--mono); text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.m.red { color: var(--alert); } .m.ink { color: var(--ink); } .m.hedge { color: var(--hedge); }
+.sub { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.off { background: #fff; border: 1.5px solid var(--ink); border-radius: 18px; box-shadow: 3px 4px 0 0 var(--hedge-tint), 3px 4px 0 1.5px var(--ink); padding: 12px 13px; }
+.off.porch { box-shadow: 3px 4px 0 0 var(--porch-tint), 3px 4px 0 1.5px var(--ink); }
+.play { width: 42px; height: 42px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; flex: 0 0 auto; }
+.shead { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 2px 7px; }
+.grp { background: var(--grouped); border-radius: 14px; overflow: hidden; }
+.grp.white { background: #fff; border: 1px solid var(--line); }
+.r { display: flex; align-items: center; gap: 9px; padding: 9px 11px; border-bottom: 1px solid rgba(27,35,30,.08); position: relative; background: inherit; min-height: 40px; }
+.r:last-child { border-bottom: 0; }
+.r .g { flex: 1; min-width: 0; }
+.r .t { font-family: var(--display); font-weight: 700; font-size: 12.5px; line-height: 1.2; }
+.r .s { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.r .chev { color: var(--faint); font-size: 14px; }
+.r.red .t { color: var(--alert); }
+.ck { width: 18px; height: 18px; border-radius: 50%; border: 1.6px solid var(--ink); flex: 0 0 auto; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.ch { font: 500 9px/1 var(--mono); text-transform: uppercase; padding: 4px 6px; border-radius: 6px; background: #fff; color: var(--muted); white-space: nowrap; border: 1px solid var(--line); }
+.ch.red { background: var(--alert-tint); color: var(--alert); border-color: transparent; }
+.ch.ink { border: 1.3px solid var(--ink); color: var(--ink); }
+.avs { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 700 8.5px/1 var(--sans); background: var(--hedge-tint); color: var(--hedge); flex: 0 0 auto; }
+.hist { display: flex; gap: 10px; align-items: flex-start; margin: 0 2px 9px; }
+.hist .m { width: 58px; flex: 0 0 auto; padding-top: 2px; color: var(--ink); }
+.tabs { position: absolute; bottom: 12px; left: 12px; right: 12px; display: flex; gap: 8px; align-items: center; z-index: 7; }
+.tabs .cap { flex: 1; min-width: 0; height: 50px; border-radius: 25px; border: 1.5px solid var(--ink); background: #fff; display: flex; align-items: center; justify-content: space-around; padding: 0 5px; }
+.tabs .cap div { display: flex; align-items: center; justify-content: center; width: 34px; height: 38px; color: var(--ink); flex: 0 0 auto; }
+.tabs .cap div.on { width: auto; padding: 0 11px; white-space: nowrap; border-radius: 19px; background: var(--ink); color: #fff; gap: 5px; font-weight: 700; font-size: 12px; }
+.tabs .log { flex: 0 0 auto; width: 50px; height: 50px; border-radius: 50%; background: var(--porch); border: 1.5px solid var(--ink); display: grid; place-items: center; color: var(--ink); }
+
+/* map */
+.map { position: absolute; inset: 0; background: #ebe6d9; overflow: hidden; }
+.map .blk { position: absolute; background: #e2dccd; border-radius: 6px; }
+.map .st { position: absolute; background: #fff; }
+.map .lbl { position: absolute; font: 500 8.5px/1 var(--mono); color: #8d8676; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.map .park { position: absolute; background: #d4e2cc; border-radius: 12px; }
+.map .routebox { position: absolute; border: 2.5px dashed var(--hedge); border-radius: 18px; background: rgba(45,90,69,.05); }
+.map .house { position: absolute; width: 20px; height: 16px; background: #d6cfbd; border-radius: 3px; }
+.pin { position: absolute; width: 17px; height: 17px; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.28); transform: translate(-50%, -50%); z-index: 2; }
+.pin.talk { background: var(--o-talk); } .pin.no { background: var(--o-no); } .pin.fu { background: var(--o-fu); } .pin.dec { background: var(--o-dec); } .pin.dnv { background: var(--o-dnv); }
+.pin.old { width: 11px; height: 11px; border-width: 1.8px; opacity: .8; }
+.pin.sel { box-shadow: 0 0 0 5px rgba(27,35,30,.18), 0 1px 4px rgba(0,0,0,.3); width: 22px; height: 22px; }
+.drop { position: absolute; width: 26px; height: 26px; border-radius: 50% 50% 50% 0; transform: translate(-50%, -115%) rotate(-45deg); background: var(--porch); border: 2px solid var(--ink); z-index: 3; box-shadow: 2px 3px 0 rgba(27,35,30,.25); }
+.drop::after { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--ink); }
+.shadow-dot { position: absolute; width: 10px; height: 4px; border-radius: 50%; background: rgba(27,35,30,.3); transform: translate(-50%, -50%); z-index: 2; }
+.walkpill { position: absolute; top: 42px; left: 12px; right: 12px; z-index: 6; display: flex; gap: 8px; }
+.walkpill .p { flex: 1; min-width: 0; background: #fff; border: 1.5px solid var(--ink); border-radius: 18px; padding: 8px 8px 8px 12px; display: flex; align-items: center; gap: 10px; }
+.walkpill .end { font: 700 11px/1 var(--sans); padding: 8px 10px; border-radius: 12px; background: var(--grouped); }
+.chiprow { position: absolute; left: 12px; right: 0; z-index: 6; display: flex; gap: 6px; overflow: hidden; }
+.cp { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; font: 650 11px/1 var(--sans); padding: 7px 10px; border-radius: 999px; background: #fff; border: 1.3px solid var(--line-strong); box-shadow: 0 2px 8px -4px rgba(0,0,0,.2); }
+.cp.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.cp i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.hint { position: absolute; left: 50%; transform: translateX(-50%); z-index: 6; background: var(--ink); color: #fff; border-radius: 999px; padding: 9px 14px; font: 650 12px/1 var(--sans); white-space: nowrap; display: flex; gap: 7px; align-items: center; box-shadow: 0 6px 16px -8px rgba(0,0,0,.6); }
+.locbtn { position: absolute; right: 12px; z-index: 6; width: 38px; height: 38px; border-radius: 50%; background: #fff; border: 1.3px solid var(--line-strong); display: grid; place-items: center; box-shadow: 0 2px 8px -4px rgba(0,0,0,.25); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--paper); border-top: 1.5px solid var(--ink); border-radius: 26px 26px 0 0; padding: 8px 14px 24px; z-index: 6; }
+.grab { width: 36px; height: 4.5px; border-radius: 3px; background: var(--line-strong); margin: 0 auto 10px; }
+.shtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.outs { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-top: 12px; }
+.ob { height: 56px; border-radius: 16px; border: 1.5px solid var(--ink); background: #fff; display: flex; flex-direction: column; justify-content: center; padding: 0 12px; }
+.ob .t { font-family: var(--display); font-weight: 750; font-size: 13.5px; line-height: 1.1; white-space: nowrap; }
+.ob .m { margin-top: 3px; font-size: 8.5px; }
+.ob.pri { background: var(--hedge); color: #fff; box-shadow: 3px 4px 0 0 var(--ink); }
+.ob.pri .m { color: rgba(255,255,255,.75); }
+.sw8 { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: 1px; }
+.links { display: flex; justify-content: space-between; margin-top: 12px; font: 650 11.5px/1 var(--sans); color: var(--hedge); }
+.links .red { color: var(--alert); }
+.toast { position: absolute; left: 14px; right: 14px; z-index: 7; background: var(--ink); color: #fff; border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; font-size: 12px; }
+.toast .u { margin-left: auto; font-weight: 700; color: var(--porch); }
+.btn { height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13.5px; gap: 6px; }
+.btn.ink { background: var(--ink); color: #fff; }
+.btn.out { border: 1.5px solid var(--ink); background: #fff; }
+.btn.sm { height: 36px; font-size: 12px; border-radius: 12px; }
+.btn.red { color: var(--alert); }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pl { font-size: 11.5px; font-weight: 600; padding: 7px 10px; border-radius: 999px; border: 1.3px solid var(--line-strong); background: #fff; white-space: nowrap; }
+.pl.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.field { min-height: 40px; border-radius: 12px; background: var(--grouped); display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; color: var(--faint); }
+.field.f { color: var(--ink); }
+.field.tall { min-height: 70px; align-items: flex-start; padding-top: 10px; font-size: 12.5px; line-height: 1.4; }
+.lab { margin: 12px 2px 6px; }
+.toggle { width: 38px; height: 22px; border-radius: 11px; background: var(--hedge); position: relative; flex: 0 0 auto; }
+.toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+.toggle.offt { background: var(--line-strong); }
+.toggle.offt::after { right: auto; left: 2px; }
+.saved { display: inline-flex; align-items: center; gap: 5px; font: 600 9.5px/1 var(--mono); text-transform: uppercase; padding: 5px 8px; border-radius: 8px; background: var(--hedge-tint); color: var(--hedge); }
+.seg { display: flex; border: 1.5px solid var(--ink); border-radius: 999px; padding: 3px; background: #fff; }
+.seg div { flex: 1; text-align: center; font-weight: 700; font-size: 12px; padding: 7px 0; border-radius: 999px; white-space: nowrap; }
+.seg div span { font: 500 9.5px/1 var(--mono); margin-left: 3px; opacity: .7; }
+.seg div.on { background: var(--ink); color: #fff; }
+.seg.sm div { font-size: 11px; padding: 6px 0; }
+.big { font-family: var(--display); font-weight: 900; font-size: 88px; line-height: .85; letter-spacing: -.04em; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 4px; }
+.stats .v, .nums .v { font-family: var(--display); font-weight: 850; font-size: 26px; line-height: 1; }
+.stats .m, .nums .m { margin-top: 4px; }
+.nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0 10px; }
+.bigav { width: 60px; height: 60px; border-radius: 50%; background: var(--hedge-tint); color: var(--hedge); display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: 24px; border: 1.5px solid var(--ink); flex: 0 0 auto; }
+.rail { display: flex; align-items: center; margin: 10px 0 12px; }
+.rail div { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; flex: 1; font: 500 8.5px/1 var(--mono); text-transform: uppercase; color: var(--faint); position: relative; }
+.rail div::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: #fff; position: relative; z-index: 1; }
+.rail div::after { content: ""; position: absolute; left: 9px; right: 0; top: 4.5px; height: 1.5px; background: var(--line-strong); }
+.rail div:last-child::after { display: none; }
+.rail div.done::before { background: var(--ink); border-color: var(--ink); }
+.rail div.done::after { background: var(--ink); }
+.rail div.now { color: var(--ink); font-weight: 600; }
+.rail div.now::before { background: var(--porch); border-color: var(--ink); }
+.sw5 { width: 6px; align-self: stretch; border-radius: 3px; flex: 0 0 auto; }
+.stackav { display: flex; }
+.stackav span { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #fff; margin-left: -7px; display: grid; place-items: center; font: 700 8.5px/1 var(--sans); background: var(--hedge-tint); color: var(--hedge); }
+.stackav span:first-child { margin-left: 0; }
+.stackav span.more { background: var(--ink); color: #fff; }
+.minimap { position: relative; height: 150px; margin: 0 -14px; background: #ebe6d9; overflow: hidden; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.zone { position: absolute; border: 2px solid var(--ink); border-radius: 20px 40px 26px 34px; }
+.zone .zl { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #fff; border: 1.5px solid var(--ink); border-radius: 10px; padding: 5px 8px; white-space: nowrap; text-align: center; }
+.zone .zl b { display: block; font: 700 11px/1.1 var(--display); }
+.dchips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.dchips > div { border: 1.5px solid var(--line-strong); border-radius: 14px; background: #fff; text-align: center; padding: 8px 0 7px; }
+.dchips > div .m { font-size: 8.5px; }
+.dchips > div .v { font-family: var(--display); font-weight: 800; font-size: 19px; line-height: 1.05; margin-top: 2px; }
+.dchips > div.on { border-color: var(--ink); background: var(--ink); color: #fff; }
+.dchips > div.on .m { color: rgba(255,255,255,.7); }
+.chk { width: 22px; height: 22px; border-radius: 7px; border: 1.6px solid var(--ink); flex: 0 0 auto; display: grid; place-items: center; font: 700 11px/1 var(--sans); }
+.chk.on { background: var(--ink); color: #fff; }
+.chk.round { border-radius: 50%; }
+.ctc { background: var(--grouped); border-radius: 14px; margin-top: 10px; }
+.ctc .cr { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 46px; padding: 7px 8px 7px 12px; border-bottom: 1px solid rgba(27,35,30,.08); }
+.ctc .cr:last-child { border-bottom: 0; }
+.phin { flex: 1; min-width: 0; }
+.phin .m { font-size: 8.5px; }
+.phin .v { font-size: 13.5px; margin-top: 2px; }
+.mseg { display: inline-flex; border: 1.3px solid var(--ink); border-radius: 999px; padding: 2px; background: #fff; flex: 0 0 auto; }
+.mseg div { font: 700 11px/1 var(--sans); padding: 6px 11px; border-radius: 999px; }
+.mseg div.on { background: var(--ink); color: #fff; }
+.faces { display: flex; gap: 12px; margin: 8px -14px 0 0; overflow: hidden; }
+.faces div { flex: 0 0 auto; width: 50px; text-align: center; font-size: 10.5px; font-weight: 600; }
+.faces .fa { width: 44px; height: 44px; margin: 0 auto 5px; border-radius: 50%; display: grid; place-items: center; font: 800 14px/1 var(--display); background: var(--hedge-tint); color: var(--hedge); border: 1.5px solid var(--ink); }
+.faces .fa.new { background: #fff; color: var(--ink); border-style: dashed; font-size: 20px; }
+.swatches { display: flex; gap: 8px; }
+.swatches i { width: 30px; height: 30px; border-radius: 50%; display: block; border: 2px solid transparent; }
+.swatches i.on { border-color: var(--ink); box-shadow: inset 0 0 0 3px #fff; }
+.wseg { display: flex; background: var(--grouped); border-radius: 12px; padding: 3px; }
+.wseg div { flex: 1; text-align: center; font-weight: 650; font-size: 12px; padding: 7px 0; border-radius: 9px; }
+.wseg div.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); font-weight: 750; }
+.datebox { width: 40px; flex: 0 0 auto; border: 1.5px solid var(--ink); border-radius: 10px; text-align: center; padding: 4px 0 3px; line-height: 1; }
+.datebox .m { font-size: 8px; color: var(--ink); }
+.datebox b { display: block; font: 800 17px/1.05 var(--display); }
+.actsheet { position: absolute; left: 10px; right: 10px; bottom: 16px; z-index: 6; display: grid; gap: 8px; }
+.actsheet .grp { background: #fff; }
+.actsheet .r { justify-content: center; min-height: 48px; }
+.actsheet .r .t { font-size: 14px; }
+.ob.slim { height: 42px; flex-direction: row; align-items: center; justify-content: space-between; margin-top: 8px; border-color: var(--line-strong); }
+.ob.slim .t { font-size: 13px; }
+.qbar { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); margin-top: 10px; background: var(--grouped); border-radius: 14px; overflow: hidden; }
+.qbar div { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 50px; font: 650 11px/1 var(--sans); color: var(--ink); white-space: nowrap; }
+.qbar div + div { border-left: 1px solid rgba(27,35,30,.1); }
+.qbar div.red { color: var(--alert); }
+.iconbtn { width: 32px; height: 32px; border-radius: 50%; border: 1.3px solid var(--line-strong); background: #fff; display: grid; place-items: center; flex: 0 0 auto; }
+.minitoast { position: absolute; left: 50%; transform: translateX(-50%); z-index: 7; background: var(--ink); color: #fff; border-radius: 999px; padding: 8px 8px 8px 14px; display: flex; gap: 12px; align-items: center; font: 600 12px/1 var(--sans); white-space: nowrap; }
+.minitoast .u { color: var(--porch); font-weight: 750; padding: 5px 8px; border-radius: 999px; background: rgba(255,255,255,.1); }
+.dashrow { border: 1.5px dashed var(--line-strong); border-radius: 14px; background: #fff; display: flex; align-items: center; gap: 9px; padding: 11px 12px; }
+.vtx { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2.5px solid var(--ink); transform: translate(-50%, -50%); z-index: 3; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-today" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-walk" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="9.5" r="2.4" fill="currentColor"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M8 12.5l2.7 2.7L16.5 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M2.5 20c.8-3.6 3.3-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.8a3.3 3.3 0 0 1 0 6.4M18 14.8c1.8.6 3 2.3 3.5 5.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="4.5" cy="6" r="1.5" fill="currentColor"/><circle cx="4.5" cy="12" r="1.5" fill="currentColor"/><circle cx="4.5" cy="18" r="1.5" fill="currentColor"/></symbol>
+  <symbol id="i-door" viewBox="0 0 24 24"><path d="M6 21V4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21M3.5 21h17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="14.5" cy="12.5" r="1.2" fill="currentColor"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 3.5h3.5l1.8 4.5-2.3 1.4a11 11 0 0 0 6.6 6.6l1.4-2.3 4.5 1.8V19a1.5 1.5 0 0 1-1.6 1.5C10.2 20 4 13.8 3.5 5.1A1.5 1.5 0 0 1 5 3.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-5 4v-4.3A2.5 2.5 0 0 1 4 13.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L20 20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></symbol>
+  <symbol id="i-loc" viewBox="0 0 24 24"><path d="M20 4L4 11l7 2 2 7z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-10.5a6 6 0 0 1 12 0C18 15.4 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M12 7.5v6M9 10.5h6" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20l1-4.5L15.5 5a2 2 0 0 1 2.8 0l.7.7a2 2 0 0 1 0 2.8L8.5 19z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-print" viewBox="0 0 24 24"><path d="M7 8V3.5h10V8M7 17H4.5V9.5A1.5 1.5 0 0 1 6 8h12a1.5 1.5 0 0 1 1.5 1.5V17H17M7 14h10v6.5H7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><path d="M19.5 9A8 8 0 0 0 5 7.5M4.5 15A8 8 0 0 0 19 16.5M5 3.5v4h4M19 20.5v-4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M5.5 18.5l1.8-1.8M16.7 7.3l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.2" fill="currentColor"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24"><path d="M4 12h11M11 7l5 5-5 5M20 4v16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3.5h9l4 4V20a.5.5 0 0 1-.5.5h-12.5A.5.5 0 0 1 5.5 20V4A.5.5 0 0 1 6 3.5zM9 12h6M9 16h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 18L18 6" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-homeplus" viewBox="0 0 24 24"><path d="M3.5 11L12 4l8.5 7M6 9.5V20h12V9.5M12 11.5v5M9.5 14h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7L4.5 11.5 9 16M5 11.5h9a5 5 0 0 1 0 10h-2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</defs></svg>
+
+<div class="topnav"><div class="in">
+  <b>Redesign · source of truth</b><span id="roundNo" hidden></span>
+  <nav id="areaNav"></nav>
+  <div class="progress"><div class="bar"><i id="progBar"></i></div><span id="progText">0 of 0</span><a href="#final">Your prompt ↓</a></div>
+</div></div>
+
+<div class="wrap">
+<header class="doc">
+  <p class="kicker">NeighborWalk redesign · source of truth in progress · locked after round 3 · Sep 24, 2026</p>
+  <h1>Screen-by-screen walkthrough</h1>
+  <p class="lede"><b>Locked. This is the source of truth for the redesign.</b> All 53 screens were approved over three rounds of review (WK3 was restored without its mini map afterward). Build from these mockups and their notes, check each built screen side by side with its mockup, and use the numbered checklist in <code>docs/design/redesign-build-plan.md</code>. To change a screen later, press "Reopen for changes" on it and send the generated prompt.</p>
+</header>
+
+<div class="intro">
+  <div class="box">
+    <h2>Rules in force</h2>
+    <ul>
+      <li><b>Pins, not next door.</b> Walkers drop a pin on each home as they go and find their own way on the map.</li>
+      <li><b>During a walk, every conversation belongs to a house.</b> The yellow + is for conversations away from a door.</li>
+      <li><b>No conversation guides</b> anywhere, and <b>no email</b> in forms. Contact is a cell phone with Text or Call.</li>
+      <li><b>Type:</b> Schibsted Grotesk for names, titles and addresses; IBM Plex Mono for times, counts and dates.</li>
+      <li><b>One offset card per screen,</b> on the one thing to do next. Everything else is grouped lists.</li>
+      <li><b>No floating button stacks.</b> The map keeps only a locate button; other actions live in the top bar or a ⋯ menu.</li>
+      <li><b>The + always opens the logger,</b> starting on the live walk when there is one (PL1).</li>
+      <li><b>Leaders draw or pick each route by hand</b>, one at a time; no automatic splitting (PW2).</li>
+      <li><b>Conversations away from doors</b> is a row at the top of People (PE1). <b>Member invites are phone only</b>, sent by text (AD3).</li>
+      <li><b>The walk page keeps its routes list, Edit teams and Team activity, but no mini map</b> (WK3).</li>
+      <li><b>Long-press a house</b> to drop a pin straight to Don't knock. A new pin with nothing logged disappears when you tap away (WM2).</li>
+      <li><b>Pin sheets:</b> the outcome grid, then one quiet grey bar (Don't knock · Another home · History) on pins that already exist (WM3-B). To move a pin, tap away and tap the right house.</li>
+      <li><b>History everywhere uses the follow-up history component:</b> date over time in mono on the left, the entry on the right (FU1, MP10, PE4).</li>
+      <li><b>Menus replace their sheet:</b> when a ⋯ menu opens, the sheet under it steps away, and comes back on Close (MP12).</li>
+    </ul>
+  </div>
+  <div class="box">
+    <h2>Locked before this walkthrough</h2>
+    <ul class="locked-list">
+      <li>Tab bar and header</li><li>Today (leader)</li><li>Follow-ups: lists, detail top, check-in, snooze, hand-off</li><li>Walk page phase rail and walker invite card</li><li>Check-in: Who's here? and teams</li><li>Wrap-up (numbers, then owners)</li><li>Plan a walk: When step</li><li>The + logger sheet</li>
+    </ul>
+    <div class="legend" style="margin-top:14px"><span class="kind new">New screen</span><span class="kind revised">Redesigned</span><span class="kind check">Check the build</span></div>
+    <p style="font-size:13px;color:var(--muted);margin:8px 0 0">"Check the build" means the screen exists already but was never on a board. Confirm or change it.</p>
+  </div>
+  <div class="box">
+    <h2>What informed the pin screens</h2>
+    <ul style="font-size:14px">
+      <li><a href="https://mobbin.com/flows/fc456b35-963f-494d-937c-91a24d7c146b">Apple Maps · marking a location</a>: the pin drops first, then a sheet shows the address, with Move as a main action.</li>
+      <li><a href="https://mobbin.com/flows/6c81a01e-d5f5-4d9a-8d4a-18d8ebcb1d7e">Abode · adding a location</a>: a compact card at the pin asks for details right away.</li>
+      <li><a href="https://mobbin.com/screens/597368e9-5b3d-45e2-b058-c9628e55db81">Tide Guide · station map</a>: one small dismissible hint teaches the gesture.</li>
+      <li><a href="https://mobbin.com/screens/81b567ce-d28d-4c73-ad7d-4c4a8919c164">Uber Eats</a> and <a href="https://mobbin.com/screens/b0b3c28c-c2f1-4ac6-bc56-6f226123bcca">Strava</a> maps: search and chips float over a full-bleed map.</li>
+    </ul>
+  </div>
+</div>
+
+<div id="screens"></div>
+
+<section class="final" id="final">
+  <h2>Your prompt</h2>
+  <p style="color:var(--muted);margin:0 0 12px">Anything that isn't tied to one screen goes here: patterns across screens, missing screens, or things I got wrong in general.</p>
+  <label class="notes-label" for="general">General notes</label>
+  <textarea id="general" placeholder="e.g. Sheets feel too tall everywhere. Add a screen for…"></textarea>
+  <div class="row"><span class="stat" id="finalStat"></span></div>
+  <label class="notes-label" for="prompt">Generated prompt · updates as you type</label>
+  <textarea id="prompt" readonly></textarea>
+  <div class="row">
+    <button type="button" id="copyBtn">Copy prompt</button>
+    <button type="button" class="quiet" id="resetBtn">Clear my notes for this round</button>
+    <span id="copied" class="copied" aria-live="polite"></span>
+  </div>
+</section>
+</div>
+
+<script>
+const ROUND = 3;
+const STORE = `nw-walkthrough-round-${ROUND}`;
+
+/* ---------- mock helpers ---------- */
+const ic = (id, s = 18) => `<svg class="i" style="width:${s}px;height:${s}px"><use href="#i-${id}"/></svg>`;
+const sb = () => `<div class="sb"><span>9:41</span><span>●●●</span></div>`;
+const tabs = (on) => {
+  const t = [["today", "Today"], ["walk", "Walks"], ["check", "Follow-ups"], ["people", "People"]];
+  return `<div class="tabs"><div class="cap">${t.map(([i, l]) => i === on ? `<div class="on">${ic(i)}${l}</div>` : `<div>${ic(i)}</div>`).join("")}</div><div class="log">${ic("plus", 22)}</div></div>`;
+};
+const phone = (inner, opts = {}) => `<div class="ph">${opts.map ? inner : sb() + inner}${opts.tabs ? tabs(opts.tabs) : ""}</div>`;
+const mapBg = (pins = [], extra = "") => `<div class="map">
+  <div class="blk" style="left:-10px;top:120px;width:130px;height:108px"></div>
+  <div class="blk" style="left:150px;top:120px;width:170px;height:108px"></div>
+  <div class="blk" style="left:-10px;top:268px;width:130px;height:130px"></div>
+  <div class="blk" style="left:150px;top:268px;width:170px;height:130px"></div>
+  <div class="blk" style="left:-10px;top:436px;width:130px;height:140px"></div>
+  <div class="blk" style="left:150px;top:436px;width:170px;height:140px"></div>
+  <div class="park" style="left:196px;top:290px;width:66px;height:52px"></div>
+  <div class="st" style="left:0;right:0;top:238px;height:30px"></div>
+  <div class="st" style="left:0;right:0;top:406px;height:30px"></div>
+  <div class="st" style="left:120px;top:0;bottom:0;width:30px"></div>
+  <div class="lbl" style="left:186px;top:249px">Gaines St</div>
+  <div class="lbl" style="left:180px;top:417px">Crockett St</div>
+  <div class="lbl" style="left:131px;top:150px;transform:rotate(-90deg);transform-origin:left top">Perry Blvd</div>
+  ${[[22,214],[62,214],[100,214],[168,214],[210,214],[252,214],[22,280],[62,280],[168,280],[252,280],[22,452],[62,452],[100,452],[168,452],[210,452],[252,452]].map(([x,y]) => `<div class="house" style="left:${x-10}px;top:${y-8}px"></div>`).join("")}
+  ${extra}
+  ${pins.map(([x, y, c]) => c === "drop" ? `<div class="shadow-dot" style="left:${x}px;top:${y}px"></div><div class="drop" style="left:${x}px;top:${y}px"></div>` : `<div class="pin ${c}" style="left:${x}px;top:${y}px"></div>`).join("")}
+</div>`;
+const walkPins = [[22,214,"no"],[62,214,"talk"],[100,214,"fu"],[168,214,"talk"],[22,280,"old no"],[62,280,"old talk"],[168,280,"no"],[252,280,"old dnv"],[22,452,"old talk"],[100,452,"old fu"],[210,452,"old no"]];
+const route = `<div class="routebox" style="left:6px;top:180px;width:282px;height:130px"></div>`;
+const walkPill = (meta = "14 doors · 1h 12m") => `<div class="walkpill"><div class="p"><div style="flex:1;min-width:0"><div class="H3" style="font-size:14px">Crockett north</div><div class="m">${meta}</div></div><div class="end">Finish</div></div><div class="rnd">${ic("list")}</div></div>`;
+const chips = (top, on = "All") => `<div class="chiprow" style="top:${top}px">${[["All"],["Talked","var(--o-talk)"],["No answer","var(--o-no)"],["Come back","var(--o-fu)"],["Don't knock","var(--o-dnv)"]].map(([l, c]) => `<span class="cp ${l === on ? "on" : ""}">${c ? `<i style="background:${c}"></i>` : ""}${l}</span>`).join("")}</div>`;
+const outs = (noNote = "saves now") => `<div class="outs">
+  <div class="ob pri"><div class="t">Talked</div><div class="m">add details next</div></div>
+  <div class="ob"><div class="t"><span class="sw8" style="background:var(--o-no)"></span>No answer</div><div class="m">${noNote}</div></div>
+  <div class="ob"><div class="t"><span class="sw8" style="background:var(--o-fu)"></span>Come back</div><div class="m">follow-up</div></div>
+  <div class="ob"><div class="t"><span class="sw8" style="background:var(--o-dec)"></span>Not now</div><div class="m">not interested</div></div></div>`;
+const sheet = (inner, top) => `<div class="sheet" style="${top !== undefined ? `top:${top}px;` : ""}">${`<div class="grab"></div>`}${inner}</div>`;
+const back = (label = "") => `<div class="topbar" style="padding:0 14px">${`<div class="rnd">${ic("back")}</div>`}${label}</div>`;
+const walksSeg = (on) => `<div class="wseg">${["Walks", "Map", "List"].map((l) => `<div class="${l === on ? "on" : ""}">${l}</div>`).join("")}</div>`;
+
+/* ---------- screens ---------- */
+const AREAS = [
+  { key: "walk", nav: "Walk mode", title: "Walk mode with pins", intro: "The screens volunteers use on the street. Nothing is pinned ahead of time; each home gets a pin when someone knocks. Leaders draw the route area, and walkers find their own way inside it." },
+  { key: "plus", nav: "+ button", title: "The + button", intro: "The yellow + is for conversations away from a door. Walk mode hides the tab bar, so this only matters when a walk is live and you're elsewhere in the app." },
+  { key: "map", nav: "Map", title: "Map, list and homes", intro: "Walks → Map and Walks → List outside a walk. Same pins, same outcome grid, no floating button stack. Leaders' neighborhood tools move into a ⋯ menu." },
+  { key: "walks", nav: "Walks", title: "Walks and the walk page", intro: "The leftovers on the walk page, plus the Walks list I added without a board. Coverage is counted in doors logged, since homes aren't known ahead of time." },
+  { key: "plan", nav: "Plan", title: "Plan a walk", intro: "Where and Who drifted from the board, and pins change how coverage and route splitting can work." },
+  { key: "fu", nav: "Follow-ups", title: "Follow-ups", intro: "One drifted piece at the bottom of the follow-up detail." },
+  { key: "today", nav: "Today", title: "Today", intro: "The volunteer's walk invitation, with wording made consistent with the walk page." },
+  { key: "people", nav: "People", title: "People", intro: "The person page becomes one scroll with no tabs, so it doesn't repeat the Follow-ups tab. Forms lose email and dropdowns." },
+  { key: "admin", nav: "More", title: "More, team and settings", intro: "Account and admin screens, rebuilt as grouped lists with small subpages instead of one long page of cards." },
+];
+
+const S = [];
+const add = (area, id, kind, title, replaces, why, mock, question) => S.push({ area, id, kind, title, replaces, why, mock, question, status: "review", changes: [] });
+
+/* ===== WALK MODE ===== */
+add("walk", "WM1", "revised", "Walk map", "Replaces audit 29 (empty card with Add a home and the off-door link) and the Next door card.", [
+  "No card until you tap. A small hint says what to do and goes away after your first pin.",
+  "The progress pill counts <b>doors logged tonight</b>, not \"4 of 6 homes\", because nothing is pinned ahead of time.",
+  "Tonight's pins are full size. Pins from earlier walks are smaller, so walkers can see who said Don't knock before.",
+  "The dashed outline is the route area the leader drew. Chips filter the pins, as in the current build.",
+], phone(mapBg(walkPins, route) + sb() + walkPill() + chips(94) + `<div class="locbtn" style="bottom:82px">${ic("loc")}</div><div class="hint" style="bottom:30px">${ic("pin", 15)}Tap a house to drop a pin</div>`, { map: true }));
+
+add("walk", "WM2", "new", "Drop a pin", "New. Replaces \"Add a home\" mode and the Add this home sheet (audit 21, 22, 32).", [
+  "Tap a house: the pin drops right there and the outcome grid opens at once. <b>No answer is one tap.</b>",
+  "The address fills in from the county parcel (or the street address where we don't have parcels). Tap it to edit.",
+  "Move pin fixes a miss without starting over, as in Apple Maps.",
+  "Cancel removes the pin if it was a mis-tap.",
+], phone(mapBg([...walkPins, [210, 214, "drop"]], route) + sb() + walkPill() + sheet(`<div class="shtop"><div><div class="m ink">New pin · Gaines St</div><div class="H2" style="margin-top:3px;display:flex;align-items:center;gap:6px">217 Gaines Street ${ic("pencil", 14)}</div><div class="sub" style="margin-top:2px">From the county parcel · add a unit</div></div></div>${outs()}<div class="links"><span>Don't knock</span><span>Move pin</span><span class="red">Cancel</span></div>`), { map: true }));
+
+add("walk", "WM3", "revised", "Tap a pin that's already there", "Replaces the Next door card (audit 30).", [
+  "Same outcome grid, with the last visit in mono above the address, so you know what happened before you knock.",
+  "<b>Another home here</b> covers duplexes and apartments (WM6).",
+  "History opens the home sheet (MP9).",
+  "No Skip and no \"left on street\" count.",
+], phone(mapBg(walkPins.map(([x, y, c]) => x === 168 && y === 280 ? [x, y, "no sel"] : [x, y, c]), route) + sb() + walkPill() + sheet(`<div class="m ink">Last: no answer · Sep 20 · Maya</div><div class="H2" style="margin-top:3px">221 Gaines Street</div>${outs()}<div class="links"><span>Don't knock</span><span>Another home here</span><span>History ›</span></div>`), { map: true }));
+
+add("walk", "WM4", "revised", "Anything to add?", "Replaces the details sheet (audit 31).", [
+  "Same as the locked board, except one <b>Done</b> button. There's no Next door button any more.",
+  "The visit is already saved when this opens. Done just closes the sheet.",
+], phone(mapBg(walkPins, route) + sb() + `<div class="dim"></div>` + sheet(`<div style="display:flex;justify-content:space-between;align-items:center"><span class="saved">✓ Saved · Talked</span><span class="m">217 Gaines St</span></div><div class="H2" style="margin-top:8px">Anything to add?</div><div class="lab m">Name</div><div class="field f">Tasha</div><div class="ctc"><div class="cr"><span class="D" style="font-weight:700;font-size:13.5px">Stay in touch?</span><div class="mseg"><div class="on">Yes</div><div>No</div></div></div><div class="cr"><div class="phin"><div class="m">Cell phone</div><div class="v">(555) 014-2231</div></div><div class="mseg"><div class="on">Text</div><div>Call</div></div></div></div><div class="lab m">What came up</div><div class="pills"><span class="pl on">Prayed together</span><span class="pl">Food</span><span class="pl on">Health</span><span class="pl">Rides</span><span class="pl">+</span></div><div class="off porch" style="margin-top:12px;padding:9px 12px"><div style="display:flex;align-items:center;justify-content:space-between"><div class="H3" style="font-size:14.5px">Come back?</div><div class="toggle"></div></div><div class="seg sm" style="margin-top:8px"><div>Tomorrow</div><div class="on">Sat</div><div>1 wk</div><div style="flex:0 0 40px">${ic("cal", 14)}</div></div></div><div class="m hedge" style="margin:12px 2px 0">+ Add a note</div><div class="btn ink" style="margin-top:12px">Done</div>`, 64), { map: true }));
+
+add("walk", "WM5", "revised", "After a save", "Replaces the advancing card (audit 30).", [
+  "The pin takes its outcome color and the sheet closes. You're back on the map to walk to the next house yourself.",
+  "The Undo toast stays for 5 seconds, as built.",
+  "The pill ticks up to 15 doors.",
+], phone(mapBg([...walkPins, [210, 214, "talk"]], route) + sb() + walkPill("15 doors · 1h 14m") + chips(94) + `<div class="toast" style="top:136px"><span>✓</span><div><b>217 Gaines</b> · Talked · follow-up Sat</div><span class="u">Undo</span></div><div class="locbtn" style="bottom:30px">${ic("loc")}</div>`, { map: true }));
+
+add("walk", "WM6", "new", "Another home here", "New. Covers apartments and duplexes.", [
+  "Opened from \"Another home here\" on an existing pin.",
+  "Give it a unit label, then pick the outcome in the same step. Each unit is its own home with its own history.",
+  "On the map, a pin with several homes shows a small count.",
+], phone(mapBg(walkPins, route) + sb() + walkPill() + sheet(`<div class="m ink">221 Gaines Street · 1 home here</div><div class="H2" style="margin-top:3px">Another home here</div><div class="lab m">Unit or label</div><div class="field f">Apt B <span class="m">e.g. upstairs, rear</span></div>${outs()}<div class="links"><span></span><span class="red">Cancel</span></div>`), { map: true }));
+
+add("walk", "WM7", "revised", "Logged tonight", "Replaces \"Tonight's addresses\" (audit 33).", [
+  "The list button in the pill opens this. With nothing pinned ahead of time, the list shows what <b>you and your team logged tonight</b>, newest first.",
+  "Tap a row to jump to its pin on the map.",
+  "Print moves to Walks → List (MP8), where there's a real address list.",
+], phone(back(`<div class="m">14 doors</div>`) + `<div class="body"><div class="H1" style="font-size:30px">Logged tonight</div><div class="m" style="margin:-4px 2px 12px">Crockett north · you, Maya, Jordan</div><div class="shead" style="margin-top:4px"><div class="H3">Gaines St</div><div class="m">5</div></div><div class="grp">${[["9:58","217 Gaines","talk","Talked","You"],["9:51","221 Gaines","no","No answer","You"],["9:44","215 Gaines","fu","Come back","Maya"],["9:39","211 Gaines","talk","Talked","Maya"]].map(([t,a,c,o,w]) => `<div class="r"><span class="m" style="width:34px;color:var(--ink)">${t}</span><span class="dot" style="background:var(--o-${c})"></span><div class="g"><div class="t">${a}</div><div class="s">${o} · ${w}</div></div><span class="chev">›</span></div>`).join("")}</div><div class="shead"><div class="H3">Perry Blvd</div><div class="m">9</div></div><div class="grp"><div class="r"><span class="m" style="width:34px;color:var(--ink)">9:31</span><span class="dot" style="background:var(--o-dnv)"></span><div class="g"><div class="t">402 Perry</div><div class="s">Don't knock · Jordan</div></div><span class="chev">›</span></div></div></div>`));
+
+add("walk", "WM8", "revised", "Finish route", "Replaces the route wrap-up's home count.", [
+  "Same as the locked wrap-up, but the big number counts <b>doors</b> logged on your route tonight.",
+  "\"Who's following up?\" and the Open queue work as locked.",
+], phone(back(`<div class="m">Thu Sep 24 · 1h 20m</div>`) + `<div class="body"><div class="m ink" style="margin-top:6px">Crockett north · done</div><div style="display:flex;align-items:baseline;gap:10px;margin-top:6px"><div class="big">15</div><div class="H2">doors<br>tonight</div></div><div class="stats"><div><div class="v" style="color:var(--o-talk)">6</div><div class="m">Talked</div></div><div><div class="v" style="color:var(--o-no)">7</div><div class="m">No answer</div></div><div><div class="v" style="color:var(--o-fu)">2</div><div class="m">Come back</div></div></div><div class="shead" style="margin-top:16px"><div class="H2" style="font-size:19px">Who's following up?</div></div><div class="grp white"><div class="r">${ic("door", 15)}<div class="g"><div class="t">Tasha · 217 Gaines</div><div class="s">Visit · Sat 26</div></div><span class="avs">ER</span></div><div class="r">${ic("phone", 15)}<div class="g"><div class="t">215 Gaines</div><div class="s">Call · asked about rides</div></div><span class="ch ink">Assign</span></div></div><div class="m" style="margin:10px 2px">1 unassigned · goes to the Open queue</div><div class="btn ink">Finish route</div></div>`));
+
+/* ===== PLUS ===== */
+add("plus", "PL1", "revised", "+ while a walk is live", "Changes the current build, where + opens the walk.", [
+  "+ always opens the logger, even while a walk is live. It's for conversations away from a door: the church lot, the corner store.",
+  "When a walk is live, the Where row starts on that walk (\"Crockett north · away from a door\") so the conversation still counts toward it. Change sets another place.",
+  "To get back to your route, use the play button on Today or the walk card on Walks.",
+], phone(`<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">Log a conversation</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="off" style="margin-top:12px;padding:10px 12px;display:flex;align-items:center;gap:10px">${ic("walk")}<div style="flex:1;min-width:0"><div class="m">Where · live now</div><div class="H3" style="font-size:14px">Crockett north · away from a door</div></div><span class="m hedge">Change</span></div><div class="lab m">Who</div><div class="field">${ic("search", 14)}<span style="flex:1">Find or add a person</span></div><div class="faces"><div><div class="fa new">+</div>New</div><div><div class="fa">T</div>Tasha</div><div><div class="fa">E</div>Elena</div><div><div class="fa">M</div>Marcus</div></div>${outs("saves now")}`, 150), { tabs: "today" }),
+  { q: "During a live walk, what should + do?", options: ["Open the logger with Where set to the walk (drawn here)", "Open the walk map, as the current build does"] });
+
+/* ===== MAP ===== */
+const mapPins = [[22,214,"no"],[62,214,"talk"],[100,214,"fu"],[168,214,"talk"],[210,214,"talk"],[22,280,"no"],[62,280,"talk"],[168,280,"no"],[252,280,"dnv"],[22,452,"talk"],[100,452,"fu"],[210,452,"no"],[252,452,"talk"]];
+const mapTop = (seg = "Map") => `<div style="position:absolute;top:40px;left:12px;right:12px;z-index:6;display:grid;gap:8px">${walksSeg(seg).replace('class="wseg"', 'class="wseg" style="box-shadow:0 2px 10px -4px rgba(0,0,0,.25)"')}<div style="display:flex;gap:8px;align-items:center"><div class="cap-btn lg" style="flex:1;min-width:0;justify-content:space-between;overflow:hidden">Crockett Heights <span class="m">212 ▾</span></div><div class="rnd">${ic("search")}</div><div class="rnd">${ic("dots")}</div></div></div>`;
+
+add("map", "MP1", "revised", "Walks → Map", "Replaces audit 18, the screen you sent: floating +, pencil and neighborhood buttons, plus the old header.", [
+  "The map fills the screen. On top float the Walks / Map / List switch, the neighborhood capsule, Search, and ⋯ for leader tools.",
+  "Filter chips work as in walk mode. Only the locate button floats on the map.",
+  "Tap a house to drop a pin (same as WM2); tap a pin to open its home sheet (MP9).",
+  "Coverage percent goes away. The capsule counts pins in the neighborhood instead.",
+], phone(mapBg(mapPins) + sb() + mapTop() + chips(132) + `<div class="locbtn" style="bottom:78px">${ic("loc")}</div>`, { map: true, tabs: "walk" }));
+
+add("map", "MP2", "new", "Search an address", "Replaces the old search field in the header.", [
+  "Search expands over the map. Results show homes you've pinned first, with their last outcome, then street addresses.",
+  "Picking an address that isn't pinned flies the map there so you can drop one.",
+], phone(mapBg(mapPins) + sb() + `<div style="position:absolute;top:40px;left:12px;right:12px;z-index:6"><div style="display:flex;gap:8px"><div class="field f" style="flex:1;background:#fff;border:1.5px solid var(--ink)">${ic("search", 14)}<span style="flex:1">215 gai</span></div><div class="rnd">${ic("x", 14)}</div></div><div class="grp white" style="margin-top:8px"><div class="m" style="padding:9px 11px 0">Pinned</div><div class="r"><span class="dot" style="background:var(--o-fu)"></span><div class="g"><div class="t">215 Gaines Street</div><div class="s">Come back · Sep 24 · Tasha</div></div></div><div class="r"><span class="dot" style="background:var(--o-no)"></span><div class="g"><div class="t">2150 Gaines Street</div><div class="s">No answer · Aug 30</div></div></div><div class="m" style="padding:9px 11px 0">Addresses</div><div class="r">${ic("walk", 14)}<div class="g"><div class="t">215 Gainesboro Rd</div><div class="s">Lawrenceburg</div></div></div></div></div>`, { map: true, tabs: "walk" }));
+
+add("map", "MP3", "revised", "Choose a neighborhood", "Replaces audit 19 (\"territory\" wording, pencil on every row).", [
+  "Tap the capsule to switch. Each row shows its pins and when it was last walked.",
+  "Editing moves into the ⋯ menu (MP4) so rows are one tap. Leaders see New neighborhood at the bottom.",
+], phone(mapBg(mapPins) + sb() + `<div class="dim"></div>` + sheet(`<div class="H2">Neighborhoods</div><div class="grp" style="margin-top:12px"><div class="r"><span class="sw5" style="background:#2d5a45"></span><div class="g"><div class="t">Crockett Heights</div><div class="s">212 pins · walked Sep 24</div></div><div class="chk round on">✓</div></div><div class="r"><span class="sw5" style="background:#6b91ad"></span><div class="g"><div class="t">Westside</div><div class="s">48 pins · walked Aug 30</div></div></div><div class="r"><span class="sw5" style="background:#b98a3a"></span><div class="g"><div class="t">Shoal Creek</div><div class="s">No pins yet</div></div></div></div><div class="grp" style="margin-top:10px"><div class="r"><span style="color:var(--hedge)">${ic("plus", 16)}</span><div class="g"><div class="t" style="color:var(--hedge)">New neighborhood</div></div></div></div>`), { map: true }));
+
+add("map", "MP4", "new", "Leader tools (⋯)", "Replaces the floating pencil and New neighborhood buttons.", [
+  "A plain action sheet from the ⋯ button. Volunteers see only Print.",
+], phone(mapBg(mapPins) + sb() + mapTop() + `<div class="dim"></div><div class="actsheet"><div class="grp"><div class="r"><div class="t">Edit Crockett Heights</div></div><div class="r"><div class="t">New neighborhood</div></div><div class="r"><div class="t">Print address list</div></div></div><div class="grp"><div class="r"><div class="t" style="font-weight:800">Cancel</div></div></div></div>`, { map: true }));
+
+add("map", "MP5", "revised", "Draw a neighborhood", "Replaces audit 24 (Rectangle / Polygon tools and loading panel).", [
+  "Full screen. Tap corners around the area; the shape closes when you tap the first point again.",
+  "\"Draw a box\" is the quick option for simple blocks.",
+  "Undo removes the last corner. Next goes to naming (MP6).",
+], phone(mapBg([], `<svg style="position:absolute;inset:0;z-index:2" width="282" height="622"><polygon points="40,150 250,130 268,330 150,380 30,320" fill="rgba(227,163,59,.18)" stroke="#1b231e" stroke-width="2.5" stroke-dasharray="0"/></svg><div class="vtx" style="left:40px;top:150px"></div><div class="vtx" style="left:250px;top:130px"></div><div class="vtx" style="left:268px;top:330px"></div><div class="vtx" style="left:150px;top:380px"></div><div class="vtx" style="left:30px;top:320px;background:var(--porch)"></div>`) + sb() + `<div style="position:absolute;top:42px;left:12px;right:12px;z-index:6;display:flex;gap:8px;align-items:center"><div class="rnd">${ic("x", 14)}</div><div class="cap-btn lg" style="flex:1;justify-content:center">New neighborhood</div><div class="rnd">${ic("undo", 16)}</div></div><div class="hint" style="top:96px;bottom:auto">5 corners · tap the first to close</div>` + sheet(`<div class="seg sm"><div class="on">Tap corners</div><div>Draw a box</div></div><div class="btn ink" style="margin-top:12px">Next</div>`), { map: true }));
+
+add("map", "MP6", "new", "Name the neighborhood", "Replaces the naming step of the old drawing flow.", [
+  "Name and color, then save. The color is what its routes and capsule use.",
+], phone(mapBg([], `<svg style="position:absolute;inset:0;z-index:2" width="282" height="622"><polygon points="40,150 250,130 268,330 150,380 30,320" fill="rgba(45,90,69,.16)" stroke="#2d5a45" stroke-width="2.5"/></svg>`) + sb() + sheet(`<div class="H2">Name it</div><div class="lab m">Name</div><div class="field f">Riverside</div><div class="lab m">Color</div><div class="swatches"><i class="on" style="background:#2d5a45"></i><i style="background:#6b91ad"></i><i style="background:#b98a3a"></i><i style="background:#95598a"></i><i style="background:#8a593e"></i><i style="background:#666f6b"></i></div><div class="btn ink" style="margin-top:16px">Save neighborhood</div>`), { map: true }));
+
+add("map", "MP7", "revised", "Edit a neighborhood", "Replaces audit 23.", [
+  "Name, color, and a Redraw row that reopens the drawing screen with the current shape.",
+  "Delete is a quiet red row at the bottom and asks to confirm. Pins and visit history stay.",
+], phone(mapBg(mapPins) + sb() + `<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">Crockett Heights</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="lab m">Name</div><div class="field f">Crockett Heights</div><div class="lab m">Color</div><div class="swatches"><i class="on" style="background:#2d5a45"></i><i style="background:#6b91ad"></i><i style="background:#b98a3a"></i><i style="background:#95598a"></i><i style="background:#8a593e"></i><i style="background:#666f6b"></i></div><div class="grp" style="margin-top:14px"><div class="r"><div class="g"><div class="t">Boundary</div><div class="s">5 corners</div></div><span class="m hedge">Redraw ›</span></div><div class="r red"><div class="g"><div class="t">Delete neighborhood</div><div class="s">Pins and visits stay</div></div></div></div><div class="btn ink" style="margin-top:14px">Save</div>`, 150), { map: true }));
+
+add("map", "MP8", "revised", "Walks → List", "Replaces audit 25 (Address list with a Neighborhood dropdown and Print button).", [
+  "Every pinned home in the neighborhood, grouped by street, with its last outcome and date.",
+  "The same capsule switches neighborhoods. Print moves to the ⋯ button in the corner.",
+  "Tap a row to open its home sheet (MP9).",
+], phone(`<div class="body"><div style="display:grid;gap:8px;margin-top:4px">${walksSeg("List")}<div style="display:flex;gap:8px"><div class="cap-btn lg" style="flex:1;justify-content:space-between">Crockett Heights <span class="m">212 ▾</span></div><div class="rnd">${ic("print", 16)}</div></div><div class="field">${ic("search", 14)}<span style="flex:1">Street or name</span></div></div><div class="shead"><div class="H3">Gaines St</div><div class="m">18</div></div><div class="grp">${[["211 Gaines","talk","Talked · Sep 24"],["213 Gaines","no","No answer · Sep 24"],["215 Gaines","fu","Come back · Sep 24 · Tasha"],["221 Gaines","no","No answer · Sep 20"]].map(([a,c,s]) => `<div class="r"><span class="dot" style="background:var(--o-${c})"></span><div class="g"><div class="t">${a}</div><div class="s">${s}</div></div><span class="chev">›</span></div>`).join("")}</div><div class="shead"><div class="H3">Perry Blvd</div><div class="m">9</div></div><div class="grp"><div class="r"><span class="dot" style="background:var(--o-dnv)"></span><div class="g"><div class="t">402 Perry</div><div class="s">Don't knock · Aug 30</div></div><span class="chev">›</span></div></div></div>`, { tabs: "walk" }));
+
+add("map", "MP9", "revised", "Home sheet", "Replaces audit 26–28 (Record visit / People / History tabs and the \"Need a prompt?\" guide card).", [
+  "One scrolling sheet, no tabs. The address is the title; the mono line sums up its history.",
+  "If a follow-up is open, it's the offset card, since that's the next thing to do here.",
+  "Log a visit uses the same outcome grid as the walk.",
+  "People and History are further down (MP10). ⋯ opens Edit home (MP11).",
+], phone(mapBg(mapPins.map(([x, y, c]) => x === 100 && y === 214 ? [x, y, "fu sel"] : [x, y, c])) + sb() + sheet(`<div class="shtop"><div><div class="m ink">3 visits · last Sep 24</div><div class="H2" style="margin-top:3px">215 Gaines Street</div></div><div class="rnd line" style="width:30px;height:30px">${ic("dots", 14)}</div></div><div class="off porch" style="margin-top:12px;padding:10px 12px"><div class="m red">Come back · due Sat · Maya</div><div class="D" style="font-weight:700;font-size:13.5px;line-height:1.3;margin-top:4px">Bring the pantry schedule for Tasha's mom.</div><div class="m hedge" style="margin-top:7px">Open follow-up ›</div></div><div class="m" style="margin:14px 2px 0">Log a visit</div>${outs()}`, 170), { map: true }));
+
+add("map", "MP10", "revised", "Home sheet, scrolled", "Replaces the People and History tabs (audit 27, 28).", [
+  "People who live here, with how they like to be reached. Add person goes straight into the Edit person form (PE7) with this home filled in.",
+  "History is every visit and conversation here in mono time, newest first.",
+], phone(mapBg(mapPins) + sb() + sheet(`<div class="H2">215 Gaines Street</div><div class="shead"><div class="H3">People here</div><div class="m hedge">+ Add</div></div><div class="grp"><div class="r"><span class="avs">T</span><div class="g"><div class="t">Tasha</div><div class="s">Prefers text · owner Maya</div></div><span class="chev">›</span></div><div class="r"><span class="avs">?</span><div class="g"><div class="t">Tasha's mom</div><div class="s">No contact yet</div></div><span class="chev">›</span></div></div><div class="shead"><div class="H3">History</div></div><div class="hist"><div class="m">Sep 24<br>9:44 AM</div><div><div class="sub" style="color:var(--ink)"><span class="dot" style="background:var(--o-fu);display:inline-block;width:8px;height:8px;margin-right:4px"></span>Come back · Maya</div><div class="sub">Prayed together · health</div></div></div><div class="hist"><div class="m">Sep 20</div><div class="sub" style="color:var(--ink)"><span class="dot" style="background:var(--o-no);display:inline-block;width:8px;height:8px;margin-right:4px"></span>No answer · Jordan</div></div><div class="hist"><div class="m">Aug 30</div><div class="sub" style="color:var(--ink)"><span class="dot" style="background:var(--o-talk);display:inline-block;width:8px;height:8px;margin-right:4px"></span>Talked · Erica</div></div>`, 60), { map: true }));
+
+add("map", "MP11", "new", "Edit home", "Replaces the address fields in the old sheets.", [
+  "Address, unit, Move pin, and a quiet Delete home that asks to confirm (leaders, or whoever dropped it that day).",
+  "Visits are never edited here; corrections stay in the leader's admin flow.",
+], phone(mapBg(mapPins) + sb() + `<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">Edit home</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="lab m">Street address</div><div class="field f">215 Gaines Street</div><div class="lab m">Unit or label</div><div class="field">Optional · e.g. Apt B</div><div class="grp" style="margin-top:14px"><div class="r"><div class="g"><div class="t">Move pin</div><div class="s">Drag it onto the right house</div></div><span class="chev">›</span></div><div class="r red"><div class="g"><div class="t">Delete home</div><div class="s">Only if it was pinned by mistake</div></div></div></div><div class="btn ink" style="margin-top:14px">Save</div>`, 190), { map: true }));
+
+/* ===== WALKS ===== */
+add("walks", "WK1", "check", "Walks list", "Built in the last pass without a board.", [
+  "The live walk is the offset card with its door count and who's out walking.",
+  "Coming up is a list with date blocks. Past walks hide behind a row at the bottom.",
+  "Plan a walk is the ink + at top right (leaders only).",
+], phone(`<div class="body"><div class="topbar"><div class="H1" style="margin:0">Walks</div><div class="rnd" style="background:var(--ink);color:#fff">${ic("plus", 16)}</div></div>${walksSeg("Walks")}<div class="off porch" style="margin-top:14px"><div class="m ink" style="display:flex;align-items:center;gap:6px"><span class="dot" style="background:var(--porch);width:8px;height:8px"></span>Live now · 38 doors</div><div class="H2" style="margin-top:4px">Saturday outreach</div><div class="sub">Started 9:30 AM · Church welcome table</div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><div class="stackav"><span>ER</span><span>M</span><span>J</span><span class="more">+4</span></div><span class="m hedge">Open ›</span></div></div><div class="shead"><div class="m">Coming up</div></div><div class="grp">${[["Sat","26","Westside prayer walk","9:30 AM · 2 routes · 5 going","Ready"],["Sat","3","Shoal Creek fall walk","9:30 AM · draft","Draft"]].map(([d,n,t,s,b]) => `<div class="r"><div class="datebox"><div class="m">${d}</div><b>${n}</b></div><div class="g"><div class="t">${t}</div><div class="s">${s}</div></div><span class="ch">${b}</span></div>`).join("")}</div><div class="grp" style="margin-top:12px"><div class="r"><div class="g"><div class="t">Past walks</div></div><span class="m">12 ›</span></div></div></div>`, { tabs: "walk" }));
+
+add("walks", "WK2", "revised", "Walk page · live · leader", "Replaces audit 04 (Route dropdown, \"Your route is selected\", Open walk and End walk stacked).", [
+  "The card shows tonight's numbers in doors, then your route as one row with Change, then two buttons.",
+  "<b>Open my route</b> is the main action; End walk is secondary and opens the whole-walk wrap-up.",
+], phone(back(`<div class="rnd">${ic("dots")}</div>`) + `<div class="body"><div class="m ink">Live · Thu Sep 24</div><div class="H1" style="font-size:28px;margin:4px 0">Saturday outreach</div><div class="m">9:30–12:00 · Church welcome table</div><div class="rail"><div class="done">Plan</div><div class="done">Invite</div><div class="done">Check in</div><div class="now">Walk</div><div>Wrap up</div></div><div class="off"><div class="m">Walking now · 1h 12m</div><div class="nums"><div><div class="v" style="color:var(--hedge)">38</div><div class="m">Doors</div></div><div><div class="v">12</div><div class="m">Talked</div></div><div><div class="v">5</div><div class="m">Follow-ups</div></div></div><div class="grp" style="margin-bottom:10px"><div class="r"><span class="sw5" style="background:#2d5a45"></span><div class="g"><div class="m">Your route</div><div class="t">Crockett north</div></div><span class="m hedge">Change</span></div></div><div style="display:grid;grid-template-columns:1.5fr 1fr;gap:7px"><div class="btn ink sm">Open my route</div><div class="btn out sm">End walk</div></div></div></div>`));
+
+add("walks", "WK3", "revised", "Walk page · routes and activity", "Replaces audit 05 (mini map with stray info buttons, \"4/6\" coverage).", [
+  "The mini map shows the route areas and tonight's pins, with no controls on it.",
+  "Each route counts doors logged tonight and lists its team.",
+  "Team activity stays as built.",
+], phone(`<div class="body" style="padding-top:6px"><div class="shead" style="margin-top:0"><div class="H2" style="font-size:19px">Routes</div><div class="m hedge">Edit teams</div></div><div class="minimap"><div class="st" style="position:absolute;left:0;right:0;top:70px;height:18px;background:#fff"></div><div class="st" style="position:absolute;left:130px;top:0;bottom:0;width:18px;background:#fff"></div><div class="routebox" style="position:absolute;left:10px;top:18px;width:120px;height:110px;border:2.5px dashed #2d5a45;border-radius:14px"></div><div class="routebox" style="position:absolute;left:150px;top:18px;width:120px;height:110px;border:2.5px dashed #6b91ad;border-radius:14px"></div>${[[30,60,"talk"],[60,60,"no"],[90,60,"fu"],[40,100,"talk"],[170,60,"no"],[210,100,"talk"],[240,60,"no"]].map(([x,y,c]) => `<div class="pin ${c}" style="left:${x}px;top:${y}px;width:12px;height:12px;border-width:2px"></div>`).join("")}</div><div class="grp" style="margin-top:10px">${[["#2d5a45","Crockett north","Erica, Maya, Jordan","15 doors"],["#6b91ad","Crockett south","Sam, Ruth","14 doors"],["#b98a3a","Westside loop","Noah, Eli","9 doors"]].map(([c,n,s,d]) => `<div class="r"><span class="sw5" style="background:${c}"></span><div class="g"><div class="t">${n}</div><div class="s">${s}</div></div><span class="ch">${d}</span></div>`).join("")}</div><div class="shead"><div class="H2" style="font-size:19px">Team activity</div><div class="m">38</div></div>${[["10:48","Jordan","dnv","don't knock · 229 Gaines"],["10:40","Maya","fu","come back · 215 Gaines"],["10:36","Jordan","no","no answer · 207 Gaines"]].map(([t,w,c,s]) => `<div class="hist"><div class="m">${t}</div><span class="dot" style="background:var(--o-${c});margin-top:3px"></span><div class="sub" style="color:var(--ink)"><b>${w}</b> · ${s}</div></div>`).join("")}</div>`));
+
+add("walks", "WK4", "revised", "Walk page · after the walk", "Replaces audit 06 (Coverage panel and Debrief disclosure).", [
+  "In Wrap up, the offset card shows the final numbers and anything that still needs an owner.",
+  "\"Notes for next time\" replaces the Debrief disclosure. Next time the walk is copied, these notes show on the Where step.",
+  "The per-neighborhood coverage panel goes away.",
+], phone(back(`<div class="rnd">${ic("dots")}</div>`) + `<div class="body"><div class="m ink">Done · Thu Sep 24</div><div class="H1" style="font-size:28px;margin:4px 0">Saturday outreach</div><div class="rail"><div class="done">Plan</div><div class="done">Invite</div><div class="done">Check in</div><div class="done">Walk</div><div class="now">Wrap up</div></div><div class="off"><div class="m">Final · 7 walkers · 2h 30m</div><div class="nums"><div><div class="v" style="color:var(--hedge)">38</div><div class="m">Doors</div></div><div><div class="v">12</div><div class="m">Talked</div></div><div><div class="v">5</div><div class="m">Follow-ups</div></div></div><div class="grp"><div class="r"><div class="g"><div class="t" style="color:var(--alert)">2 follow-ups need an owner</div></div><span class="m hedge">Assign ›</span></div></div></div><div class="shead"><div class="H2" style="font-size:19px">Notes for next time</div></div><div class="field f tall">Start on Perry. Gaines was mostly no answer before 10. Bring pantry flyers.</div><div class="btn out sm" style="margin-top:8px">Save notes</div></div>`));
+
+add("walks", "WK5", "revised", "Walk options (⋯)", "Replaces audit 07 and the Edit walk / Repeat walk buttons at the bottom of the page.", [
+  "Everything that isn't the next step goes behind ⋯: Edit, Repeat, Cancel.",
+  "Cancel walk is red and asks to confirm, as built.",
+], phone(back(`<div class="rnd">${ic("dots")}</div>`) + `<div class="body"><div class="m ink">Ready · Sat Sep 26</div><div class="H1" style="font-size:28px;margin:4px 0">Westside prayer walk</div></div><div class="dim"></div><div class="actsheet"><div class="grp"><div class="r"><div class="t">Edit walk</div></div><div class="r"><div class="t">Repeat walk</div></div><div class="r"><div class="t" style="color:var(--alert)">Cancel walk</div></div></div><div class="grp"><div class="r"><div class="t" style="font-weight:800">Close</div></div></div></div>`));
+
+add("walks", "WK6", "revised", "Edit walk", "Replaces audit 08 (old form with raw date fields and a Conversation guide field).", [
+  "Edit reuses the Plan-a-walk steps. This page sums them up; Change jumps into that step.",
+  "Once a walk is ready, routes are locked (as today), so Where shows \"Routes are set\".",
+], phone(`<div class="body"><div class="topbar"><div class="rnd">${ic("x", 14)}</div><div class="m">Edit walk</div><div style="width:34px"></div></div><div class="H1" style="font-size:28px">Westside prayer walk</div><div class="grp" style="margin-top:8px"><div class="r"><div class="g"><div class="m">Where</div><div class="t">Westside · 2 routes</div><div class="s">Routes are set once invites go out</div></div></div><div class="r"><div class="g"><div class="m">When</div><div class="t">Sat Sep 26 · 9:30–11:30</div><div class="s">Church welcome table</div></div><span class="m hedge">Change</span></div><div class="r"><div class="g"><div class="m">Who</div><div class="t">7 invited · 5 going</div></div><span class="m hedge">Change</span></div><div class="r"><div class="g"><div class="m">Name</div><div class="t">Westside prayer walk</div></div><span class="m hedge">Change</span></div></div><div class="btn ink" style="margin-top:16px">Done</div></div>`));
+
+add("walks", "WK7", "revised", "Repeat walk", "Replaces audit 09 (raw start and end fields).", [
+  "Pick the new day from chips; the time and length carry over.",
+  "Toggles decide what to copy: people and routes. Routes copy only from the same neighborhood.",
+  "Makes a draft, as today.",
+], phone(`<div class="dim"></div>` + sheet(`<div class="H2">Repeat this walk</div><div class="sub" style="margin-top:3px">Same place, time and meeting point</div><div class="lab m">New day</div><div class="dchips"><div class="on"><div class="m">Sat</div><div class="v">3</div></div><div><div class="m">Sat</div><div class="v">10</div></div><div><div class="m">Sat</div><div class="v">17</div></div><div style="display:grid;place-items:center">${ic("cal", 16)}</div></div><div class="grp" style="margin-top:14px"><div class="r"><div class="g"><div class="t">Invite the same people</div><div class="s">7 people</div></div><div class="toggle"></div></div><div class="r"><div class="g"><div class="t">Copy routes</div><div class="s">2 routes in Westside</div></div><div class="toggle"></div></div></div><div class="btn ink" style="margin-top:14px">Create draft</div>`, 190)));
+
+add("walks", "WK8", "revised", "Invitations", "Replaces audit 12.", [
+  "Same pieces as the Who step: search, saved team pills, then check rows with each person's reply in mono.",
+], phone(`<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">Who's invited?</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="field" style="margin-top:10px">${ic("search", 14)}<span style="flex:1">Find someone</span></div><div class="lab m">Saved teams</div><div class="pills"><span class="pl on">✓ Team Barnabas · 3</span><span class="pl">Team Priscilla · 2</span></div><div class="lab m">7 invited · 5 going</div><div class="grp">${[["Erica","Going",1],["Maya","Going",1],["Jordan","No reply",1],["Sam","Can't go",1],["Noah","",0]].map(([n,s,on]) => `<div class="r"><div class="chk ${on ? "on" : ""}">${on ? "✓" : ""}</div><div class="g"><div class="t">${n}</div></div><span class="m">${s}</span></div>`).join("")}</div><div class="btn ink" style="margin-top:12px">Save</div>`, 90)));
+
+add("walks", "WK9", "revised", "Walk page · live · volunteer", "Replaces audit 77 (\"Your route: Crockett north\" repeated the Team row).", [
+  "The offset card says where you are and who you're with, with one button: Open my route.",
+  "Meeting point and leader are plain rows below.",
+], phone(back(`<div class="rnd">${ic("dots")}</div>`) + `<div class="body"><div class="m ink">Live · Thu Sep 24</div><div class="H1" style="font-size:28px;margin:4px 0">Saturday outreach</div><div class="rail"><div class="done">Plan</div><div class="done">Invite</div><div class="done">Check in</div><div class="now">Walk</div><div>Wrap up</div></div><div class="off porch"><div class="m">Your route</div><div class="H2" style="margin-top:3px">Crockett north</div><div class="sub">with Erica & Jordan · 15 doors so far</div><div class="btn ink" style="margin-top:10px">Open my route</div></div><div class="grp white" style="margin-top:14px"><div class="r">${ic("walk", 15)}<div class="g"><div class="t">Church welcome table</div><div class="s">North entrance · back by 12:00</div></div></div><div class="r">${ic("phone", 15)}<div class="g"><div class="t">Erica · leader</div><div class="s">At the welcome table</div></div></div></div></div>`));
+
+add("walks", "WK10", "check", "Walks list · volunteer", "Built in the last pass without a board.", [
+  "Same list as WK1 without the + button. Walks waiting on your reply show a porch Reply chip.",
+], phone(`<div class="body"><div class="H1">Walks</div>${walksSeg("Walks")}<div class="off porch" style="margin-top:14px"><div class="m ink">Live now · you're on Crockett north</div><div class="H2" style="margin-top:4px">Saturday outreach</div><div class="m hedge" style="margin-top:8px">Open ›</div></div><div class="shead"><div class="m">Coming up</div></div><div class="grp"><div class="r"><div class="datebox"><div class="m">Sat</div><b>26</b></div><div class="g"><div class="t">Westside prayer walk</div><div class="s">9:30 AM · Church welcome table</div></div><span class="ch" style="background:var(--porch-tint);border-color:transparent;color:var(--ink)">Reply</span></div></div></div>`, { tabs: "walk" }));
+
+/* ===== PLAN ===== */
+add("plan", "PW1", "revised", "Plan a walk · Where", "Replaces audit 15 (coverage % per neighborhood).", [
+  "Copy last walk stays on top as a dashed row.",
+  "The neighborhood map and list show <b>when each was last walked and how many pins it has</b>, instead of a percent, since homes aren't known ahead of time.",
+  "\"It's a gathering instead\" stays at the bottom.",
+], phone(`<div class="body"><div class="topbar"><div class="rnd">${ic("x", 14)}</div><div class="m">1 of 3</div><div style="width:34px"></div></div><div class="H1" style="font-size:30px">Where are you walking?</div><div class="field f" style="border:1.5px dashed var(--line-strong);background:#fff;margin-bottom:10px">${ic("copy", 15)}<span style="flex:1"><b class="D">Copy last walk</b> <span class="sub">· Saturday outreach</span></span></div><div class="minimap" style="height:130px;margin:0"><div class="zone" style="left:14px;top:22px;width:110px;height:84px;background:rgba(45,90,69,.14)"><div class="zl"><b>Crockett</b><span class="m">Sep 24</span></div></div><div class="zone" style="left:150px;top:12px;width:110px;height:60px;border-color:#6b91ad"><div class="zl"><b>Westside</b><span class="m">Aug 30</span></div></div><div class="zone" style="left:160px;top:84px;width:90px;height:40px;border-color:#b98a3a;border-style:dashed"><div class="zl"><b>Shoal Creek</b></div></div></div><div class="grp" style="margin-top:10px"><div class="r"><span class="sw5" style="background:#2d5a45"></span><div class="g"><div class="t">Crockett Heights</div><div class="s">212 pins · walked Sep 24</div></div><div class="chk round on">✓</div></div><div class="r"><span class="sw5" style="background:#6b91ad"></span><div class="g"><div class="t">Westside</div><div class="s">48 pins · walked Aug 30</div></div></div><div class="r"><span class="sw5" style="background:#b98a3a"></span><div class="g"><div class="t">Shoal Creek</div><div class="s">Never walked</div></div></div></div><div class="m hedge" style="margin:12px 2px">It's a gathering instead</div></div>`));
+
+add("plan", "PW2", "revised", "Plan a walk · Which streets?", "Replaces audit 16 (\"How many routes?\" split by parcel count, dashed streets by parcel coverage).", [
+  "Tap streets to add them. Streets with pins from the last 60 days are dashed, so leaders can pick what's left.",
+  "Selected streets are grouped into routes below. \"Split into\" divides the chosen streets into 2–4 routes of about the same length.",
+  "The advanced area tools (draw a box, whole neighborhood) move behind \"More ways to choose\".",
+], phone(`<div class="body"><div class="topbar"><div class="rnd">${ic("back")}</div><div class="m">1 of 3</div><div style="width:34px"></div></div><div class="H2">Which streets?</div><div class="minimap" style="height:180px;margin:10px -14px 0"><div style="position:absolute;left:0;right:0;top:60px;height:14px;background:#e3a33b;opacity:.9"></div><div style="position:absolute;left:0;right:0;top:130px;height:14px;background:#fff"></div><div style="position:absolute;left:0;right:0;top:136px;border-top:3px dashed #2d5a45"></div><div style="position:absolute;left:120px;top:0;bottom:0;width:14px;background:#e3a33b;opacity:.9"></div><div style="position:absolute;left:220px;top:0;bottom:0;width:14px;background:#fff"></div><div style="position:absolute;left:226px;top:0;bottom:0;border-left:3px dashed #2d5a45"></div><div class="lbl" style="position:absolute;left:10px;top:48px;font:500 8.5px var(--mono);color:#8d8676">GAINES ST</div><div class="lbl" style="position:absolute;left:10px;top:118px;font:500 8.5px var(--mono);color:#8d8676">CROCKETT ST</div></div><div style="display:flex;gap:10px;margin:8px 2px 0"><span class="m" style="display:flex;align-items:center;gap:5px"><i style="width:14px;height:5px;background:#e3a33b;display:inline-block;border-radius:2px"></i>Chosen</span><span class="m" style="display:flex;align-items:center;gap:5px"><i style="width:14px;border-top:2.5px dashed #2d5a45;display:inline-block"></i>Walked recently</span></div><div class="lab m">Split into</div><div class="seg sm"><div>1 route</div><div class="on">2</div><div>3</div><div>4</div></div><div class="grp" style="margin-top:10px"><div class="r"><span class="sw5" style="background:#2d5a45"></span><div class="g"><div class="t">Route A</div><div class="s">Gaines St · 0.4 mi</div></div></div><div class="r"><span class="sw5" style="background:#6b91ad"></span><div class="g"><div class="t">Route B</div><div class="s">Perry Blvd · 0.4 mi</div></div></div></div><div class="m hedge" style="margin:10px 2px">More ways to choose ›</div></div>`),
+  { q: "How should leaders split a walk into routes?", options: ["Pick streets, then split them evenly into 2–4 routes (drawn here)", "Leaders draw or pick each route by hand, one at a time", "One route per walk; teams share it"] });
+
+add("plan", "PW3", "check", "Plan a walk · Who's coming?", "Built from the board, then drifted (the link icon opens a one-time invite; the name moved into the summary).", [
+  "Saved team pills first, then check rows.",
+  "The summary card's title is the editable walk name, defaulting to \"{neighborhood} · {day}\".",
+  "The link icon opens \"Invite someone new\" (AD3) for people not on the list yet.",
+], phone(`<div class="body"><div class="topbar"><div class="rnd">${ic("back")}</div><div class="m">3 of 3</div><div style="width:34px"></div></div><div class="H1" style="font-size:30px">Who's coming?</div><div class="pills"><span class="pl on">✓ Team Barnabas · 3</span><span class="pl">Team Priscilla · 2</span></div><div class="lab m">7 invited · Invite everyone</div><div class="grp">${["Erica","Maya","Jordan","Sam"].map((n, i) => `<div class="r"><div class="chk ${i < 3 ? "on" : ""}">${i < 3 ? "✓" : ""}</div><div class="g"><div class="t">${n}</div></div></div>`).join("")}</div><div class="off" style="margin-top:12px;padding:10px 12px"><div class="m">Crockett Heights · Sat Oct 3 · 9:30</div><div class="H3" style="margin-top:4px;border-bottom:1.5px dashed var(--line-strong);padding-bottom:4px">Crockett Heights · Sat Oct 3</div><div class="sub" style="margin-top:4px">2 routes · 7 invited</div></div><div style="display:grid;grid-template-columns:38px 38px 1fr 1.25fr;gap:6px;margin-top:12px"><div class="btn out sm">${ic("back", 14)}</div><div class="btn out sm">${ic("link", 15)}</div><div class="btn out sm">Save draft</div><div class="btn ink sm">Send invites</div></div></div>`));
+
+/* ===== FOLLOW-UPS ===== */
+add("fu", "FU1", "revised", "Follow-up detail, lower part", "Replaces the pills in audit 39 (\"Person & notes\", \"Location\", \"Cancel follow-up\").", [
+  "Links become plain rows: the person and the home, each opening its page.",
+  "Cancel follow-up is a quiet red row at the end, with a confirm.",
+], phone(back(`<div class="rnd">${ic("dots")}</div>`) + `<div class="body"><div style="display:flex;gap:12px;align-items:center"><div class="bigav">T</div><div><div class="H1" style="font-size:30px;margin:0">Tasha</div><div class="m">215 Gaines · met Sep 15</div></div></div><div class="off porch" style="margin-top:14px"><div class="m red">Due yesterday · visit</div><div class="D" style="font-weight:700;font-size:14px;line-height:1.3;margin-top:4px">Check in after her mother's appointment.</div></div><div class="btn ink" style="margin-top:12px">Log check-in</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px"><div class="btn out sm">${ic("moon", 14)}Snooze</div><div class="btn out sm">${ic("hand", 14)}Hand off</div></div><div class="shead"><div class="H2" style="font-size:19px">History</div></div><div class="hist"><div class="m">Sep 15<br>4:30 PM</div><div class="sub" style="color:var(--ink)">Follow-up created · Erica</div></div><div class="grp" style="margin-top:6px"><div class="r"><span class="avs">T</span><div class="g"><div class="t">Tasha</div><div class="s">Person page</div></div><span class="chev">›</span></div><div class="r">${ic("walk", 15)}<div class="g"><div class="t">215 Gaines Street</div><div class="s">Home and visits</div></div><span class="chev">›</span></div><div class="r red"><div class="g"><div class="t">Cancel follow-up</div></div></div></div></div>`));
+
+/* ===== TODAY ===== */
+add("today", "TD1", "revised", "Today · walk invitation (volunteer)", "Replaces audit 74 (\"Going / Can't go\" here, \"I'm in / Can't make it\" on the walk page).", [
+  "The invitation is the offset card, using the walk page's words: <b>I'm in</b> and <b>Can't make it</b>.",
+  "After you reply it collapses to a line: \"You're in · Sat 26 ›\". The \"Your replies\" disclosure goes away.",
+], phone(`<div class="body"><div class="topbar"><div class="cap-btn">Grace Harbor</div><div class="rnd av">MA</div></div><div class="H1" style="margin-bottom:4px">Today</div><div class="m" style="margin:0 2px 14px">Thursday · Sep 24</div><div class="off porch"><div class="m ink">Invitation · Sat Sep 26 · 9:30 AM</div><div class="H2" style="margin-top:4px">Westside prayer walk</div><div class="sub">Church welcome table · led by Erica</div><div style="display:grid;grid-template-columns:1.2fr 1fr;gap:7px;margin-top:10px"><div class="btn ink sm">I'm in</div><div class="btn out sm">Can't make it</div></div></div><div class="shead"><div class="H2">Follow-ups</div><div class="m">3 this week</div></div><div class="grp"><div class="r"><div class="ck"></div><div class="g"><div class="t">118 Crockett Street</div><div class="s">Asked for prayer; welcomed a return visit</div></div><span class="ch">Sat</span></div><div class="r"><div class="ck"></div><div class="g"><div class="t">Elena</div><div class="s">Bring the Spanish-language Gospel of John</div></div><span class="ch">Sat</span></div></div><div class="shead"><div class="H2">History</div><div class="m">You · 0 today</div></div></div>`, { tabs: "today" }));
+
+/* ===== PEOPLE ===== */
+add("people", "PE1", "revised", "People", "Replaces audit 43, 44, 72 (Everyone / Conversations tabs, Filter & sort, Add person button).", [
+  "Search, then chips instead of a filter panel: Mine · Everyone · Follow-up due.",
+  "Add person is the + in the corner.",
+  "Conversations away from doors get their own row at the top instead of a tab (PE2).",
+], phone(`<div class="body"><div class="topbar"><div class="H1" style="margin:0">People</div><div class="rnd" style="background:var(--ink);color:#fff">${ic("plus", 16)}</div></div><div class="field">${ic("search", 14)}<span style="flex:1">Name, street or phone</span></div><div class="pills" style="margin-top:8px"><span class="pl on">Mine</span><span class="pl">Everyone</span><span class="pl">Follow-up due</span></div><div class="grp" style="margin-top:12px"><div class="r">${ic("msg", 16)}<div class="g"><div class="t">Conversations away from doors</div></div><span class="m">4 ›</span></div></div><div class="shead"><div class="m">3 people</div><div class="m">Due first</div></div><div class="grp">${[["T","Tasha","215 Gaines · due yesterday",1],["E","Elena","118 Crockett · due Sat",0],["M","Marcus","122 Crockett · due Tue",0]].map(([a,n,s,late]) => `<div class="r"><span class="avs">${a}</span><div class="g"><div class="t">${n}</div><div class="s" ${late ? 'style="color:var(--alert)"' : ""}>${s}</div></div><span class="chev">›</span></div>`).join("")}</div></div>`, { tabs: "people" }),
+  { q: "Keep Conversations as a row, or bring back the tab?", options: ["A row at the top of People (drawn here)", "A tab: People | Conversations", "Drop the list; conversations show only on each person's page"] });
+
+add("people", "PE2", "revised", "Conversations away from doors", "Replaces audit 72.", [
+  "Everything logged with + that wasn't at a door, newest first. Tap a row to open the person or the conversation.",
+], phone(back(`<div></div>`) + `<div class="body"><div class="H1" style="font-size:30px">Conversations</div><div class="m" style="margin:-4px 2px 12px">Away from doors · 4</div>${[["Sep 22","Church lot","Marcus & Jen","talk","Talked · asked about the pantry"],["Sep 20","Food drive","Dolores","fu","Follow-up · pray before surgery"],["Sep 14","Corner store","Unnamed","talk","Talked"]].map(([d,p,w,c,s]) => `<div class="hist"><div class="m">${d}</div><span class="dot" style="background:var(--o-${c});margin-top:3px"></span><div><div class="t D" style="font-weight:700;font-size:12.5px">${w} · ${p}</div><div class="sub">${s}</div></div></div>`).join("")}</div>`, { tabs: "people" }));
+
+add("people", "PE3", "revised", "Person page", "Replaces audit 45 (card-in-card header, tabs, pink Next step).", [
+  "Person first, like the follow-up detail: avatar, name, mono summary line.",
+  "Text and Call are right under the name when there's a phone (and hidden if they asked not to be contacted that way).",
+  "The open follow-up is the offset card, and opens the follow-up.",
+  "Owner and Home are rows. Timeline continues below (PE4).",
+], phone(back(`<div class="rnd">${ic("dots")}</div>`) + `<div class="body"><div style="display:flex;gap:12px;align-items:center"><div class="bigav">T</div><div><div class="H1" style="font-size:32px;margin:0">Tasha</div><div class="m">215 Gaines · met Sep 15</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px"><div class="btn out sm">${ic("msg", 14)}Text</div><div class="btn out sm">${ic("phone", 14)}Call</div></div><div class="off porch" style="margin-top:14px"><div class="m red">Due yesterday · visit · you</div><div class="D" style="font-weight:700;font-size:14px;line-height:1.3;margin-top:4px">Check in after her mother's appointment.</div><div class="m hedge" style="margin-top:8px">Open follow-up ›</div></div><div class="grp" style="margin-top:14px"><div class="r"><span class="avs">ER</span><div class="g"><div class="m">Owner</div><div class="t">Erica</div></div><span class="chev">›</span></div><div class="r">${ic("walk", 15)}<div class="g"><div class="m">Home</div><div class="t">215 Gaines Street</div></div><span class="chev">›</span></div></div></div>`, { tabs: "people" }));
+
+add("people", "PE4", "revised", "Person page · timeline", "Replaces audit 46–47 (duplicate follow-ups panel with its own Snooze and Mark done, and the note form with a Note kind dropdown).", [
+  "One timeline of everything: visits, conversations, check-ins and notes, in mono time.",
+  "\"Add a note\" is a row at the top of the timeline (PE5).",
+  "No follow-ups panel. Follow-ups live in the Follow-ups tab and the offset card above.",
+], phone(`<div class="body" style="padding-top:6px"><div class="shead" style="margin-top:0"><div class="H2" style="font-size:19px">Timeline</div></div><div class="field">${ic("note", 14)}<span style="flex:1">Add a note</span></div><div style="margin-top:12px">${[["Sep 24","note","Prayer request","Her mother's appointment is Thursday. Pray for good news."],["Sep 20","fu","Come back · Maya","Prayed together · health"],["Sep 15","talk","Talked at the door · Erica","Met Tasha; she welcomed a visit"],["Sep 15","","Follow-up created","Visit · due Sep 23 · Erica"]].map(([d,c,t,s]) => `<div class="hist"><div class="m">${d}</div>${c === "note" ? `<span style="margin-top:1px">${ic("note", 12)}</span>` : c ? `<span class="dot" style="background:var(--o-${c});margin-top:3px"></span>` : `<span class="dot" style="background:var(--line-strong);margin-top:3px"></span>`}<div><div class="t D" style="font-weight:700;font-size:12.5px">${t}</div><div class="sub">${s}</div></div></div>`).join("")}</div></div>`, { tabs: "people" }));
+
+add("people", "PE5", "new", "Add a note", "Replaces the note form with the Note kind dropdown.", [
+  "Two kinds as a switch: Note or Prayer request. The privacy line says who will see it.",
+], phone(`<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">Add a note</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="seg sm" style="margin-top:12px"><div class="on">Note</div><div>Prayer request</div></div><div class="field f tall" style="margin-top:10px;min-height:110px">Prefers visits after 5 PM. Her daughter Kayla answers the door.</div><div class="m" style="margin:8px 2px">${ic("lock", 11)} Erica and church leaders can see this</div><div class="btn ink" style="margin-top:10px">Save note</div>`, 250)));
+
+add("people", "PE6", "revised", "Privacy and status (⋯)", "Replaces audit 48 (Details tab) and the contact-restriction dialog.", [
+  "Who can see this person, their status, and contact limits in one sheet from ⋯.",
+  "Contact limits are three switches. Turning one on hides that action (Text, Call or a visit follow-up) everywhere.",
+  "Change owner starts the hand-off, which they must accept, as today.",
+], phone(`<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">Tasha</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="grp" style="margin-top:12px"><div class="r">${ic("lock", 15)}<div class="g"><div class="t">Who can see Tasha</div><div class="s">Erica (owner) and church leaders</div></div><span class="chev">›</span></div><div class="r"><span class="avs">ER</span><div class="g"><div class="t">Change owner</div></div><span class="chev">›</span></div></div><div class="lab m">Status</div><div class="seg sm"><div class="on">Active</div><div>Paused</div><div>Archived</div></div><div class="lab m">Contact limits</div><div class="grp"><div class="r"><div class="g"><div class="t">Don't text</div></div><div class="toggle offt"></div></div><div class="r"><div class="g"><div class="t">Don't call</div></div><div class="toggle offt"></div></div><div class="r"><div class="g"><div class="t">Don't visit</div></div><div class="toggle offt"></div></div></div>`, 140)));
+
+add("people", "PE7", "revised", "Edit person", "Replaces audit 49 (email field, Preferred contact and Contact request dropdowns, Status dropdown).", [
+  "Name, home, and the same contact block as the door: Stay in touch? then cell phone with Text or Call.",
+  "No email. Status and contact limits live in PE6.",
+], phone(`<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">Edit Tasha</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="lab m">Name</div><div class="field f">Tasha</div><div class="lab m">Home</div><div class="grp"><div class="r">${ic("walk", 15)}<div class="g"><div class="t">215 Gaines Street</div></div><span class="m hedge">Change</span></div></div><div class="ctc"><div class="cr"><span class="D" style="font-weight:700;font-size:13.5px">Stay in touch?</span><div class="mseg"><div class="on">Yes</div><div>No</div></div></div><div class="cr"><div class="phin"><div class="m">Cell phone</div><div class="v">(555) 014-2231</div></div><div class="mseg"><div class="on">Text</div><div>Call</div></div></div></div><div class="btn ink" style="margin-top:16px">Save</div>`, 150)));
+
+add("people", "PE8", "revised", "Add person", "Replaces audit 50.", [
+  "Same form, empty. Home is optional and picks from pinned homes or the map.",
+], phone(`<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">New person</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="lab m">Name</div><div class="field">Name, or a short description</div><div class="lab m">Home</div><div class="grp"><div class="r">${ic("walk", 15)}<div class="g"><div class="t" style="color:var(--muted);font-weight:600">Choose a home</div></div><span class="chev">›</span></div></div><div class="ctc"><div class="cr"><span class="D" style="font-weight:700;font-size:13.5px">Stay in touch?</span><div class="mseg"><div>Yes</div><div class="on">No</div></div></div></div><div class="btn ink" style="margin-top:16px">Add person</div>`, 200)));
+
+/* ===== ADMIN ===== */
+add("admin", "AD1", "revised", "More", "Replaces audit 51 (Conversation guides row, unstyled groups).", [
+  "Your profile card on top: the avatar in the header opens this page.",
+  "No Conversation guides. Sync shows its status right in the row.",
+], phone(`<div class="body"><div class="H1">More</div><div class="off" style="display:flex;align-items:center;gap:12px"><div class="bigav" style="width:50px;height:50px;font-size:18px;background:var(--hedge);color:#fff">ER</div><div><div class="H2">Erica</div><div class="m">Leader · Grace Harbor Church</div></div></div><div class="shead"><div class="m">Your church</div></div><div class="grp"><div class="r">${ic("people", 16)}<div class="g"><div class="t">Team & invitations</div></div><span class="chev">›</span></div></div><div class="shead"><div class="m">This phone</div></div><div class="grp"><div class="r">${ic("gear", 16)}<div class="g"><div class="t">Settings</div></div><span class="chev">›</span></div><div class="r">${ic("sync", 16)}<div class="g"><div class="t">Sync</div></div><span class="m">All sent ›</span></div></div><div class="shead"><div class="m">Help</div></div><div class="grp"><div class="r">${ic("help", 16)}<div class="g"><div class="t">Help & field guide</div></div><span class="chev">›</span></div><div class="r">${ic("lock", 16)}<div class="g"><div class="t">Privacy & trust</div></div><span class="chev">›</span></div></div></div>`, { tabs: "none" }));
+
+add("admin", "AD2", "revised", "Team & invitations", "Replaces audit 53–55 (Getting started checklist, neighborhoods list, Recent activity).", [
+  "\"Invite someone\" is the offset card: it's the main job here.",
+  "People with their role, then saved teams with faces.",
+  "Getting started shrinks to one row until it's done. Neighborhoods move to the map's ⋯ menu; Recent activity is on each walk page.",
+], phone(back(`<div></div>`) + `<div class="body"><div class="H1" style="font-size:32px">Team</div><div class="grp" style="margin-bottom:12px"><div class="r"><div class="g"><div class="t">Getting started</div><div class="s">3 of 5 done · next: try a walk</div></div><span class="chev">›</span></div></div><div class="off" style="display:flex;align-items:center;gap:10px"><div style="flex:1"><div class="H3">Invite someone</div><div class="sub">They get a text with a one-time link</div></div><div class="btn ink sm" style="padding:0 14px">Invite</div></div><div class="shead"><div class="H2" style="font-size:19px">People</div><div class="m">7</div></div><div class="grp">${[["ER","Erica","Leader · you"],["MA","Maya","Volunteer"],["JO","Jordan","Volunteer"]].map(([a,n,s]) => `<div class="r"><span class="avs">${a}</span><div class="g"><div class="t">${n}</div><div class="s">${s}</div></div><span class="chev">›</span></div>`).join("")}</div><div class="shead"><div class="H2" style="font-size:19px">Saved teams</div><div class="m hedge">+ New</div></div><div class="grp"><div class="r"><div class="g"><div class="t">Team Barnabas</div></div><div class="stackav"><span>MA</span><span>JO</span><span>ER</span></div></div></div></div>`));
+
+add("admin", "AD3", "new", "Invite someone", "Replaces the invitation form in Team & invitations.", [
+  "Name, cell phone, and role. The link goes out by text and works once.",
+], phone(`<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">Invite someone</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="lab m">Name</div><div class="field f">Dee</div><div class="lab m">Cell phone</div><div class="field f">(555) 018-4420</div><div class="lab m">Role</div><div class="seg sm"><div class="on">Volunteer</div><div>Leader</div></div><div class="sub" style="margin:10px 2px 0">Volunteers walk and follow up. Leaders also plan walks and manage people.</div><div class="btn ink" style="margin-top:14px">${ic("msg", 15)}Text the invite</div><div class="m" style="margin:8px 2px 0;text-align:center">Works once · expires in 7 days</div>`, 170)),
+  { q: "Member invitations: phone only, or phone or email?", options: ["Phone only, sent by text (drawn here)", "Phone or email"] });
+
+add("admin", "AD4", "revised", "Saved team", "Replaces audit 56.", [
+  "Name, then check rows for members. Delete is a quiet red row.",
+], phone(`<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">Team Barnabas</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="lab m">Name</div><div class="field f">Team Barnabas</div><div class="lab m">Members · 3</div><div class="grp">${["Erica","Maya","Jordan","Sam","Noah"].map((n, i) => `<div class="r"><div class="chk ${i < 3 ? "on" : ""}">${i < 3 ? "✓" : ""}</div><div class="g"><div class="t">${n}</div></div></div>`).join("")}<div class="r red"><div class="g"><div class="t">Delete team</div></div></div></div><div class="btn ink" style="margin-top:12px">Save</div>`, 110)));
+
+add("admin", "AD5", "revised", "Settings", "Replaces audit 57–60 (one long page of cards, including Favorite conversation guide).", [
+  "One grouped list. Simple settings sit in the row (appearance, reminders); bigger ones open a small page (AD6–AD8).",
+  "Leader-only rows are marked. \"Preview as\" shows only in the sample church.",
+], phone(back(`<div></div>`) + `<div class="body"><div class="H1" style="font-size:32px">Settings</div><div class="shead"><div class="m">This phone</div></div><div class="grp"><div class="r"><div class="g"><div class="t">Appearance</div></div><div class="mseg"><div class="on">Auto</div><div>Light</div><div>Dark</div></div></div><div class="r"><div class="g"><div class="t">Follow-up reminders</div><div class="s">8:00 AM when something's due</div></div><div class="toggle"></div></div><div class="r"><div class="g"><div class="t">Map</div><div class="s">Small dots on busy streets</div></div><span class="chev">›</span></div></div><div class="shead"><div class="m">Church · leaders</div></div><div class="grp"><div class="r"><div class="g"><div class="t">Church profile</div></div><span class="chev">›</span></div><div class="r"><div class="g"><div class="t">Records & privacy</div></div><span class="chev">›</span></div><div class="r"><div class="g"><div class="t">Data</div><div class="s">Export, import, clear</div></div><span class="chev">›</span></div></div><div class="shead"><div class="m">Sample church</div></div><div class="grp"><div class="r"><div class="g"><div class="t">Preview as</div></div><span class="m">Erica · leader ›</span></div></div></div>`));
+
+add("admin", "AD6", "new", "Church profile", "Replaces the Church profile card.", [
+  "Name, timezone and the default follow-up timing, which sets the date the Come back switch starts on.",
+], phone(back(`<div class="m">Settings</div>`) + `<div class="body"><div class="H1" style="font-size:30px">Church profile</div><div class="lab m">Church name</div><div class="field f">Grace Harbor Church</div><div class="lab m">Timezone</div><div class="grp"><div class="r"><div class="g"><div class="t">Central · Chicago</div></div><span class="chev">›</span></div></div><div class="lab m">Default follow-up</div><div class="seg sm"><div>Tomorrow</div><div class="on">3 days</div><div>1 wk</div><div>2 wks</div></div><div class="btn ink" style="margin-top:18px">Save</div></div>`));
+
+add("admin", "AD7", "new", "Records & privacy", "Replaces the Records and retention card.", [
+  "How long before old records come up for review, the note length limit, and the optional faith fields.",
+  "Nothing is deleted automatically; the line says so.",
+], phone(back(`<div class="m">Settings</div>`) + `<div class="body"><div class="H1" style="font-size:30px">Records & privacy</div><div class="lab m">Review records after</div><div class="seg sm"><div class="on">1 year</div><div>2 years</div><div>5 years</div></div><div class="sub" style="margin:6px 2px 0">Old records come up for a leader's review. Nothing is deleted automatically.</div><div class="lab m">Note limit</div><div class="seg sm"><div>280</div><div class="on">500</div><div>1,000</div></div><div class="grp" style="margin-top:14px"><div class="r"><div class="g"><div class="t">Faith & relationship fields</div><div class="s">Off hides them but keeps what's saved</div></div><div class="toggle offt"></div></div></div><div class="btn ink" style="margin-top:18px">Save</div></div>`));
+
+add("admin", "AD8", "new", "Data", "Replaces the Data and synchronization card and Clear outreach records.", [
+  "Export and import as plain rows. Clear records is red, at the bottom, and asks you to type the church name.",
+], phone(back(`<div class="m">Settings</div>`) + `<div class="body"><div class="H1" style="font-size:30px">Data</div><div class="grp"><div class="r"><div class="g"><div class="t">Export records</div><div class="s">A file with everything you can see</div></div><span class="chev">›</span></div><div class="r"><div class="g"><div class="t">Import a backup</div></div><span class="chev">›</span></div></div><div class="sub" style="margin:8px 2px 0">${ic("lock", 11)} Exports include names and notes. Keep the file private.</div><div class="grp" style="margin-top:22px"><div class="r red"><div class="g"><div class="t">Clear outreach records</div><div class="s">Homes, visits, follow-ups and people. Settings, teams and neighborhoods stay.</div></div></div></div></div>`));
+
+add("admin", "AD9", "revised", "Sync", "Replaces audit 61.", [
+  "One big status with the last send time, what's waiting, and Sync now.",
+  "Recovery stays as a row for the rare case something couldn't send.",
+], phone(back(`<div class="m">More</div>`) + `<div class="body"><div class="H1" style="font-size:32px">Sync</div><div class="off" style="text-align:center;padding:18px 12px"><div style="width:48px;height:48px;border-radius:50%;background:var(--hedge-tint);color:var(--hedge);display:grid;place-items:center;margin:0 auto">${ic("check", 24)}</div><div class="H2" style="margin-top:8px">All sent</div><div class="m" style="margin-top:4px">Last sent 2 min ago · online</div></div><div class="grp" style="margin-top:14px"><div class="r"><div class="g"><div class="t">Waiting to send</div></div><span class="m ink">0</span></div><div class="r"><div class="g"><div class="t">Recovery</div><div class="s">Changes that couldn't send</div></div><span class="m">None ›</span></div></div><div class="btn out" style="margin-top:14px">${ic("sync", 16)}Sync now</div></div>`));
+
+/* ---------- round 2 ---------- */
+const byId = (id) => S.find((s) => s.id === id);
+const LOCKED_R1 = "WM1 WM4 WM6 WM7 WM8 PL1 MP1 MP2 MP4 MP5 MP6 MP7 MP8 MP9 WK2 WK5 WK6 WK7 WK8 WK9 PW1 PW3 FU1 TD1 PE1 PE2 PE3 PE4 PE6 PE7 AD1 AD2 AD3 AD4 AD5 AD6 AD7 AD8 AD9 MP11 PE5 PE8".split(" ");
+LOCKED_R1.forEach((id) => { byId(id).status = "locked"; });
+const CUT = [];
+const redo = (id, patch) => Object.assign(byId(id), { status: "review", kind: "revised" }, patch);
+const locked = (id, changes) => { const s = byId(id); s.changes = changes; };
+
+/* Answers applied to locked screens */
+locked("MP11", ["How you get here: <b>⋯ on the home sheet</b> (MP9) opens a short menu, and <b>Edit home</b> is the first item. Drawn as MP12 below."]);
+locked("PE5", ["How you get here: the <b>Add a note</b> row at the top of the person's timeline (PE4). It's also in <b>⋯</b> on the person page (PE3), next to privacy and status."]);
+{
+  const s = byId("PE8");
+  s.changes = ["Stay in touch now uses the <b>exact component from PE7</b>: the Yes/No switch with the cell phone and Text/Call row under it. It starts on Yes with the phone field empty."];
+  s.mock = phone(`<div class="dim"></div>` + sheet(`<div class="shtop"><div class="H2">New person</div><div class="rnd line" style="width:30px;height:30px">${ic("x", 14)}</div></div><div class="lab m">Name</div><div class="field">Name, or a short description</div><div class="lab m">Home</div><div class="grp"><div class="r">${ic("walk", 15)}<div class="g"><div class="t" style="color:var(--muted);font-weight:600">Choose a home</div></div><span class="chev">›</span></div></div><div class="ctc"><div class="cr"><span class="D" style="font-weight:700;font-size:13.5px">Stay in touch?</span><div class="mseg"><div class="on">Yes</div><div>No</div></div></div><div class="cr"><div class="phin"><div class="m">Cell phone</div><div class="v" style="color:var(--faint)">(555) 000-0000</div></div><div class="mseg"><div class="on">Text</div><div>Call</div></div></div></div><div class="btn ink" style="margin-top:16px">Add person</div>`, 150));
+}
+
+/* WM2: two versions of the secondary actions */
+const newPinHead = (right) => `<div class="shtop" style="align-items:center"><div class="m ink">New pin · Gaines St</div>${right}</div><div class="H2" style="margin-top:3px;display:flex;align-items:center;gap:6px">217 Gaines Street ${ic("pencil", 14)}</div><div class="sub" style="margin-top:2px">From the county parcel · add a unit</div>`;
+const slimDnk = `<div class="ob slim"><div class="t"><span class="sw8" style="background:var(--o-dnv)"></span>Don't knock</div><div class="m">saves now</div></div>`;
+redo("WM2", {
+  replaces: "Round 1 note: \"Don't knock, Move pin and Cancel\" looked wrong as a row of green and red text links.",
+  why: [
+    "<b>A:</b> Don't knock is an outcome, so it joins the grid as a slim fifth button. Move and Cancel become small icon buttons next to the address, where pin actions belong.",
+    "<b>B:</b> keeps all three together as one quiet grey bar with icons under the grid, so nothing looks like a stray link.",
+    "Both keep No answer as one tap, and the grid is unchanged.",
+  ],
+  mocks: [
+    ["A · Don't knock in the grid", phone(mapBg([...walkPins, [210, 214, "drop"]], route) + sb() + walkPill() + sheet(newPinHead(`<div style="display:flex;gap:6px"><div class="iconbtn">${ic("move", 15)}</div><div class="iconbtn">${ic("x", 13)}</div></div>`) + outs() + slimDnk), { map: true })],
+    ["B · One quiet bar", phone(mapBg([...walkPins, [210, 214, "drop"]], route) + sb() + walkPill() + sheet(newPinHead("") + outs() + `<div class="qbar"><div>${ic("ban", 14)}Don't knock</div><div>${ic("move", 14)}Move pin</div><div class="red">${ic("x", 12)}Cancel</div></div>`), { map: true })],
+  ],
+  question: { q: "Which version for the secondary pin actions (WM2 and WM3)?", options: ["A: Don't knock joins the grid; pin actions become icons by the address", "B: one quiet bar with icons under the grid"] },
+});
+
+/* WM3: matching two versions */
+const oldPinHead = (right) => `<div class="shtop" style="align-items:center"><div class="m ink">No answer · Sep 20 · Maya</div>${right}</div><div class="H2" style="margin-top:3px">221 Gaines Street</div>`;
+const wm3Pins = walkPins.map(([x, y, c]) => x === 168 && y === 280 ? [x, y, "no sel"] : [x, y, c]);
+redo("WM3", {
+  replaces: "Round 1 note: the same problem with \"Don't knock, Another home here, History\".",
+  why: [
+    "<b>A:</b> Don't knock is the slim fifth outcome. History is a clock icon by the address, and Another home here moves into ⋯ (it's the rarer action).",
+    "<b>B:</b> the same quiet grey bar as WM2-B: Don't knock, Another home, History.",
+    "Whichever you pick applies to both WM2 and WM3.",
+  ],
+  mocks: [
+    ["A · Don't knock in the grid", phone(mapBg(wm3Pins, route) + sb() + walkPill() + sheet(oldPinHead(`<div style="display:flex;gap:6px"><div class="iconbtn">${ic("clock", 15)}</div><div class="iconbtn">${ic("dots", 14)}</div></div>`) + outs() + slimDnk), { map: true })],
+    ["B · One quiet bar", phone(mapBg(wm3Pins, route) + sb() + walkPill() + sheet(oldPinHead("") + outs() + `<div class="qbar"><div>${ic("ban", 14)}Don't knock</div><div>${ic("homeplus", 14)}Another home</div><div>${ic("clock", 14)}History</div></div>`), { map: true })],
+  ],
+});
+
+/* WM5 */
+redo("WM5", {
+  replaces: "Round 1 note: the Undo toast was too big, with too much information, and wrapped onto two lines.",
+  mock: phone(mapBg([...walkPins, [210, 214, "talk"]], route) + sb() + walkPill("15 doors · 1h 14m") + chips(94) + `<div class="locbtn" style="bottom:84px">${ic("loc")}</div><div class="minitoast" style="bottom:30px">✓ Saved<span class="u">Undo</span></div>`, { map: true }),
+  why: [
+    "A small one-line pill at the bottom, where the hint sits: <b>✓ Saved · Undo</b>. The pin's new color already says what was saved.",
+    "It fades after 5 seconds, as built. Nothing covers the chips or the pill.",
+  ],
+});
+
+/* MP3 */
+redo("MP3", {
+  replaces: "Round 1 note: New neighborhood looked left over from the old design (green text in its own box).",
+  mock: phone(mapBg(mapPins) + sb() + `<div class="dim"></div>` + sheet(`<div class="H2">Neighborhoods</div><div class="grp" style="margin-top:12px"><div class="r"><span class="sw5" style="background:#2d5a45"></span><div class="g"><div class="t">Crockett Heights</div><div class="s">212 pins · walked Sep 24</div></div><div class="chk round on">✓</div></div><div class="r"><span class="sw5" style="background:#6b91ad"></span><div class="g"><div class="t">Westside</div><div class="s">48 pins · walked Aug 30</div></div></div><div class="r"><span class="sw5" style="background:#b98a3a"></span><div class="g"><div class="t">Shoal Creek</div><div class="s">No pins yet</div></div></div><div class="r"><span class="sw5" style="background:repeating-linear-gradient(180deg,var(--line-strong) 0 4px,transparent 4px 7px)"></span><div class="g"><div class="t">New neighborhood</div><div class="s">Draw it on the map</div></div><span class="chev">›</span></div></div>`), { map: true }),
+  why: [
+    "New neighborhood is the last row of the same list, drawn like the others: a dashed color bar where its color will go, ink title, a one-line hint and a chevron.",
+    "It's still leaders only.",
+  ],
+});
+
+/* MP10 */
+const histRows = (rows) => `<div class="grp">${rows.map(([c, t, s, d]) => `<div class="r"><span class="dot" style="background:${c}"></span><div class="g"><div class="t">${t}</div><div class="s">${s}</div></div><span class="m ink" style="text-align:right;white-space:nowrap">${d}</span></div>`).join("")}</div>`;
+redo("MP10", {
+  replaces: "Round 1 note: History looked disheveled; the date and time shared one indent, so it was hard to scan.",
+  mock: phone(mapBg(mapPins) + sb() + sheet(`<div class="H2">215 Gaines Street</div><div class="shead"><div class="H3">People here</div><div class="m hedge">+ Add</div></div><div class="grp"><div class="r"><span class="avs">T</span><div class="g"><div class="t">Tasha</div><div class="s">Prefers text · owner Maya</div></div><span class="chev">›</span></div><div class="r"><span class="avs">?</span><div class="g"><div class="t">Tasha's mom</div><div class="s">No contact yet</div></div><span class="chev">›</span></div></div><div class="shead"><div class="H3">History</div><div class="m">3</div></div>` + histRows([["var(--o-fu)", "Come back · Maya", "9:44 AM · prayed together, health", "Sep 24"], ["var(--o-no)", "No answer · Jordan", "10:16 AM", "Sep 20"], ["var(--o-talk)", "Talked · Erica", "4:30 PM · met Tasha", "Aug 30"]]), 60), { map: true }),
+  why: [
+    "History uses the same grouped rows as the rest of the sheet: outcome dot, who, the details, and the <b>date alone on the right</b> in mono. The time moves into the details line.",
+    "Every row lines up on the same edges, so you can scan down the dates or down the outcomes.",
+  ],
+  question: { q: "Use this history style everywhere history appears?", options: ["Yes: also the person timeline (PE4) and follow-up history (FU1)", "No: only the home sheet"] },
+});
+
+/* WK1 / WK10 */
+const walksTop = `<div style="margin-top:4px">${walksSeg("Walks")}</div>`;
+redo("WK1", {
+  replaces: "Round 1 note: the Walks / Map / List switch moved between screens because Walks had a title and a + above it.",
+  mock: phone(`<div class="body">${walksTop}<div class="off porch" style="margin-top:14px"><div class="m ink" style="display:flex;align-items:center;gap:6px"><span class="dot" style="background:var(--porch);width:8px;height:8px"></span>Live now · 38 doors</div><div class="H2" style="margin-top:4px">Saturday outreach</div><div class="sub">Started 9:30 AM · Church welcome table</div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><div class="stackav"><span>ER</span><span>M</span><span>J</span><span class="more">+4</span></div><span class="m hedge">Open ›</span></div></div><div class="shead"><div class="m">Coming up</div></div><div class="grp">${[["Sat","26","Westside prayer walk","9:30 AM · 2 routes · 5 going","Ready"],["Sat","3","Shoal Creek fall walk","9:30 AM · draft","Draft"]].map(([d,n,t,st,b]) => `<div class="r"><div class="datebox"><div class="m">${d}</div><b>${n}</b></div><div class="g"><div class="t">${t}</div><div class="s">${st}</div></div><span class="ch">${b}</span></div>`).join("")}</div><div class="dashrow" style="margin-top:10px">${ic("plus", 16)}<div class="t D" style="font-weight:700;font-size:13px">Plan a walk</div></div><div class="grp" style="margin-top:12px"><div class="r"><div class="g"><div class="t">Past walks</div></div><span class="m">12 ›</span></div></div></div>`, { tabs: "walk" }),
+  why: [
+    "No title. The switch is the first thing on all three screens (Walks, Map, List), in <b>exactly the same place</b>, so switching feels like one screen changing.",
+    "Plan a walk moves out of the header into a dashed row under Coming up, like Copy last walk in PW1 (leaders only).",
+  ],
+});
+redo("WK10", {
+  replaces: "Round 1 note: same as WK1; the switch must stay at the top on all three screens.",
+  mock: phone(`<div class="body">${walksTop}<div class="off porch" style="margin-top:14px"><div class="m ink">Live now · you're on Crockett north</div><div class="H2" style="margin-top:4px">Saturday outreach</div><div class="m hedge" style="margin-top:8px">Open ›</div></div><div class="shead"><div class="m">Coming up</div></div><div class="grp"><div class="r"><div class="datebox"><div class="m">Sat</div><b>26</b></div><div class="g"><div class="t">Westside prayer walk</div><div class="s">9:30 AM · Church welcome table</div></div><span class="ch" style="background:var(--porch-tint);border-color:transparent;color:var(--ink)">Reply</span></div></div><div class="grp" style="margin-top:12px"><div class="r"><div class="g"><div class="t">Past walks</div></div><span class="m">4 ›</span></div></div></div>`, { tabs: "walk" }),
+  why: ["Same layout as WK1 without Plan a walk. Walks waiting on your reply show a porch Reply chip."],
+});
+
+/* WK4 */
+redo("WK4", {
+  replaces: "Round 1 note: the red \"2 follow-ups need an owner\" row looked ugly.",
+  mock: phone(back(`<div class="rnd">${ic("dots")}</div>`) + `<div class="body"><div class="m ink">Done · Thu Sep 24</div><div class="H1" style="font-size:28px;margin:4px 0">Saturday outreach</div><div class="rail"><div class="done">Plan</div><div class="done">Invite</div><div class="done">Check in</div><div class="done">Walk</div><div class="now">Wrap up</div></div><div class="off"><div class="m">Final · 7 walkers · 2h 30m</div><div class="nums" style="margin-bottom:0"><div><div class="v" style="color:var(--hedge)">38</div><div class="m">Doors</div></div><div><div class="v">12</div><div class="m">Talked</div></div><div><div class="v">5</div><div class="m">Follow-ups</div></div></div></div><div class="shead"><div class="H2" style="font-size:19px">Who's following up?</div><div class="m">2 open</div></div><div class="grp white"><div class="r">${ic("door", 15)}<div class="g"><div class="t">215 Gaines</div><div class="s">Visit · Sat 26</div></div><span class="ch ink">Assign</span></div><div class="r">${ic("phone", 15)}<div class="g"><div class="t">Dolores</div><div class="s">Call · before surgery</div></div><span class="ch ink">Assign</span></div></div><div class="shead"><div class="H2" style="font-size:19px">Notes for next time</div></div><div class="field f tall">Start on Perry. Gaines was mostly no answer before 10.</div></div>`),
+  why: [
+    "The card only holds the final numbers.",
+    "Unowned follow-ups get the same <b>\"Who's following up?\"</b> list as the locked wrap-up, with an Assign chip on each. When everything has an owner, the section disappears.",
+    "Notes for next time stays as locked in round 1.",
+  ],
+});
+
+/* PW2 per answer */
+redo("PW2", {
+  replaces: "Locked in round 1, but your answer was \"leaders draw or pick each route by hand\", so the automatic split is gone.",
+  mock: phone(`<div class="body"><div class="topbar"><div class="rnd">${ic("back")}</div><div class="m">1 of 3</div><div style="width:34px"></div></div><div class="H2">Which streets?</div><div class="pills" style="margin-top:10px"><span class="pl on" style="background:#2d5a45;border-color:#2d5a45">Route A</span><span class="pl">Route B</span><span class="pl">+ Route</span></div><div class="minimap" style="height:170px;margin:10px -14px 0"><div style="position:absolute;left:0;right:0;top:60px;height:14px;background:#2d5a45"></div><div style="position:absolute;left:120px;top:0;height:67px;width:14px;background:#2d5a45"></div><div style="position:absolute;left:0;right:0;top:130px;height:14px;background:#6b91ad;opacity:.45"></div><div style="position:absolute;left:220px;top:0;bottom:0;width:14px;background:#fff"></div><div style="position:absolute;left:226px;top:0;bottom:0;border-left:3px dashed #8b918a"></div><div style="position:absolute;left:10px;top:48px;font:500 8.5px var(--mono);color:#8d8676">GAINES ST</div><div style="position:absolute;left:10px;top:118px;font:500 8.5px var(--mono);color:#8d8676">CROCKETT ST</div></div><div class="m" style="margin:8px 2px 0">Tap streets to add them to Route A · dashed = walked recently</div><div class="grp" style="margin-top:10px"><div class="r"><span class="sw5" style="background:#2d5a45"></span><div class="g"><div class="t">Route A</div><div class="s">Gaines St, Perry Blvd · 0.6 mi</div></div><span class="m hedge">Editing</span></div><div class="r"><span class="sw5" style="background:#6b91ad"></span><div class="g"><div class="t">Route B</div><div class="s">Crockett St · 0.3 mi</div></div><span class="chev">›</span></div></div><div class="m hedge" style="margin:10px 2px">Draw an area instead ›</div></div>`),
+  why: [
+    "Routes are chips across the top. Pick one, then tap streets on the map to add them to it; <b>+ Route</b> starts the next one.",
+    "The route you're editing shows in its color. Other routes are faded, and streets walked recently are dashed grey.",
+    "\"Draw an area instead\" is for rural or apartment areas where streets don't fit.",
+  ],
+});
+
+/* MP12 new */
+S.splice(S.findIndex((s) => s.id === "MP11"), 0, { area: "map", id: "MP12", kind: "new", title: "Home options (⋯)", status: "review", changes: [],
+  replaces: "New. Answers \"how would I even get to Edit home?\" (MP11).",
+  why: [
+    "⋯ on the home sheet (MP9) opens this short menu: <b>Edit home</b>, <b>Another home here</b> and <b>Move pin</b>.",
+    "Edit home opens MP11. The same menu works in walk mode.",
+  ],
+  mock: phone(mapBg(mapPins.map(([x, y, c]) => x === 100 && y === 214 ? [x, y, "fu sel"] : [x, y, c])) + sb() + sheet(`<div class="shtop"><div><div class="m ink">3 visits · last Sep 24</div><div class="H2" style="margin-top:3px">215 Gaines Street</div></div><div class="rnd line" style="width:30px;height:30px;background:var(--ink);color:#fff">${ic("dots", 14)}</div></div>`, 440) + `<div class="dim" style="z-index:6"></div><div class="actsheet" style="z-index:7"><div class="grp"><div class="r"><div class="t">Edit home</div></div><div class="r"><div class="t">Another home here</div></div><div class="r"><div class="t">Move pin</div></div></div><div class="grp"><div class="r"><div class="t" style="font-weight:800">Close</div></div></div></div>`, { map: true }),
+});
+
+/* ---------- round 3 ---------- */
+S.forEach((s) => { s.status = "locked"; });
+{
+  const s = byId("WM3");
+  s.mock = s.mocks[1][1]; delete s.mocks; delete s.question; s.kind = "revised";
+  s.changes = ["You chose <b>B</b>: one quiet grey bar under the grid with Don't knock, Another home and History."];
+}
+{
+  const s = byId("MP12");
+  s.changes = ["The home sheet steps away while this menu is open, so there's only one layer. <b>Close</b> brings the home sheet back."];
+  s.mock = phone(mapBg(mapPins.map(([x, y, c]) => x === 100 && y === 214 ? [x, y, "fu sel"] : [x, y, c])) + sb() + `<div class="dim" style="z-index:6"></div><div class="actsheet" style="z-index:7"><div class="grp"><div class="r" style="flex-direction:column;gap:2px;min-height:54px"><div class="m">215 Gaines Street</div></div><div class="r"><div class="t">Edit home</div></div><div class="r"><div class="t">Another home here</div></div><div class="r"><div class="t">Move pin</div></div></div><div class="grp"><div class="r"><div class="t" style="font-weight:800">Close</div></div></div></div>`, { map: true });
+  s.why = ["⋯ on the home sheet (MP9) opens this menu: <b>Edit home</b>, <b>Another home here</b> and <b>Move pin</b>.", "The address sits at the top of the menu, since the sheet is out of the way."];
+}
+redo("WM2", {
+  replaces: "Round 2 note: cut the bottom row. To reposition, tap away and tap again. Don't knock comes from the WM3 bar.",
+  mocks: undefined,
+  mock: phone(mapBg([...walkPins, [210, 214, "drop"]], route) + sb() + walkPill() + sheet(`<div class="m ink">New pin · Gaines St</div><div class="H2" style="margin-top:3px;display:flex;align-items:center;gap:6px">217 Gaines Street ${ic("pencil", 14)}</div><div class="sub" style="margin-top:2px">From the county parcel · add a unit</div>` + outs()), { map: true }),
+  why: [
+    "Just the address and the outcome grid. No answer is still one tap.",
+    "Wrong house? Tap away (the new pin disappears, since nothing was logged), then tap the right house.",
+    "The address is still editable, and \"add a unit\" still works for apartments.",
+  ],
+  question: { q: "A house with a \"No soliciting\" sign has no pin yet. How does a walker mark it Don't knock?", options: [
+    "Tapping away keeps the new pin, grey and unlogged. Tap it again to get the WM3 sheet, whose bar has Don't knock. (Moving a pin then means tapping the stray one and choosing Remove pin in its ⋯ menu.)",
+    "Tapping away removes the pin. Don't knock goes into the grid as a fifth outcome on new pins only.",
+    "Tapping away removes the pin. Long-press a house to drop a pin straight to Don't knock.",
+  ] },
+});
+delete byId("WM2").mocks;
+redo("MP10", {
+  replaces: "Round 2 note: go back to the earlier history and keep the follow-up history component.",
+  mock: phone(mapBg(mapPins) + sb() + sheet(`<div class="H2">215 Gaines Street</div><div class="shead"><div class="H3">People here</div><div class="m hedge">+ Add</div></div><div class="grp"><div class="r"><span class="avs">T</span><div class="g"><div class="t">Tasha</div><div class="s">Prefers text · owner Maya</div></div><span class="chev">›</span></div><div class="r"><span class="avs">?</span><div class="g"><div class="t">Tasha's mom</div><div class="s">No contact yet</div></div><span class="chev">›</span></div></div><div class="shead"><div class="H3">History</div></div>${[["Sep 24", "9:44 AM", "var(--o-fu)", "Come back · Maya", "Prayed together · health"], ["Sep 20", "10:16 AM", "var(--o-no)", "No answer · Jordan", ""], ["Aug 30", "4:30 PM", "var(--o-talk)", "Talked · Erica", "Met Tasha"]].map(([d, t, c, a, b]) => `<div class="hist"><div class="m">${d}<br>${t}</div><div><div class="sub" style="color:var(--ink)"><span class="dot" style="background:${c};display:inline-block;width:8px;height:8px;margin-right:4px"></span>${a}</div>${b ? `<div class="sub">${b}</div>` : ""}</div></div>`).join("")}`, 60), { map: true }),
+  why: [
+    "The same component as the follow-up history (FU1): <b>date on the first line and time on the second</b>, in mono on the left, and the entry on the right with its outcome dot.",
+    "Every entry now shows both date and time, so the left column lines up, which is what looked messy before.",
+    "This is the history style everywhere: FU1, MP10 and the person timeline (PE4).",
+  ],
+});
+delete byId("MP10").question;
+
+/* ---------- WK3 correction (after lock) ---------- */
+{
+  const s = byId("WK3");
+  s.title = "Walk page · routes and activity";
+  s.changes = ["Correction: the round-1 cut meant <b>only the mini map</b>. The route list (with Edit teams) and Team activity stay."];
+  s.why = ["Routes list each team and the doors logged tonight. <b>Edit teams</b> opens the locked check-in and teams screen, so leaders can move people during a live walk.", "Team activity lists everyone's latest doors in the follow-up history component: time on the left; outcome, address and walker on the right.", "No mini map."];
+  s.mock = phone(`<div class="body" style="padding-top:6px"><div class="shead" style="margin-top:0"><div class="H2" style="font-size:19px">Routes</div><div class="m hedge">Edit teams</div></div><div class="grp">${[["#2d5a45","Crockett north","Erica, Maya, Jordan","15 doors"],["#6b91ad","Crockett south","Sam, Ruth","14 doors"],["#b98a3a","Westside loop","Noah, Eli","9 doors"]].map(([c,n,st,d]) => `<div class="r"><span class="sw5" style="background:${c}"></span><div class="g"><div class="t">${n}</div><div class="s">${st}</div></div><span class="ch">${d}</span></div>`).join("")}</div><div class="shead"><div class="H2" style="font-size:19px">Team activity</div><div class="m">38</div></div>${[["10:48 AM","Jordan","dnv","Don't knock · 229 Gaines"],["10:40 AM","Maya","fu","Come back · 215 Gaines"],["10:36 AM","Jordan","no","No answer · 207 Gaines"],["10:32 AM","Maya","talk","Talked · 201 Gaines"]].map(([t,w,c,a]) => `<div class="hist"><div class="m">${t}</div><div><div class="sub" style="color:var(--ink)"><span class="dot" style="background:var(--o-${c});display:inline-block;width:8px;height:8px;margin-right:4px"></span>${a}</div><div class="sub">${w}</div></div></div>`).join("")}</div>`);
+}
+
+/* ---------- final lock ---------- */
+S.forEach((s) => { s.status = "locked"; });
+byId("WM2").changes = ["Your answer: tapping away removes a new pin that has nothing logged. <b>Long-press a house</b> to drop a pin straight to Don't knock."];
+byId("MP10").changes = ["Uses the follow-up history component. This is the history style everywhere (FU1, MP10, PE4)."];
+delete byId("WM2").question;
+
+/* ---------- render ---------- */
+const kindLabel = { new: "New screen", revised: "Redesigned", check: "Check the build" };
+const state = (() => { try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch { return {}; } })();
+state.v ??= {}; state.n ??= {}; state.q ??= {}; state.general ??= ""; state.reopen ??= {};
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} update(); };
+const isReview = (s) => s.status === "review" || state.reopen[s.id];
+const REVIEW = () => S.filter(isReview);
+
+const phoneBlock = (s) => s.mocks ? `<div class="variants">${s.mocks.map(([label, html]) => `<figure>${html}<figcaption>${label}</figcaption></figure>`).join("")}</div>` : s.mock;
+const card = (s) => {
+  const review = isReview(s);
+  return `<article class="scr${s.mocks ? " wide" : ""}" id="${s.id}">
+    <div class="scr-phone">${phoneBlock(s)}</div>
+    <div class="scr-body">
+      <div class="scr-id"><span class="id">${s.id}</span>${review ? `<span class="kind ${s.kind}">${kindLabel[s.kind]}</span>` : `<span class="kind locked">Locked</span>`}</div>
+      <h3>${s.title}</h3>
+      <p class="replaces">${s.replaces}</p>
+      ${s.changes && s.changes.length ? `<div class="changes"><b>Changed after your review</b><ul>${s.changes.map((c) => `<li>${c}</li>`).join("")}</ul></div>` : ""}
+      <ul class="why">${s.why.map((w) => `<li>${w}</li>`).join("")}</ul>
+      ${review ? `${s.question ? `<div class="q"><div class="qt">${s.question.q}</div>${s.question.options.map((o, i) => `<label><input type="radio" name="q-${s.id}" value="${i}"> <span>${o}</span></label>`).join("")}<label><input type="radio" name="q-${s.id}" value="other"> <span>Something else (say in your notes)</span></label></div>` : ""}
+      <div class="verdict" role="group" aria-label="Decision for ${s.id}">
+        <button type="button" data-v="lock" aria-pressed="false">Lock it</button>
+        <button type="button" data-v="change" aria-pressed="false">Change it</button>
+        <button type="button" data-v="cut" aria-pressed="false">Cut it</button>
+      </div>
+      <label class="notes-label" for="n-${s.id}">Your notes on ${s.id}</label>
+      <textarea class="note" id="n-${s.id}" placeholder="What should change? Anything missing?"></textarea>` : `<button type="button" class="reopen" data-reopen="${s.id}">Reopen for changes</button>`}
+    </div>
+  </article>`;
+};
+
+function render() {
+  const host = document.getElementById("screens");
+  host.innerHTML = AREAS.map((a) => {
+    const list = S.filter((s) => s.area === a.key);
+    const open = list.filter(isReview), done = list.filter((s) => !isReview(s));
+    const cut = CUT.filter((c) => byId(c.id) === undefined && c.id.startsWith(a.key === "walks" ? "WK" : "zz"));
+    return `<section class="area" id="area-${a.key}"><p class="kicker">${open.length ? `${open.length} to review · ` : ""}${done.length} locked</p><h2>${a.title}</h2><p>${a.intro}</p>
+      ${open.map(card).join("")}
+      ${done.length ? `<details class="lockedarea"${open.length ? "" : " open"}><summary>Locked in this area (${done.length}): ${done.map((s) => s.id).join(", ")}</summary>${done.map(card).join("")}</details>` : ""}
+      ${cut.length ? `<p class="cutlist">Cut: ${cut.map((c) => `<b>${c.id}</b> ${c.title} (${c.note})`).join("; ")}</p>` : ""}
+    </section>`;
+  }).join("");
+  bind();
+  update();
+}
+
+function bind() {
+  for (const s of REVIEW()) {
+    const el = document.getElementById(s.id);
+    const note = el.querySelector("textarea.note");
+    note.value = state.n[s.id] || "";
+    note.addEventListener("input", () => { state.n[s.id] = note.value; save(); });
+    el.querySelectorAll(".verdict button").forEach((b) => {
+      b.setAttribute("aria-pressed", String(state.v[s.id] === b.dataset.v));
+      b.addEventListener("click", () => {
+        state.v[s.id] = state.v[s.id] === b.dataset.v ? undefined : b.dataset.v;
+        el.querySelectorAll(".verdict button").forEach((x) => x.setAttribute("aria-pressed", String(state.v[s.id] === x.dataset.v)));
+        save();
+      });
+    });
+    el.querySelectorAll(`input[name="q-${s.id}"]`).forEach((r) => {
+      r.checked = state.q[s.id] === r.value;
+      r.addEventListener("change", () => { state.q[s.id] = r.value; save(); });
+    });
+  }
+  document.querySelectorAll("[data-reopen]").forEach((b) => b.addEventListener("click", () => {
+    const id = b.dataset.reopen; state.reopen[id] = true; state.v[id] = "change"; save(); render();
+    document.getElementById(id).scrollIntoView({ block: "start" });
+  }));
+}
+
+const general = document.getElementById("general");
+general.value = state.general;
+general.addEventListener("input", () => { state.general = general.value; save(); });
+
+function promptText() {
+  const R = REVIEW();
+  const line = (s) => `[${s.id}] ${s.title}`;
+  const note = (s) => (state.n[s.id] || "").trim();
+  const by = (v) => R.filter((s) => state.v[s.id] === v);
+  const lockPlain = by("lock").filter((s) => !note(s));
+  const lockNotes = by("lock").filter((s) => note(s));
+  const change = by("change"), cut = by("cut");
+  const notesOnly = R.filter((s) => !state.v[s.id] && note(s));
+  const untouched = R.filter((s) => !state.v[s.id] && !note(s));
+  const out = [];
+  out.push(`NeighborWalk redesign walkthrough: round ${ROUND} feedback`);
+  out.push(`Source: docs/design/redesign-walkthrough.html (round ${ROUND}: ${R.length} to review, ${S.length - R.length} already locked). Keep screen IDs stable.`);
+  const reopened = Object.keys(state.reopen).filter((id) => state.reopen[id]);
+  if (reopened.length) out.push(`REOPENED (were locked): ${reopened.join(", ")}`);
+  out.push("");
+  out.push(`LOCK AS DRAWN (${lockPlain.length}): ${lockPlain.map((s) => s.id).join(", ") || "none"}`);
+  out.push("");
+  out.push(`LOCK AFTER THESE SMALL CHANGES (${lockNotes.length}):`);
+  lockNotes.forEach((s) => out.push(`- ${line(s)}: ${note(s)}`));
+  if (!lockNotes.length) out.push("- none");
+  out.push("");
+  out.push(`CHANGE AND REDRAW NEXT ROUND (${change.length}):`);
+  change.forEach((s) => out.push(`- ${line(s)}: ${note(s) || "(no note; ask me what to change)"}`));
+  if (!change.length) out.push("- none");
+  out.push("");
+  out.push(`CUT: REMOVE THE SCREEN (${cut.length}):`);
+  cut.forEach((s) => out.push(`- ${line(s)}${note(s) ? `: ${note(s)}` : ""}`));
+  if (!cut.length) out.push("- none");
+  if (notesOnly.length) {
+    out.push("");
+    out.push(`NOTES WITHOUT A DECISION (${notesOnly.length}), treat as change requests:`);
+    notesOnly.forEach((s) => out.push(`- ${line(s)}: ${note(s)}`));
+  }
+  const qs = R.filter((s) => s.question);
+  if (qs.length) {
+    out.push("");
+    out.push("OPEN QUESTIONS:");
+    qs.forEach((s) => {
+      const a = state.q[s.id];
+      out.push(`- [${s.id}] ${s.question.q} → ${a === undefined ? "(not answered)" : a === "other" ? "Something else (see notes)" : s.question.options[Number(a)]}`);
+    });
+  }
+  out.push("");
+  out.push(`NOT REVIEWED YET (${untouched.length}): ${untouched.map((s) => s.id).join(", ") || "none"}`);
+  out.push("");
+  out.push("GENERAL NOTES:");
+  out.push(state.general.trim() || "(none)");
+  out.push("");
+  out.push(`INSTRUCTIONS: Apply every note. Lock LOCK AS DRAWN screens and the small-change screens after applying their notes. Redraw every CHANGE screen for round ${ROUND + 1} and remove CUT screens. Keep screens NOT REVIEWED YET unchanged. Don't implement anything until every screen is locked.`);
+  return out.join("\n");
+}
+
+function update() {
+  const R = REVIEW();
+  const reviewed = R.filter((s) => state.v[s.id] || (state.n[s.id] || "").trim()).length;
+  document.getElementById("progBar").style.width = `${R.length ? Math.round(reviewed / R.length * 100) : 100}%`;
+  document.getElementById("progText").textContent = `${reviewed} of ${R.length} reviewed · ${S.length - R.length} locked`;
+  const count = (v) => R.filter((s) => state.v[s.id] === v).length;
+  document.getElementById("finalStat").textContent = `${count("lock")} locked · ${count("change")} to change · ${count("cut")} cut · ${R.length - reviewed} not reviewed`;
+  document.getElementById("prompt").value = promptText();
+  const none = R.length === 0;
+  document.getElementById("final").style.display = none ? "none" : "";
+  document.getElementById("progText").textContent = none ? `All ${S.length} screens locked` : document.getElementById("progText").textContent;
+  document.querySelector(".progress .bar").style.display = none ? "none" : "";
+  document.querySelector('.progress a').style.display = none ? "none" : "";
+}
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  const text = document.getElementById("prompt").value;
+  try { await navigator.clipboard.writeText(text); } catch { const t = document.getElementById("prompt"); t.select(); document.execCommand("copy"); }
+  document.getElementById("copied").textContent = "Copied. Paste it into our chat.";
+  setTimeout(() => { document.getElementById("copied").textContent = ""; }, 3000);
+});
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (!confirm("Clear every decision and note for this round?")) return;
+  state.v = {}; state.n = {}; state.q = {}; state.general = ""; state.reopen = {};
+  general.value = "";
+  save(); render();
+});
+document.getElementById("roundNo").textContent = ROUND;
+document.getElementById("areaNav").innerHTML = AREAS.map((a) => `<a href="#area-${a.key}">${a.nav}</a>`).join("");
+render();
+</script>
+</body>
+</html>
