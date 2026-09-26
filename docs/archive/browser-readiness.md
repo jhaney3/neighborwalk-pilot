@@ -1,5 +1,7 @@
 # Browser release checks
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 These tests use fictional records, a fixed loopback app (`127.0.0.1:3013`) and a fixed loopback Supabase database (`127.0.0.1:54321` / PostgreSQL `54322`). Browser requests to other origins are blocked. There is no environment option for pointing this suite at a real church. Test traces are disabled; local artifacts stay under ignored `work/browser-results`.
 
 ## Run locally
@@ -73,7 +75,7 @@ References: [Next.js native History integration](https://nextjs.org/docs/app/get
 
 ## Still required before release
 
-- Repeat the automated session/account-switch and while-open expiry scenarios on actual supported devices. The local behavior and limitations are documented in [session security](session-security.md).
+- Repeat the automated session/account-switch and while-open expiry scenarios on actual supported devices. The local behavior and limitations are documented in [session security](../session-security.md).
 - Service-worker version transition with pending records and multiple open tabs/windows; storage eviction and backgrounding/screen lock.
 - Live permission conflict/recovery; concurrent area/group archival and person moves with open tasks.
 - iPhone Safari/installed PWA, Android Chrome/installed PWA and proportionate desktop Safari/Firefox checks. Chromium emulation is not a substitute for actual devices.

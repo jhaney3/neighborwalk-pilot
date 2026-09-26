@@ -1,5 +1,7 @@
 # Map-first zones and nightly targets
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 Approved implementation scope, 2026-09-12. This extends the simplicity pass; the existing When → Where → Who → Review structure stays.
 
 ## The simple model

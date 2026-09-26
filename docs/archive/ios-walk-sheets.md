@@ -1,12 +1,14 @@
 # Walk invitation and crew sheets
 
+> Historical implementation and test note. For current iOS release status, see the [iOS release guide](../ios-release.md).
+
 Claude's Contacts-style invited roster and grouped selection lists are preserved. The summary retains zero counts for “here” and “going”; only the declined attendance text uses red. Manage invitations and Manage crews have a minimum 44-point button height.
 
 The Options control is React-managed. Its backdrop exists only while the menu is open; it does not install document-level pointer listeners. Keyboard users can open with Arrow Down, navigate menu items, and dismiss with Escape or Tab. Dismissal returns focus to Options. The shared dialog restores focus to its opener on close.
 
 Verification commands:
 
-- `npm run test:mobile` runs Chromium and WebKit, including repeated Options → dismiss → Invitations → close → Crews → close interactions and small-screen overflow checks.
+- `npm run test:mobile` covers Chromium and WebKit projects, including repeated Options → dismiss → Invitations → close → Crews → close interactions and small-screen overflow checks. WebKit needs its host libraries; they are unavailable on the current Linux machine.
 - `npm run ios:sync` refreshes the bundled app before native checks.
 - Xcode's App scheme includes an XCUITest of that interaction in the installed app. Use a separate simulator and DerivedData directory when another person or agent is building the same project.
 

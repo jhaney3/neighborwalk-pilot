@@ -1,15 +1,17 @@
 # NeighborWalk release gates
 
-**The church-readiness rework is not yet a production-approved release.** This checklist supersedes the old connected-pilot checklist. Use [rework progress](rework-progress.md) for exact commits and test evidence; an implementation or a successful local test does not close a production gate.
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
 
-## What is actually deployed
+At the time of this checklist, the church-readiness rework was not a production-approved release. It superseded an earlier connected-pilot checklist. [Rework progress](rework-progress.md) records the associated commits and test evidence; this archived checklist does not establish today's deployment state.
+
+## Deployment recorded at the time
 
 The pre-rework changes were pushed first and deployed at commit `d94d17c6a24075e6cc657759b676dba988789a97`. Vercel deployment `dpl_C4sMrQ52ewYiZdrAyMF3YCc9qjho` was verified READY. The rework lives on `rework/church-ready-neighborwalk`. No rework production database migration or rework production deployment has been performed.
 
 ## Gate 1 — preserve and rehearse the live church
 
 - [ ] Obtain the existing production database credential through a private operator-owned configuration file. Never paste it into chat, code, app environment variables or shell arguments. Do not reset it incidentally.
-- [ ] Capture a fresh encrypted application-database bundle and verify an isolated restore using [database recovery](database-recovery.md). The earlier partial preserved production export excludes 66,252 reference parcels and is not a complete backup.
+- [ ] Capture a fresh encrypted application-database bundle and verify an isolated restore using [database recovery](../database-recovery.md). The earlier partial preserved production export excludes 66,252 reference parcels and is not a complete backup.
 - [ ] Verify managed recovery/PITR, off-site copies, separate key custody, root/provider secrets, storage objects, recovery time and acceptable data-loss window. A logical database bundle does not cover every hosted setting.
 - [ ] Reconcile the hosted project's historical migrations with the repository. Rehearse the exact additive sequence and field/relationship reconciliation against the fresh copy; do not blindly push or relabel migrations.
 - [ ] Collect/reconcile pending work on existing devices. A server backup cannot preserve unsent phone-only changes. Preserve originals before retiring the legacy writer.
@@ -32,7 +34,7 @@ Public enrollment stays closed until these gates are met. Do not claim legal com
 
 - [ ] Verify production Site URL, exact redirects, invitation fragment handling, account recovery and every offered sign-in provider using separate authorized accounts.
 - [ ] Configure trusted production auth SMTP and verify actual invitation/recovery delivery. Test expired, wrong-account and suspended-membership paths; neither an SDK success nor a local mail inbox proves production delivery.
-- [ ] Activate opt-in reminders only after the provider/domain, signed webhooks, scheduler, opt-out, retry/unknown outcomes and monitoring pass [email reminder activation](email-reminders.md). No real reminder provider or scheduler has been activated by the rework.
+- [ ] Activate opt-in reminders only after the provider/domain, signed webhooks, scheduler, opt-out, retry/unknown outcomes and monitoring pass [email reminder activation](../email-reminders.md). No real reminder provider or scheduler has been activated by the rework.
 - [ ] Configure redacted error/availability monitoring, delivery failures, backup-age alerts, restore-drill scheduling and an operator escalation route. Never log care notes, neighbor details, authorization headers, invitation fragments or raw provider bodies.
 - [ ] Rehearse first-church/first-leader provisioning, access removal, lost-device response, offboarding, privacy requests and recovery with named operators. No broad uploaded-JSON overwrite is available.
 - [ ] Verify platform/runtime settings on the exact release, including Node version, security headers, dependency checks, production secrets and deployment rollback/forward-repair procedure.

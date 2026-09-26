@@ -18,3 +18,20 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Never merge the full web and iOS branches merely to synchronize a feature. Preserve deliberate platform, navigation, styling, authentication, build, and release differences.
 - Do not copy generated output, dependency directories, native build artifacts, or environment files between worktrees.
 - Use the Node version declared in `mise.toml`. Run `npm run lint`, `npm run typecheck`, and relevant tests for changed behavior; run `npm run mobile:build:sample` and relevant mobile browser tests for release-sensitive iOS changes.
+
+## Documentation source of truth
+
+- Start with `README.md` for this iOS worktree. `docs/ios-release.md` is the current iOS release status and checklist; `mobile/README.md` is the local build guide.
+- `docs/archive/` contains dated decisions, test evidence, and earlier web/rework checkpoints. Treat them as history, not as current implementation or release instructions. Verify implementation against source and tests.
+- Keep current release status in `docs/ios-release.md` instead of adding another progress or resume document.
+
+## UI and design workflow
+
+Before changing UI, UX, navigation, UI copy, accessibility, or visual
+styling, read and follow `docs/design/workflow.md`.
+
+Apply its task-size rules: substantial design work requires reference
+research and rendered verification; small fixes use the lighter path.
+
+Report missing tools and unperformed checks honestly.
+Backend-only work does not require this workflow.

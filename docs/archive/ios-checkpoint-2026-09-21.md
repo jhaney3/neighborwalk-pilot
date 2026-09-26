@@ -1,12 +1,14 @@
 # NeighborWalk iOS checkpoint — September 21, 2026
 
-## Active production-readiness pass
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
 
-This file is the living handoff for the current iOS-only completion pass on
-`codex/neighborwalk-ios`. Update it as work is verified; do not mark an external
-release gate complete from source inspection or mocked tests alone.
+## Production-readiness pass recorded at the time
 
-### Current session status
+This file preserves the September 2026 iOS-only completion pass on
+`codex/neighborwalk-ios`. It is no longer the release checklist. Use the
+[current iOS release guide](../ios-release.md) for any new verification or gate update.
+
+### Status recorded in that session
 
 - [x] Confirmed the correct clean worktree and branch; the separate hosted web
   worktree remains untouched.
@@ -43,7 +45,7 @@ language, supply a real reviewer account, validate a signed build on the owner's
 physical devices, or submit an App Store Connect build. Those remain release
 gates even if all source work is complete.
 
-## Where to resume
+## Recorded workspace and branch
 
 Repository: https://github.com/jhaney3/neighborwalk-pilot
 Branch: `codex/neighborwalk-ios`
@@ -52,9 +54,9 @@ Xcode project: `ios/App/App.xcodeproj`
 
 This checkpoint combines Claude's styling and Codex's native app, authentication, invitations, sheet fixes, and assignment-based target selection. Keep this branch separate from `main`; do not merge it simply to submit the iOS app. The bundled app excludes the marketing landing page. Real signed-in builds use the existing shared Supabase backend, so backend changes require compatibility with the live website.
 
-## Start next session
+## Handoff instruction recorded at the time
 
-Ask the agent: “Read docs/RESUME-IOS.md and the linked release guides. Continue toward TestFlight and App Store submission on codex/neighborwalk-ios. Preserve main and the hosted website. Check actual completion of each release requirement before proceeding.”
+The handoff originally directed the next agent to continue toward TestFlight and App Store submission while preserving the separate website. That instruction has been replaced by the current release guide and `AGENTS.md`.
 
 On this machine, open the existing folder and confirm the branch before editing. On another machine, clone the repository and check out `codex/neighborwalk-ios`. Use Node 22, run `npm ci`, restore the approved public mobile environment configuration, then run `npm run ios:release:prepare` and `npm run ios:open`.
 
@@ -66,7 +68,7 @@ Do not put private keys, service-role keys, APNs worker secrets, or Apple
 credentials into Git or the mobile environment. Xcode signing will need the
 authorized Apple account/team. Generated assets can be rebuilt from source.
 
-## Remaining release work
+## Work remaining at this checkpoint
 
 1. Enroll/configure Apple Developer membership and App Store Connect; verify the
    final bundle identifier, team, signing, and capabilities. Add Push
@@ -88,11 +90,11 @@ authorized Apple account/team. Generated assets can be rebuilt from source.
 
 Phone-only SMS sign-in is optional; phone-addressed invitation links can already be accepted using another enabled sign-in provider once the invitation backend is activated.
 
-## Detailed instructions and verification context
+## Links and verification recorded at this checkpoint
 
-- [Release guide](ios-release.md): Xcode steps, privacy, deletion, device checklist, draft listing.
-- [Authentication and invitations](ios-auth-and-invitations.md): Apple/Google setup, migrations, invitation hosting, link behavior.
-- [iOS notifications](IOS-REMOTE-PUSH-RUNBOOK.md): Apple capability, backend secrets,
+- [Release guide](../ios-release.md): Xcode steps, privacy, deletion, device checklist, draft listing.
+- [Authentication and invitations](../ios-auth-and-invitations.md): Apple/Google setup, migrations, invitation hosting, link behavior.
+- [iOS notifications](../IOS-REMOTE-PUSH-RUNBOOK.md): Apple capability, backend secrets,
   Edge Function schedule, build flags, privacy, and signed-device acceptance.
 - [Walk sheets](ios-walk-sheets.md): interaction fixes and tests.
 

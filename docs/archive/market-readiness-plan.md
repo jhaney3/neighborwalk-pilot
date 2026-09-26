@@ -1,5 +1,7 @@
 # NeighborWalk: implementation and approval plan
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 Date: September 9, 2026
 
 Status: proposed; all decisions and implementation packages below await approval

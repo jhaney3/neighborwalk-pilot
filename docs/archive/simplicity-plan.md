@@ -1,5 +1,7 @@
 # NeighborWalk simplicity pass
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 Approved September 12, 2026. Complete this pass before resuming the remaining
 [market-readiness work](market-readiness-plan.md). Preserve the current visual
 identity, existing data, permissions, and release safeguards.

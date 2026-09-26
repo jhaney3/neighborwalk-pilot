@@ -15,7 +15,7 @@ The database remains the authorization boundary. Client validation is additional
 
 ## Verification and limits
 
-Unit tests read 25,000 fictional records under a 137-row simulated server cap and confirm the final empty page. They also exercise four-request concurrency, global row/byte limits, later-page permission failure, malformed/foreign rows, changed revisions/settings, changed identities before/after reading, and stopping other readers after a failure. Existing real local browser workflows use this same pipeline; exact completed results are in the [execution ledger](rework-progress.md).
+Unit tests read 25,000 fictional records under a 137-row simulated server cap and confirm the final empty page. They also exercise four-request concurrency, global row/byte limits, later-page permission failure, malformed/foreign rows, changed revisions/settings, changed identities before/after reading, and stopping other readers after a failure. Existing real local browser workflows use this same pipeline; exact completed results are in the [execution ledger](archive/rework-progress.md).
 
 The 25,000-record test validates complete pagination. It is **not** a mixed production-shaped database benchmark, 50 simultaneous volunteers, lower-end phone responsiveness, or actual field testing. The audit's multi-entity load fixture, supported physical phones and release-specific staging/cutover remain required evidence. Libraries have their own [guide read/write contract](guide-library-reliability.md).
 

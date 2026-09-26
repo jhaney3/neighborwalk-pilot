@@ -1,5 +1,7 @@
 # Audit delivery status
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 Updated September 11, 2026. This is an acceptance map for the [original audit](market-readiness-audit.md) and [approved plan](market-readiness-plan.md), not a replacement scope or a production-readiness certificate. Exact commits, failures and completed checks are in the [execution ledger](rework-progress.md).
 
 ## Bottom line
@@ -78,10 +80,10 @@ Historical guide editions and archived-guide reading are explicit limitations; r
 
 ## Owner inputs and external evidence required
 
-1. An owner-only database connection file outside Git for fresh production capture; provide its **path**, not the password in chat. Format and recovery boundaries: [database recovery](database-recovery.md).
+1. An owner-only database connection file outside Git for fresh production capture; provide its **path**, not the password in chat. Format and recovery boundaries: [database recovery](../database-recovery.md).
 2. Commercial-compatible hosting/staging decision, legal operator/jurisdiction, support address/commitment and approved policies.
 3. Approved sender/domain/provider and production authentication/reminder delivery configuration; no paid activation is implied by the rework request.
 4. Off-site destination/key-custody owner, recovery objectives and coordination with existing devices.
-5. Authorized real-device testers/design partners, repeated pilot use and willingness-to-pay evidence. The prepared [pilot kit](church-pilot-kit.md) is not completed research.
+5. Authorized real-device testers/design partners, repeated pilot use and willingness-to-pay evidence. The prepared [pilot kit](../church-pilot-kit.md) is not completed research.
 
 Use [production release gates](production-checklist.md) for the final decision. Do not open enrollment or call the app production-ready merely because a branch checkpoint passes CI.

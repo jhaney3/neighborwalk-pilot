@@ -1,5 +1,7 @@
 # Step 2 real map data follow-up
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 ## User-reported problem
 
 The sample planner displayed six generated parcel rectangles and intersecting generated streets over a real basemap. Moving to a Lawrence County zone did not load actual inventory. Prior workflow tests used fictional parcels and did not establish a usable real-county planning experience.

@@ -1,5 +1,7 @@
 # Codebase cleanup and review
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 Reviewed 2026-09-08/09 against `0fad092` on branch
 `refactor/simplify-neighborwalk`. The cleanup used source and local-demo checks.
 A subsequent read-only parcel-service check is recorded below. Production
@@ -120,7 +122,7 @@ caching and notifications while it is running.
 ## Follow-up: development isolation
 
 Local development has since been separated from production. See
-[sandbox.md](sandbox.md) for startup, test accounts, the connection guard,
+[sandbox.md](../sandbox.md) for startup, test accounts, the connection guard,
 browser network policy, separate caches, and network restrictions in unit tests.
 Production records were not copied; the sandbox currently uses fictional data
 and synthetic parcel rectangles. The earlier Supabase `.env.local` connection

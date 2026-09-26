@@ -1,5 +1,7 @@
 # Simplicity verification — September 12, 2026
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 Implementation follows the [approved simplicity plan](simplicity-plan.md).
 Three Sol Codex agents handled People, Walks, and the public website in the
 existing herdr session; the coordinator handled Home, navigation, integration,

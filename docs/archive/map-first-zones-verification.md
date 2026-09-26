@@ -1,5 +1,7 @@
 # Map-first zones verification
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 The original scoped local verification below passed, but subsequent user testing exposed generated map placeholders and missing real-county inventory. See the [Step 2 follow-up](map-data-loading-fix.md) for the current fix and outstanding residential-data dependency. The original results are historical workflow evidence, not proof of usable real-county planning or production readiness.
 
 ## Story under test

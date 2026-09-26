@@ -6,7 +6,7 @@ info:
     ARCHIVED DESIGN PROPOSAL, not the current implemented or deployed API.
     Do not generate a production client from these routes or assume they exist.
     Current contracts are the Supabase migration RPCs, lib/database.types.ts,
-    and docs/current-architecture.md; use docs/production-checklist.md for release.
+    and docs/current-architecture.md; use docs/ios-release.md for current iOS gates.
     The historical proposal below described the NeighborWalk PWA. All routes require an authenticated
     church member. The server derives church and user identity from the session;
     clients never choose an authorization scope by sending a church_id.

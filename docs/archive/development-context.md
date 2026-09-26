@@ -1,7 +1,9 @@
 # Development context
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 Repository orientation recorded on 2026-09-08 at commit `0fad092` on `main`.
-Updated during the earlier cleanup on `refactor/simplify-neighborwalk`. These are historical orientation notes, not the current rework contract or an audit of the live deployment. Use [current architecture](current-architecture.md), the [execution ledger](rework-progress.md) and [release gates](production-checklist.md) for current branch behavior and verification.
+Updated during the earlier cleanup on `refactor/simplify-neighborwalk`. These are historical orientation notes, not the current rework contract or an audit of the live deployment. Use [current architecture](../current-architecture.md), the [execution ledger](rework-progress.md) and [release gates](production-checklist.md) for current branch behavior and verification.
 
 ## Development on this device
 
@@ -23,7 +25,7 @@ device storage. The default map style is OpenFreeMap Bright.
 
 Connected local development now uses an isolated Supabase stack. Run
 `mise exec node@22 -- npm run sandbox:start`, then sign in with the test account
-in [sandbox.md](sandbox.md). Production connections are blocked in local and
+in [sandbox.md](../sandbox.md). Production connections are blocked in local and
 preview builds. The original local production settings were saved in ignored
 `.env.before-test-isolation.local`; they are not loaded by Next.js.
 
@@ -95,7 +97,7 @@ The current branch uses schema version 11 for account/church/environment-scoped
 device state and an immutable outbox. Connected reads use bounded relational
 collections; connected field writes use versioned, transactional commands with
 server receipts. Legacy snapshots remain only as preserved migration evidence.
-See [current architecture](current-architecture.md) for the maintained contract.
+See [current architecture](../current-architecture.md) for the maintained contract.
 
 Membership roles are leader and volunteer. SQL policies and guards enforce
 membership and privileged operations. Person visibility includes the creator,

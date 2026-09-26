@@ -1,6 +1,6 @@
-# Current rework architecture
+# Current shared architecture
 
-This describes the checked-in church-readiness branch, **not a completed production cutover**. The [execution ledger](rework-progress.md) records verified commits and migration counts. Production remains the pre-rework checkpoint until the [release gates](production-checklist.md) are fulfilled.
+This describes the checked-in shared data model and application contracts, **not a verified production cutover**. The older [execution ledger](archive/rework-progress.md) preserves rework evidence. Use the [iOS release guide](ios-release.md) for current status and staged backend requirements; confirm the live deployment separately.
 
 ## Authoritative contracts
 

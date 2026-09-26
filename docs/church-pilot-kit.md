@@ -1,6 +1,6 @@
 # Church pilot kit
 
-This is an **operator/leader preparation kit**, not an open enrollment offer or evidence of completed church pilots. Activate it only after the required [release gates](production-checklist.md) are met. The product owner must supply the actual operator, support commitment, policy approvals, hosting/provider decisions and commercial terms.
+This is an **operator/leader preparation kit**, not an open enrollment offer or evidence of completed church pilots. For an iOS pilot, complete the current [iOS release gates](ios-release.md) before activation. The product owner must supply the actual operator, support commitment, policy approvals, hosting/provider decisions and commercial terms.
 
 ## The focused offer
 

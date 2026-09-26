@@ -1,5 +1,7 @@
 # NeighborWalk: product and codebase audit
 
+> Historical record. For the current iOS release status and requirements, see the [iOS release guide](../ios-release.md).
+
 Date: September 9, 2026
 
 Status: review proposal only; no application changes authorized or implemented
@@ -116,7 +118,7 @@ Severity here means product release priority, not a formal CVSS score. “Reprod
 
 ### B01 — Volunteers can rewrite ordinary church-wide history
 
-**Blocker · reproduced.** [Role guard](../supabase/migrations/20260816090000_add_member_invitations_and_role_guards.sql), [latest protected-person migration](../supabase/migrations/20260829231758_protect_discipleship_people.sql), [initial snapshot policies](../supabase/migrations/20260812233000_initial_neighborwalk.sql).
+**Blocker · reproduced.** [Role guard](../../supabase/migrations/20260816090000_add_member_invitations_and_role_guards.sql), [latest protected-person migration](../../supabase/migrations/20260829231758_protect_discipleship_people.sql), [initial snapshot policies](../../supabase/migrations/20260812233000_initial_neighborwalk.sql).
 
 Active membership limits which church snapshot a user can access. The volunteer guard also protects leader-only top-level settings. However, the allowed ordinary-data keys include properties, visits, follow-ups, and audit. A volunteer may replace those arrays wholesale. UI restrictions on deleting locations/history do not constrain direct database requests.
 
@@ -126,7 +128,7 @@ Required direction: authorized server-side domain operations, actor identity der
 
 ### B02 — Do-not-revisit is an outcome, not a durable protection
 
-**Blocker · reproduced and source-confirmed.** [Visit recording](../lib/use-neighborwalk.ts), [retention and summaries](../lib/domain.ts), the historical snapshot-merge side effects (retired during the rework), and [property drawer](../components/PropertyDrawer.tsx).
+**Blocker · reproduced and source-confirmed.** [Visit recording](../../lib/use-neighborwalk.ts), [retention and summaries](../../lib/domain.ts), the historical snapshot-merge side effects (retired during the rework), and [property drawer](../../components/PropertyDrawer.tsx).
 
 The latest visit determines the current property outcome. A later ordinary visit can therefore supersede do-not-visit. The drawer warns about suppression but does not make it an independently enforced state. Bulk clearing removes the underlying records. Client-side task cancellation can only operate on tasks loaded for that user.
 
@@ -134,7 +136,7 @@ Separate durable “do not visit/contact” records from encounter outcomes. Def
 
 ### B03 — Retention drops recently resolved standalone tasks
 
-**Blocker · reproduced.** [enforceRetention](../lib/domain.ts#L543), [load/replace behavior](../lib/storage.ts#L198), [retention action](../lib/use-neighborwalk.ts#L1102).
+**Blocker · reproduced.** [enforceRetention](../../lib/domain.ts#L543), [load/replace behavior](../../lib/storage.ts#L198), [retention action](../../lib/use-neighborwalk.ts#L1102).
 
 A task survives only if it is scheduled or its source visit survives. Completed or cancelled tasks without a source visit are removed regardless of how recently they were resolved. Standalone person follow-ups are a normal feature, so this is not just malformed data.
 
@@ -144,7 +146,7 @@ Use the task's own lifecycle dates for retention; define cancellation timestamps
 
 ### B04 — Administrative merges discard or orphan work
 
-**Blocker · reproduced.** [Territory deletion](../lib/use-neighborwalk.ts), [group deletion](../lib/use-neighborwalk.ts), and the historical snapshot-merge implementation (retired during the rework).
+**Blocker · reproduced.** [Territory deletion](../../lib/use-neighborwalk.ts), [group deletion](../../lib/use-neighborwalk.ts), and the historical snapshot-merge implementation (retired during the rework).
 
 Territory deletion queues both a territory mutation and a whole-data mutation. The latter returns the entire local workspace during a conflict merge, losing concurrent remote changes. This is different from losing the territory transfers themselves: those transfers are preserved by the wholesale replacement.
 
@@ -154,7 +156,7 @@ Make deletion/reassignment atomic domain operations with explicit dependent chan
 
 ### B05 — “Sync now” does not refresh a clean device
 
-**High · source-confirmed.** [runSync](../lib/use-neighborwalk.ts#L1126), [retry effects](../lib/use-neighborwalk.ts#L1223), [settings status](../components/SettingsView.tsx).
+**High · source-confirmed.** [runSync](../../lib/use-neighborwalk.ts#L1126), [retry effects](../../lib/use-neighborwalk.ts#L1223), [settings status](../../components/SettingsView.tsx).
 
 With no pending local mutations, runSync returns success before fetching anything. There is no independent polling or realtime refresh path for the main workspace. Focus/visibility behavior primarily retries pending writes.
 
@@ -174,7 +176,7 @@ Move toward an IndexedDB outbox with immutable command IDs, authenticated transa
 
 ### B07 — Local data is environment-scoped, not account/workspace-scoped
 
-**Privacy blocker until resolved · source-confirmed risk, no cross-account exploit demonstrated.** [Primary cache](../lib/storage.ts#L16), [connection and fallback paths](../lib/use-neighborwalk.ts#L80), [sign-out gate](../components/SupabaseGate.tsx#L65).
+**Privacy blocker until resolved · source-confirmed risk, no cross-account exploit demonstrated.** [Primary cache](../../lib/storage.ts#L16), [connection and fallback paths](../../lib/use-neighborwalk.ts#L80), [sign-out gate](../../components/SupabaseGate.tsx#L65).
 
 The main IndexedDB record uses a single “primary” key. Connection metadata checks the user ID, which is helpful, but the underlying data remains one shared environment-local document. Sign-out does not remove or lock that cached document. Offline fallback restores cached membership/role without a defined expiry.
 
@@ -182,7 +184,7 @@ Partition all protected caches, preferences, queues, and guide data by environme
 
 ### B08 — Success feedback is not tied to durable valid saves
 
-**High · source-confirmed.** [save queue](../lib/use-neighborwalk.ts#L378), [person editor](../components/PeopleView.tsx#L352), [app callbacks](../app/NeighborWalkApp.tsx).
+**High · source-confirmed.** [save queue](../../lib/use-neighborwalk.ts#L378), [person editor](../../components/PeopleView.tsx#L352), [app callbacks](../../app/NeighborWalkApp.tsx).
 
 Many actions return an ID or no result immediately, including paths that decline to change state. Calling UI code closes forms or clears text without waiting for durable persistence. The person editor checks presence of a contact field but does not run complete email validation before inserting into state. Its email input is not being submitted through a native form-validation flow.
 
@@ -192,7 +194,7 @@ Return structured validation/persistence results. Validate before state mutation
 
 ### B09 — Relationships can diverge between people, tasks, and locations
 
-**High · source-confirmed risk.** [Person updates](../lib/use-neighborwalk.ts), [protected task rules](../supabase/migrations/20260830023113_integrate_person_followups.sql), [location deletion](../lib/use-neighborwalk.ts#L509).
+**High · source-confirmed risk.** [Person updates](../../lib/use-neighborwalk.ts), [protected task rules](../../supabase/migrations/20260830023113_integrate_person_followups.sql), [location deletion](../../lib/use-neighborwalk.ts#L509).
 
 A person can move to another property while existing tasks retain the old property ID. Protected task writes require their property to match the person, making later task updates fail. Property IDs in protected tables are text references to records inside JSON, not relational foreign keys. A volunteer's deletion check sees only the protected people available to that volunteer.
 
@@ -200,7 +202,7 @@ Use real relational constraints and deliberate move/merge/archive operations. A 
 
 ### B10 — Reads can silently return incomplete protected data
 
-**High · source-confirmed, production threshold unverified.** Historical unpaginated discipleship loading (retired during the rework), [local API configuration](../supabase/config.toml).
+**High · source-confirmed, production threshold unverified.** Historical unpaginated discipleship loading (retired during the rework), [local API configuration](../../supabase/config.toml).
 
 People, notes, and tasks are each fetched with an unpaginated select-all query. Supabase documents a default maximum of 1,000 returned rows; actual hosted configuration was not inspected. The local sandbox allows 12,000, so local testing can conceal a lower hosted limit. [Supabase query-limit documentation](https://supabase.com/docs/reference/python/select).
 
@@ -208,7 +210,7 @@ Implement paginated, deterministically ordered reads with completeness checks, i
 
 ### B11 — Backup/restore is not a complete, tenant-safe recovery system
 
-**High · source-confirmed.** [export/import format](../lib/storage.ts#L216), [import orchestration](../lib/use-neighborwalk.ts#L1049), [creator enforcement](../supabase/migrations/20260830164500_enforce_person_creator_ownership.sql).
+**High · source-confirmed.** [export/import format](../../lib/storage.ts#L216), [import orchestration](../../lib/use-neighborwalk.ts#L1049), [creator enforcement](../../supabase/migrations/20260830164500_enforce_person_creator_ownership.sql).
 
 The JSON export includes the app document, not the separately stored guide library, favorites, and group defaults. Import replaces local persistence before a connected-workspace compatibility review and queues a whole-data replacement. It lacks a tenant-identity preview, dependency reconciliation, and comprehensive dry run. New protected-person inserts enforce the importing user as creator/initial owner, so this is not a faithful historical-identity restore mechanism.
 
@@ -216,7 +218,7 @@ Treat portable export, same-church restore, and migration to a different church 
 
 ### B12 — Corrupt or future local state can silently become sample data
 
-**High · source-confirmed.** [loadNeighborWalkData](../lib/storage.ts#L185).
+**High · source-confirmed.** [loadNeighborWalkData](../../lib/storage.ts#L185).
 
 Invalid stored data is copied under an “invalid_…” recovery key, then the primary record is replaced with fictional seed data. Preserving the original is good, but there is no equivalent visible quarantine/recovery workflow. A schema mismatch or corruption can therefore look like a reset or wrong workspace.
 
@@ -224,7 +226,7 @@ Show a recoverable “data needs repair/newer app” state. Do not replace a chu
 
 ### B13 — Dependency advisories require a deliberate patch pass
 
-**Release gate · live advisory match; exploitation not demonstrated.** [Package manifest](../package.json), [lockfile](../package-lock.json).
+**Release gate · live advisory match; exploitation not demonstrated.** [Package manifest](../../package.json), [lockfile](../../package-lock.json).
 
 The production dependency audit flagged:
 
@@ -241,7 +243,7 @@ Do not run a blind force-upgrade across the repository. Preserve the current bas
 
 ### B14 — Production hardening and operational evidence are incomplete
 
-**High · source-confirmed omissions; hosted settings unverified.** [Next configuration](../next.config.ts), [scripture endpoint](../app/api/scripture/route.ts), [production checklist](production-checklist.md).
+**High · source-confirmed omissions; hosted settings unverified.** [Next configuration](../../next.config.ts), [scripture endpoint](../../app/api/scripture/route.ts), [production checklist](production-checklist.md).
 
 The application configuration adds a sandbox CSP but returns no application-defined production security headers. Hosting may supply some headers; that was not verified. The scripture endpoint has input validation, a server-only key, and a timeout, but no application authentication or rate limiting.
 
@@ -279,7 +281,7 @@ Document parcel provenance, permitted use, update cadence, deletion/correction h
 | I14 | Church profile in JSON plus relational church table | Profile edits update the snapshot, not all authoritative church metadata. | One canonical church profile with derived presentation state |
 | I15 | Detailed SQL/OpenAPI design documents | Proposed normalized schema and API are not the deployed implementation; routes such as the proposed API do not exist. | Mark design-only clearly; replace with one approved architecture and generated/verified contracts |
 
-Sources: [app shell](../app/NeighborWalkApp.tsx), [main hook](../lib/use-neighborwalk.ts), [people](../components/PeopleView.tsx), [follow-ups](../components/FollowUpsView.tsx), [guide library](../lib/conversation-guides.ts), [coverage](../lib/territory-coverage.ts), [parcel hook](../lib/use-territory-parcels.ts), [future database design](database/postgres.sql), [future API design](api/openapi.yaml).
+Sources: [app shell](../../app/NeighborWalkApp.tsx), [main hook](../../lib/use-neighborwalk.ts), [people](../../components/PeopleView.tsx), [follow-ups](../../components/FollowUpsView.tsx), [guide library](../../lib/conversation-guides.ts), [coverage](../../lib/territory-coverage.ts), [parcel hook](../../lib/use-territory-parcels.ts), [future database design](../database/postgres.sql), [future API design](../api/openapi.yaml).
 
 ## 6. What churches actually need from the workflow
 
