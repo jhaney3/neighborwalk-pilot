@@ -156,7 +156,7 @@ async function signIn(page: Page) {
   await page.getByRole("textbox", { name: "Email address" }).fill("leader@neighborwalk.test");
   await page.getByRole("textbox", { name: "Password", exact: true }).fill("NeighborWalk-test-123!");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible({ timeout: 60_000 });
 }
 
 async function queued(page: Page) {
@@ -240,10 +240,6 @@ test("a connected leader draws a Giles parent, readies one whole-zone target, an
     await page.goto(origin + "/app/outreach?plan=1");
     const dialog = page.getByRole("dialog", { name: "Plan a walk" });
     await expect(dialog).toBeVisible();
-    await dialog.getByRole("textbox", { name: "Walk name", exact: true }).fill(walkName);
-    await dialog.getByRole("button", { name: "Continue", exact: true }).click();
-
-    await dialog.getByRole("combobox", { name: "Neighborhood", exact: true }).selectOption("");
     await dialog.getByRole("button", { name: "New neighborhood", exact: true }).click();
     const creator = dialog.locator(".walk-parent-zone-creator");
     await creator.getByRole("textbox", { name: "Neighborhood name", exact: true }).fill(zoneName);
@@ -282,14 +278,16 @@ test("a connected leader draws a Giles parent, readies one whole-zone target, an
     await wholeZone.click();
     await expect(planner.locator(".walk-target-list li")).toHaveCount(1);
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+    await dialog.getByRole("textbox", { name: "Meeting point", exact: true }).fill("Fictional Giles meeting point");
+    await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+    await dialog.getByRole("textbox", { name: "Walk name", exact: true }).fill(walkName);
 
     await expect(dialog.getByRole("heading", { name: "Who’s coming?", exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "Invite Test Volunteer", exact: true }).click();
-    await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+    await dialog.locator(".walk-extra-preparation > summary").filter({ hasText: "Details for volunteers" }).click();
     await dialog.getByRole("textbox", { name: "Purpose", exact: true }).fill("Fictional connected map-first verification.");
-    await dialog.getByRole("textbox", { name: "Meeting point", exact: true }).fill("Fictional Giles meeting point");
     await dialog.getByRole("textbox", { name: "Leader contact", exact: true }).fill("Test Leader");
-    await dialog.getByRole("button", { name: "Save & mark ready", exact: true }).click();
+    await dialog.getByRole("button", { name: "Send invites", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
 

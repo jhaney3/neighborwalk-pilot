@@ -190,7 +190,7 @@
   .followup-actions.single .button { width: 100%; }
   .followup-actions-secondary, .followup-actions-outcome { width: 100%; flex-wrap: wrap; }
   .followup-actions-secondary .button, .followup-actions-outcome .button { flex: 1; }
-  .segmented-control { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
+  .segmented-control { display: grid; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); overflow: visible; }
   .segmented-control button { min-width: 0; padding-inline: 6px; }
   .inline-date-editor { width: 100%; grid-template-columns: minmax(0, 1fr) auto; }
   .inline-date-editor input { width: 100%; min-width: 0; grid-column: 1 / -1; }

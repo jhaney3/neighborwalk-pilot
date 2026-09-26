@@ -6,7 +6,7 @@ import {
   neighborWalkDataSchema,
   type NeighborWalkData,
 } from "./domain";
-import { createSeedData } from "./seed";
+import { createLiveSample, createSeedData } from "./seed";
 import { calendarDate } from "./calendar";
 import { storageKey } from "./environment";
 import { authoredRecovery } from "./device-recovery";
@@ -264,7 +264,7 @@ export async function loadNeighborWalkData(): Promise<NeighborWalkData> {
   const database = await getDatabase();
   const stored = await database.get(STORE, DATA_KEY);
   if (stored) return parseStoredData(stored, DATA_KEY);
-  const seeded = createSeedData();
+  const seeded = createLiveSample();
   await database.put(STORE, seeded, DATA_KEY);
   return seeded;
 }

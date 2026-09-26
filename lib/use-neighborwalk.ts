@@ -483,6 +483,7 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
         createdAt: now,
         updatedAt: now,
         source: input.coordinates ? "map" : "manual",
+        createdByVolunteerId: actorIdRef.current ?? current.preferences.activeVolunteerId,
       };
       return addAudit(
         { ...current, properties: [...current.properties, property] },
@@ -521,13 +522,22 @@ export function useNeighborWalk(supabaseUser?: SupabaseUser | null) {
     });
   }, [updateData]);
 
-  const updateProperty = useCallback((propertyId: string, patch: Pick<Property, "address" | "unit">) => {
-    return updateData((current) => addAudit({
-      ...current,
-      properties: current.properties.map((property) => property.id === propertyId
-        ? { ...property, address: patch.address.trim(), unit: patch.unit?.trim() || undefined, updatedAt: new Date().toISOString() }
-        : property),
-    }, "property", propertyId, "property.updated", "Location details updated"));
+  const updateProperty = useCallback((propertyId: string, patch: Partial<Pick<Property, "address" | "unit" | "coordinates">>) => {
+    return updateData((current) => {
+      const existing = current.properties.find((property) => property.id === propertyId);
+      if (!existing) throw new Error("This location is no longer available.");
+      const address = patch.address === undefined ? existing.address : patch.address.trim();
+      if (address.length < 3) throw new Error("Enter a useful address or location description.");
+      // A moved pin no longer sits on its old building outline.
+      const moved = patch.coordinates !== undefined;
+      return addAudit({
+        ...current,
+        properties: current.properties.map((property) => property.id === propertyId
+          ? { ...property, address, unit: patch.unit === undefined ? property.unit : patch.unit.trim() || undefined,
+            coordinates: patch.coordinates ?? property.coordinates, buildingGeometry: moved ? undefined : property.buildingGeometry, updatedAt: new Date().toISOString() }
+          : property),
+      }, "property", propertyId, moved ? "property.moved" : "property.updated", moved ? "Pin moved" : "Location details updated");
+    });
   }, [updateData]);
 
   const deleteProperty = useCallback((propertyId: string) => {

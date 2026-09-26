@@ -4,7 +4,7 @@ import { churchDateTimeToIso, localDateTimeValue } from "../lib/calendar";
 
 describe("addressable church workflows", () => {
   it("round trips stable routes and fieldwork context", () => {
-    for (const view of ["today", "outreach", "people", "followups", "map", "guide", "more", "leader", "settings"] as const) {
+    for (const view of ["today", "outreach", "people", "followups", "map", "more", "leader", "settings"] as const) {
       expect(appRoute(appHref(view)).view).toBe(view);
     }
     expect(appRoute("/app/people/person_123")).toEqual({ view: "people", id: "person_123" });

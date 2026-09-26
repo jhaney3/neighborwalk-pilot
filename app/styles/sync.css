@@ -11,7 +11,7 @@
 .device-status-card.attention .device-status-icon { color: var(--orange-text); background: var(--orange-soft); }
 .device-status-card.offline .device-status-icon { color: var(--label-2); background: var(--gray-5); }
 .device-status-card header h2,.device-status-card header span { margin: 0; }
-.device-status-card header h2 { font-family: var(--font-display); font-size: var(--fs-title2); line-height: var(--lh-title2); font-weight: 600; letter-spacing: 0; }
+.device-status-card header h2 { font-family: var(--font-display); font-size: var(--fs-title2); line-height: var(--lh-title2); font-weight: 800; letter-spacing: 0; }
 .device-status-card header div > span { display: block; max-width: 650px; margin-top: 7px; color: var(--label-2); font-size: var(--text-control); line-height: 1.5; }
 .device-status-actions,.device-panel-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .device-status-actions { padding: 16px 25px; }

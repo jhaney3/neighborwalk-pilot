@@ -27,11 +27,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## UI and design workflow
 
-Before changing UI, UX, navigation, UI copy, accessibility, or visual
-styling, read and follow `docs/design/workflow.md`.
+Before changing UI, UX, navigation, UI copy, accessibility, or visual styling, read `DESIGN.md` in the repository root. It points to the locked iOS redesign (`docs/design/redesign-walkthrough.html`), the build plan, and the final check that every screen must pass. Follow the general process in `docs/design/workflow.md`, including its task-size rules: substantial design work requires reference research and rendered verification; small fixes use the lighter path.
 
-Apply its task-size rules: substantial design work requires reference
-research and rendered verification; small fixes use the lighter path.
-
-Report missing tools and unperformed checks honestly.
-Backend-only work does not require this workflow.
+Report missing tools and unperformed checks honestly. Backend-only work does not require this workflow.

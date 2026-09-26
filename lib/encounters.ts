@@ -20,6 +20,9 @@ export type EncounterInput = {
   occurredAt?: string;
   /** Saved as a private prayer note on a linked person, or with the shared note when anonymous. */
   prayerRequest?: string;
+  /** How and by whom a follow-up happens, when the logger chose them. */
+  followUpChannel?: "visit" | "call" | "text" | "other";
+  followUpOwnerId?: string;
 };
 
 /** Anonymous community encounters are real encounters, not fake households or
@@ -65,8 +68,8 @@ export function recordEncounter(current: NeighborWalkData, input: EncounterInput
   let tasks = current.followUps;
   if (input.outcome === "follow_up") tasks = [...tasks, createFollowUp({ id: createId("followup"), churchId: current.church.id,
     propertyId: person?.propertyId ?? property?.id, residentId: person?.id, sourceVisitId: visitId, eventId: input.eventId, assignedTeamId: input.assignedTeamId,
-    assignedVolunteerId: person?.assignedVolunteerId ?? actorId, dueAt: due, note,
-    channel: property ? "visit" : person?.preferredContact === "none" || !person ? "other" : person.preferredContact,
+    assignedVolunteerId: input.followUpOwnerId ?? person?.assignedVolunteerId ?? actorId, dueAt: due, note,
+    channel: input.followUpChannel ?? (property ? "visit" : person?.preferredContact === "none" || !person ? "other" : person.preferredContact),
   }, actorId, timestamp)];
   if (input.outcome === "do_not_visit") tasks = tasks.map((t) => t.propertyId === property?.id && t.status === "scheduled"
     ? changeFollowUp(t, { action: "cancelled", note: "Location marked do not revisit." }, actorId, timestamp) : t);

@@ -42,11 +42,13 @@ async function signIn(page: Page, account = "leader") {
   await page.getByRole("textbox", { name: "Email address" }).fill(account + "@neighborwalk.test");
   await page.getByRole("textbox", { name: "Password", exact: true }).fill("NeighborWalk-test-123!");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
 }
 async function encounter(page: Page, note: string) {
   await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   const dialog = page.getByRole("dialog");
+  await dialog.getByRole("group", { name: "What happened" }).getByRole("button", { name: /^Talked/ }).click();
+  await dialog.getByRole("button", { name: "Add a note", exact: true }).click();
   await dialog.getByRole("textbox", { name: "Note (optional)" }).fill(note);
   await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -152,9 +154,10 @@ test("a reviewed encounter correction survives a lost response and preserves the
   await page.goto(origin + "/app/today");
   await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   dialog = page.getByRole("dialog");
-  await dialog.getByRole("group", { name: "What happened" }).getByRole("button", { name: "Wants a follow-up", exact: true }).click();
   await dialog.getByRole("combobox", { name: "Find or add a person" }).fill(label);
   await dialog.getByRole("option").getByRole("button", { name: label, exact: true }).click();
+  await dialog.getByRole("group", { name: "What happened" }).getByRole("button", { name: /^Follow up/ }).click();
+  await dialog.getByRole("button", { name: "Add a note", exact: true }).click();
   await dialog.getByRole("textbox", { name: "Note (optional)" }).fill("Fictional promised next step survives correction");
   await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -445,14 +448,14 @@ test("cold offline guide, 100 durable encounters, close/reopen and exactly-once 
   // that advisory signal (also unreliable behind a real captive portal).
   expect(await offline.evaluate(() => fetch("/manifest.webmanifest?network-probe=offline", { cache: "no-store" }).then(() => "reachable", () => "blocked"))).toBe("blocked");
   await setDisconnected(context, true);
-  await offline.getByRole("button", { name: "Home", exact: true }).click();
+  await offline.getByRole("button", { name: "Today", exact: true }).click();
   for (let i = 0; i < 100; i++) await encounter(offline, prefix + " offline /" + i);
   expect(await queued(offline)).toBe(100);
   expect(recorded(prefix + " offline")).toBe(0);
   await offline.close();
   const reopened = await context.newPage();
   await reopened.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
-  await expect(reopened.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
+  await expect(reopened.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
   expect(await queued(reopened)).toBe(100);
   await setDisconnected(context, false);
   await expect.poll(() => queued(reopened), { timeout: 120_000 }).toBe(0);
@@ -521,6 +524,8 @@ test("quota failure retains the form and never claims a persisted encounter", as
   await page.evaluate(() => sessionStorage.setItem("fictional-quota-test", "on"));
   await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   const dialog = page.getByRole("dialog");
+  await dialog.getByRole("group", { name: "What happened" }).getByRole("button", { name: /^Talked/ }).click();
+  await dialog.getByRole("button", { name: "Add a note", exact: true }).click();
   await dialog.getByRole("textbox", { name: "Note (optional)" }).fill(prefix + " quota /one");
   await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
@@ -549,7 +554,7 @@ test("expired access token can explicitly reopen a recently prepared offline wor
   await reopened.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
   await expect(reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toBeVisible();
   await reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true }).click();
-  await expect(reopened.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
+  await expect(reopened.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
   await setDisconnected(context, true);
   await encounter(reopened, prefix + " expired /one");
   expect(await queued(reopened)).toBe(1);
@@ -589,7 +594,7 @@ test("actual session revocation and account switching preserve authored work wit
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("neighborwalk-supabase-workspace:sandbox:http://127.0.0.1:54321")!).verifiedAt)).toBe("");
     await setDisconnected(context, true); await page.reload();
     await expect(page.getByRole("heading", { name: "We couldn’t open your church" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Today", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
     expect(await queued(page)).toBe(1);
     await setDisconnected(context, false);
@@ -627,11 +632,11 @@ test("an already open offline workspace locks after its authorization window wit
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page.getByRole("heading", { name: "We couldn’t open your church" })).toBeVisible();
   await expect(page.getByText(/This device needs an online membership check/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Today", exact: true })).toHaveCount(0);
   expect(await queued(page)).toBe(1); expect(recorded(prefix + " window")).toBe(0);
   await page.clock.setFixedTime(new Date());
   await setDisconnected(context, false); await page.reload();
-  await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
   await expect.poll(() => queued(page), { timeout: 60_000 }).toBe(0);
   expect(recorded(prefix + " window")).toBe(1);
 });
@@ -665,7 +670,7 @@ test(`known ${endpoint} access denial locks the cache and prevents a later offli
   const reopened = await context.newPage(); await reopened.goto(origin + "/app/today", { waitUntil: "domcontentloaded" });
   await expect(reopened.getByRole("heading", { name: "Check your connection or invitation" })).toBeVisible({ timeout: 45_000 });
   await expect(reopened.getByRole("button", { name: "Open prepared offline workspace", exact: true })).toHaveCount(0);
-  await expect(reopened.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toHaveCount(0);
+  await expect(reopened.getByRole("heading", { name: "Today", exact: true })).toHaveCount(0);
 });
 }
 
@@ -698,7 +703,7 @@ test("a second tab cannot overwrite unsent work and can reopen after the first c
   expect(await queued(second)).toBe(1);
   expect(recorded(prefix + " tabs")).toBe(0);
   await page.close(); await second.reload();
-  await expect(second.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
+  await expect(second.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
   expect(await queued(second)).toBe(1);
   expect(recorded(prefix + " tabs")).toBe(0);
   await setDisconnected(context, true);
@@ -714,7 +719,7 @@ test("a reassigned next step requires the responsible volunteer to accept before
   await isolate(context); await signIn(page);
   await page.getByRole("button", { name: "Log a conversation", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("group", { name: "What happened" }).getByRole("button", { name: "Wants a follow-up", exact: true }).click();
+  await dialog.getByRole("group", { name: "What happened" }).getByRole("button", { name: /^Follow up/ }).click();
   await dialog.getByRole("textbox", { name: "What should happen next?" }).fill(prefix + " task /one");
   await dialog.getByRole("button", { name: "Save conversation", exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -724,29 +729,28 @@ test("a reassigned next step requires the responsible volunteer to accept before
   const id = taskState().id;
   await page.goto(origin + "/app/followups/" + id);
   await expect(page.getByRole("heading", { name: "Name not known", exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "Everyone", exact: true }).click();
-  await expect(page).toHaveURL(origin + "/app/people?view=all");
+  await page.getByRole("navigation", { name: "Main sections" }).getByRole("button", { name: /^People/ }).click();
+  await expect(page).toHaveURL(origin + "/app/people");
   await page.reload();
   await expect(page.getByRole("tab", { name: "Everyone", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.goBack();
   await expect(page).toHaveURL(origin + "/app/followups/" + id);
-  await page.getByText("More actions", { exact: true }).click();
-  await page.getByRole("combobox", { name: "Owner" }).selectOption({ label: "Test Volunteer" });
+  await page.getByRole("button", { name: "Hand off", exact: true }).click();
+  await page.getByRole("button", { name: "Hand off to Test Volunteer", exact: true }).click();
   await expect.poll(() => taskState().acceptance).toBe("pending");
   const other = await browser.newContext();
   try {
     await isolate(other);
     const volunteer = await other.newPage(); await signIn(volunteer, "volunteer");
     await volunteer.goto(origin + "/app/followups/" + id);
-    // A handed-over follow-up can be declined; the owner's own "Mark done" accepts it.
-    const cardActions = volunteer.locator(".followup-actions-outcome");
-    await volunteer.getByRole("button", { name: "Decline", exact: true }).click();
+    // A handed-over follow-up can be given back; the owner's own check-in accepts it.
+    await volunteer.getByRole("button", { name: "Give it back", exact: true }).click();
     await expect.poll(() => taskState().acceptance).toBe("declined");
-    await cardActions.getByRole("button", { name: "Mark done", exact: true }).click();
-    await volunteer.getByRole("dialog").getByRole("textbox", { name: "What happened? (optional)" }).fill("Fictional follow-through completed.");
-    await volunteer.getByRole("dialog").getByRole("button", { name: "Mark done", exact: true }).click();
+    await volunteer.getByRole("button", { name: "Log check-in", exact: true }).click();
+    await volunteer.getByRole("dialog").getByRole("radio", { name: "Talked with them" }).click();
+    await volunteer.getByRole("dialog").getByRole("button", { name: "Save", exact: true }).click();
     await expect.poll(() => taskState().status).toBe("completed");
     expect(taskState().acceptance).toBe("accepted");
-    await expect(cardActions.getByRole("button", { name: "Mark done", exact: true })).toHaveCount(0);
+    await expect(volunteer.getByRole("button", { name: "Log check-in", exact: true })).toHaveCount(0);
   } finally { await other.close(); }
 });

@@ -10,6 +10,7 @@ import { contactRestricted } from "../lib/contact-restrictions";
 import { indexCurrentRecords } from "../lib/record-aliases";
 import { followUpContactCue, followUpDateBlock, groupFollowUpsByPerson, type FollowUpContactCue } from "../lib/people-follow-ups";
 import { EmptyState, Modal, ViewHeading } from "./ui";
+import { FollowUpDetail, FollowUpsList } from "./FollowUpsTab";
 
 export type FollowUpsViewProps = {
   data: NeighborWalkData; canManage: boolean; activeVolunteerId: string;
@@ -25,6 +26,8 @@ export type FollowUpsViewProps = {
   onAccept?: (id: string, acceptance: "accepted" | "declined") => Promise<unknown>;
   embedded?: boolean;
   profileMode?: boolean;
+  /** The tab's top bar: your avatar opens More. */
+  profileName?: string; attention?: boolean; onProfile?: () => void;
 };
 type Filter = "open" | "overdue" | "today" | "upcoming" | "completed" | "cancelled";
 
@@ -36,7 +39,15 @@ const scopeLabels: Record<FollowUpScope, string> = {
   declined: "Declined",
 };
 
+/** The Follow-ups tab uses the redesigned list and detail page; a person's
+ * profile keeps its embedded card list. See docs/design/decisions.md. */
 export function FollowUpsView(props: FollowUpsViewProps) {
+  if (props.profileMode) return <FollowUpCards {...props} />;
+  if (props.focusedTaskId) return <FollowUpDetail {...props} taskId={props.focusedTaskId} />;
+  return <FollowUpsList {...props} />;
+}
+
+function FollowUpCards(props: FollowUpsViewProps) {
   const { data, canManage, activeVolunteerId, initialPersonId, onClearPersonFocus } = props;
   const [filter, setFilter] = useState<Filter>("open");
   const [owner, setOwner] = useState<FollowUpScope>(props.initialScope ?? "mine");
@@ -232,7 +243,7 @@ function FollowUpAssignment({ task, data, ownerId = "", busy, helpId, personTask
   </label>;
 }
 
-function FollowUpContactAction({ cue, personName, phone, email, locationId, restricted, onOpenProperty }: {
+export function FollowUpContactAction({ cue, personName, phone, email, locationId, restricted, onOpenProperty }: {
   cue: FollowUpContactCue;
   personName?: string;
   phone?: string;
@@ -254,7 +265,7 @@ function FollowUpContactAction({ cue, personName, phone, email, locationId, rest
   return <span className={`followup-contact-action unavailable${restricted ? " restricted" : ""}`} aria-label={`${cue.label}${cue.detail ? `: ${cue.detail}` : ""}.${unavailable}`}>{content}</span>;
 }
 
-function TaskEditor({ task, mode, data, onComplete, onReschedule, onCancel, onClose }: FollowUpsViewProps & { task: FollowUp; mode: "complete" | "reschedule" | "cancel"; onClose: () => void }) {
+export function TaskEditor({ task, mode, data, onComplete, onReschedule, onCancel, onClose }: FollowUpsViewProps & { task: FollowUp; mode: "complete" | "reschedule" | "cancel"; onClose: () => void }) {
   const [note, setNote] = useState("");
   const [date, setDate] = useState(dateInputValue(task.dueAt));
   const [another, setAnother] = useState(false);

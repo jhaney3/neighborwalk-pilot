@@ -1,114 +1,105 @@
 "use client";
 
-import { Check, UserPlus, Users, X } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { NeighborWalkData } from "../lib/domain";
+import { Check, ChevronLeft } from "lucide-react";
+import { useId, useMemo, useState } from "react";
+import { autoPair } from "../lib/auto-pair";
+import type { NeighborWalkData, OutreachEvent } from "../lib/domain";
+import { useAsyncAction } from "../lib/use-async-action";
+import { targetCrewMemberIds } from "../lib/walk-crews";
+import type { WalkTarget } from "../lib/walk-targets";
+import { selectionTick } from "../mobile/haptics";
+import { Sheet } from "./Sheet";
+import { initials } from "./ui";
 
-export type WalkCrewTarget = { id: string; name: string; color: string; propertyCount: number };
 export type WalkCrews = Record<string, string[]>;
 
-type Props = {
+/** Check-in (BD9): tap who's here, then pair them onto routes. Auto-pair keeps
+ * saved teams together; tapping a route moves people onto it. */
+export function CheckInScreen({ data, outing, targets, onClose, onSave, onStart }: {
   data: NeighborWalkData;
-  targets: WalkCrewTarget[];
-  crews: WalkCrews;
-  onChange: (crews: WalkCrews) => void;
-  initialAttendingIds?: string[];
-  onAttendanceChange?: (memberIds: string[]) => void;
-};
-
-export function WalkCrewBoard({ data, targets, crews, onChange, initialAttendingIds, onAttendanceChange }: Props) {
-  const activeVolunteers = useMemo(() => data.volunteers.filter((volunteer) => volunteer.active), [data.volunteers]);
-  const initialCrewMembers = useMemo(() => [...new Set(Object.values(crews).flat())], [crews]);
-  const [attendingIds, setAttendingIds] = useState<string[]>(() => [...new Set([...(initialAttendingIds ?? []), ...initialCrewMembers])]);
+  outing: OutreachEvent;
+  targets: WalkTarget[];
+  onClose: () => void;
+  onSave: (eventId: string, crews: WalkCrews, attendingIds: string[]) => Promise<void>;
+  /** Present while the walk is ready: save teams, then start the walk. */
+  onStart?: () => Promise<unknown>;
+}) {
+  const [crews, setCrews] = useState<WalkCrews>(() => Object.fromEntries(targets.map((target) => [target.id, targetCrewMemberIds(data, target.id)])));
+  const [attendingIds, setAttendingIds] = useState<string[]>(() => [...new Set([
+    ...data.outingParticipants.filter((participant) => participant.eventId === outing.id && participant.status === "checked_in").map((participant) => participant.volunteerId),
+    ...targets.flatMap((target) => targetCrewMemberIds(data, target.id)),
+  ])]);
+  const [editing, setEditing] = useState<string | null>(null);
+  const action = useAsyncAction();
+  const titleId = useId();
+  const people = useMemo(() => data.volunteers.filter((volunteer) => volunteer.active), [data.volunteers]);
   const names = useMemo(() => new Map(data.volunteers.map((volunteer) => [volunteer.id, volunteer.name])), [data.volunteers]);
-  const targetByMember = useMemo(() => {
-    const result = new Map<string, string>();
-    for (const target of targets) for (const memberId of crews[target.id] ?? []) result.set(memberId, target.id);
-    return result;
-  }, [crews, targets]);
-  const assignedCount = attendingIds.filter((id) => targetByMember.has(id)).length;
-  const waitingIds = attendingIds.filter((id) => !targetByMember.has(id));
-  const targetCrewTeamIds = new Set((data.assignments ?? []).filter((assignment) => assignment.targetId && assignment.assignedTeamId).map((assignment) => assignment.assignedTeamId));
-  const savedGroups = data.teams.filter((team) => team.status !== "finished" && !targetCrewTeamIds.has(team.id)
-    && team.memberIds.some((id) => activeVolunteers.some((volunteer) => volunteer.id === id)));
+  const invited = new Set(data.outingParticipants.filter((participant) => participant.eventId === outing.id && participant.status !== "not_going").map((participant) => participant.volunteerId));
+  const faces = [...people].filter((person) => invited.size === 0 || invited.has(person.id) || attendingIds.includes(person.id)).sort((a, b) => a.name.localeCompare(b.name));
+  const crewTeamIds = new Set((data.assignments ?? []).filter((assignment) => assignment.targetId && assignment.assignedTeamId).map((assignment) => assignment.assignedTeamId));
+  const savedTeams = data.teams.filter((team) => team.status !== "finished" && !crewTeamIds.has(team.id) && team.memberIds.some((id) => people.some((person) => person.id === id)));
+  const withoutEveryCrew = (memberId: string, next: WalkCrews = crews) => Object.fromEntries(targets.map((target) => [target.id, (next[target.id] ?? []).filter((id) => id !== memberId)]));
+  const toggleHere = (memberId: string) => {
+    selectionTick();
+    if (attendingIds.includes(memberId)) { setAttendingIds(attendingIds.filter((id) => id !== memberId)); setCrews(withoutEveryCrew(memberId)); }
+    else setAttendingIds([...attendingIds, memberId]);
+  };
+  const toggleOnRoute = (targetId: string, memberId: string) => {
+    selectionTick();
+    if (!attendingIds.includes(memberId)) setAttendingIds([...attendingIds, memberId]);
+    const was = (crews[targetId] ?? []).includes(memberId);
+    const next = withoutEveryCrew(memberId);
+    if (!was) next[targetId] = [...(next[targetId] ?? []), memberId];
+    setCrews(next);
+  };
+  const staffed = targets.filter((target) => (crews[target.id] ?? []).length).length;
+  const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: outing.timezone ?? data.church.timezone }).format(new Date());
+  const save = () => void action.run(() => onSave(outing.id, crews, attendingIds), onClose);
+  const start = () => void action.run(async () => { await onSave(outing.id, crews, attendingIds); await onStart!(); }, onClose);
+  const editingTarget = targets.find((target) => target.id === editing);
 
-  const removeFromEveryCrew = (memberId: string, next: WalkCrews = crews) => Object.fromEntries(
-    targets.map((target) => [target.id, (next[target.id] ?? []).filter((id) => id !== memberId)]),
-  );
-  const setAttendance = (next: string[]) => {
-    setAttendingIds(next);
-    onAttendanceChange?.(next);
-  };
-  const setPresent = (memberId: string) => {
-    if (attendingIds.includes(memberId)) {
-      setAttendance(attendingIds.filter((id) => id !== memberId));
-      onChange(removeFromEveryCrew(memberId));
-    } else {
-      setAttendance([...attendingIds, memberId]);
-    }
-  };
-  const moveMember = (targetId: string, memberId: string) => {
-    if (!attendingIds.includes(memberId)) setAttendance([...attendingIds, memberId]);
-    const wasHere = (crews[targetId] ?? []).includes(memberId);
-    const next = removeFromEveryCrew(memberId);
-    if (!wasHere) next[targetId] = [...(next[targetId] ?? []), memberId];
-    onChange(next);
-  };
-  const addMembers = (targetId: string, memberIds: string[]) => {
-    const eligible = [...new Set(memberIds)].filter((id) => activeVolunteers.some((volunteer) => volunteer.id === id));
-    setAttendance([...new Set([...attendingIds, ...eligible])]);
-    let next = crews;
-    for (const memberId of eligible) next = removeFromEveryCrew(memberId, next);
-    onChange({ ...next, [targetId]: [...new Set([...(next[targetId] ?? []), ...eligible])] });
-  };
-  const clearAttendance = () => {
-    setAttendance([]);
-    onChange(Object.fromEntries(targets.map((target) => [target.id, []])));
-  };
-
-  return <div className="walk-crew-board">
-    <section className="walk-checkin" aria-labelledby="walk-checkin-title">
-      <div className="walk-crew-section-heading"><h4 id="walk-checkin-title">Check-in</h4><span>{attendingIds.length} here</span></div>
-      <div className="walk-attendance-list" role="group" aria-label="People here tonight">
-        {activeVolunteers.map((volunteer) => {
-          const present = attendingIds.includes(volunteer.id);
-          return <button type="button" key={volunteer.id} className={present ? "present" : ""} aria-label={volunteer.name} aria-pressed={present} onClick={() => setPresent(volunteer.id)}><span>{volunteer.name.charAt(0).toUpperCase()}</span><b>{volunteer.name}</b>{present && <Check size={18} aria-hidden="true" />}</button>;
-        })}
-      </div>
-      <div className="walk-crew-quick-actions"><button type="button" onClick={() => setAttendance(activeVolunteers.map((volunteer) => volunteer.id))}>Everyone is here</button><button type="button" disabled={!attendingIds.length} onClick={clearAttendance}>Clear check-in</button></div>
-      <p className="walk-crew-help">Marking someone absent takes them off tonight’s team.</p>
-    </section>
-
-    <p className="walk-crew-status" role="status"><Users size={15} aria-hidden="true" /><strong>{assignedCount} assigned</strong>{waitingIds.length ? ` · ${waitingIds.length} waiting: ${waitingIds.map((id) => names.get(id) ?? "Unavailable member").join(", ")}` : attendingIds.length ? " · Everyone here has a target." : " · Check people in, or staff targets later."}</p>
-
-    <div className="walk-crew-targets">
-      {targets.map((target) => {
-        const memberIds = crews[target.id] ?? [];
-        const waiting = waitingIds.length > 0;
-        return <article key={target.id} className="walk-crew-target">
-          <header><i style={{ background: target.color }} /><div><strong>{target.name}</strong><small>{target.propertyCount} residential {target.propertyCount === 1 ? "property" : "properties"}</small></div><span>{memberIds.length ? `${memberIds.length} ${memberIds.length === 1 ? "person" : "people"}` : "Staff later"}</span></header>
-          <div className="walk-crew-members">
-            {memberIds.map((memberId) => <button type="button" key={memberId} aria-label={`Remove ${names.get(memberId) ?? "unavailable member"} from ${target.name}`} onClick={() => moveMember(target.id, memberId)}><span>{(names.get(memberId) ?? "?").charAt(0).toUpperCase()}</span><b>{names.get(memberId) ?? "Unavailable member"}</b><X size={16} aria-hidden="true" /></button>)}
-            {!memberIds.length && <p>No one assigned yet.</p>}
-          </div>
-          <details className="walk-crew-picker">
-            <summary><UserPlus size={18} aria-hidden="true" /> Add or move people</summary>
-            <div>
-              {waiting && <button type="button" className="walk-crew-add-all" onClick={() => addMembers(target.id, waitingIds)}>Assign everyone waiting</button>}
-              <div className="walk-crew-person-list" role="group" aria-label={`Team for ${target.name}`}>
-                {attendingIds.map((memberId) => {
-                  const assignedTargetId = targetByMember.get(memberId);
-                  const onThisTarget = assignedTargetId === target.id;
-                  const assignedTarget = targets.find((item) => item.id === assignedTargetId);
-                  return <button type="button" key={memberId} className={onThisTarget ? "selected" : ""} aria-pressed={onThisTarget} onClick={() => moveMember(target.id, memberId)}><span>{names.get(memberId) ?? "Unavailable member"}<small>{onThisTarget ? "On this route" : assignedTarget ? `Move from ${assignedTarget.name}` : "Waiting"}</small></span>{onThisTarget && <Check size={18} aria-hidden="true" />}</button>;
-                })}
-                {!attendingIds.length && <p>Check people in above, or use a saved team.</p>}
-              </div>
-              {savedGroups.length > 0 && <div className="walk-saved-groups"><span>Saved teams</span><div>{savedGroups.map((team) => <button type="button" key={team.id} onClick={() => addMembers(target.id, team.memberIds)}>{team.name}<small>{team.memberIds.filter((id) => activeVolunteers.some((volunteer) => volunteer.id === id)).length} active</small></button>)}</div></div>}
-            </div>
-          </details>
-        </article>;
+  return <div className="screen-page overlay check-in" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={action.busy}>
+    <div className="screen-top"><button type="button" className="round-button float" aria-label="Back to the walk" disabled={action.busy} onClick={onClose}><ChevronLeft size={22} aria-hidden="true" /></button><span className="mono-meta">Check-in · {time}</span></div>
+    <h1 className="screen-title" id={titleId}>Who’s here?</h1>
+    <p className="mono-meta screen-kicker">{attendingIds.length} of {invited.size || people.length} {invited.size ? "going" : "people"} · tap to check in</p>
+    <div className="face-grid" role="group" aria-label="People here">
+      {faces.map((person) => {
+        const here = attendingIds.includes(person.id);
+        return <button type="button" key={person.id} className={here ? "here" : undefined} aria-pressed={here} aria-label={person.name} onClick={() => toggleHere(person.id)}>
+          <span aria-hidden="true">{initials(person.name)}{here && <i><Check size={12} strokeWidth={3} /></i>}</span>
+          <b>{person.name.split(" ")[0]}</b>
+        </button>;
       })}
     </div>
+    <div className="list-section-head teams-head"><h2>Teams</h2><button type="button" className="ink-pill" disabled={!attendingIds.length || !targets.length} onClick={() => { selectionTick(); setCrews(autoPair(targets.map((target) => target.id), attendingIds, savedTeams)); }}>Auto-pair</button></div>
+    <div className="team-rows">
+      {targets.map((target) => {
+        const members = crews[target.id] ?? [];
+        return <button type="button" key={target.id} className={`team-row${members.length ? "" : " empty"}`} aria-label={`${target.name}: ${members.length ? members.map((id) => names.get(id)).join(", ") : "no one yet"}. Change who walks it`} onClick={() => setEditing(target.id)}>
+          <i className="color-bar" style={{ background: target.color }} aria-hidden="true" />
+          <strong>{target.name}</strong>
+          <span className="face-stack" aria-hidden="true">{members.map((id) => <span key={id}>{initials(names.get(id) ?? "?")}</span>)}</span>
+        </button>;
+      })}
+    </div>
+    {action.error && <p role="alert" className="inline-error">{action.error}</p>}
+    {onStart ? <button type="button" className="walk-save" disabled={action.busy || !staffed} onClick={start}>{action.busy ? "Starting…" : `Start walk · ${staffed} ${staffed === 1 ? "team" : "teams"}`}</button>
+      : <button type="button" className="walk-save" disabled={action.busy} onClick={save}>{action.busy ? "Saving…" : "Save teams"}</button>}
+    {editingTarget && <Sheet className="plain-sheet" modal label={`Who walks ${editingTarget.name}`} onDismiss={() => setEditing(null)}>
+      <h2 className="pin-title">{editingTarget.name}</h2>
+      <p className="pin-source">Tap to put someone on this route. It moves them from any other.</p>
+      <div className="grouped-rows" role="group" aria-label={`Team for ${editingTarget.name}`}>
+        {attendingIds.map((memberId) => {
+          const on = (crews[editingTarget.id] ?? []).includes(memberId);
+          const elsewhere = targets.find((target) => target.id !== editingTarget.id && (crews[target.id] ?? []).includes(memberId));
+          return <button type="button" key={memberId} className="grouped-row check-row" role="checkbox" aria-checked={on} onClick={() => toggleOnRoute(editingTarget.id, memberId)}>
+            <span className={`check-square${on ? " on" : ""}`} aria-hidden="true">{on && <Check size={15} strokeWidth={3} />}</span>
+            <span className="grouped-row-text"><strong>{names.get(memberId) ?? "Unavailable member"}</strong><small>{on ? "On this route" : elsewhere ? `On ${elsewhere.name}` : "Waiting"}</small></span>
+          </button>;
+        })}
+        {!attendingIds.length && <p className="home-empty">Check people in first.</p>}
+      </div>
+      <button type="button" className="walk-save" onClick={() => setEditing(null)}>Done</button>
+    </Sheet>}
   </div>;
 }

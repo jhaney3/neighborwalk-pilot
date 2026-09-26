@@ -1,5 +1,5 @@
-export type AppView = "today" | "outreach" | "map" | "people" | "followups" | "guide" | "leader" | "settings" | "more" | "recovery" | "data";
-const paths: Record<AppView, string> = { today: "today", outreach: "outreach", map: "locations", people: "people", followups: "followups", guide: "guides", leader: "leader", settings: "settings", more: "more", recovery: "recovery", data: "data" };
+export type AppView = "today" | "outreach" | "map" | "people" | "followups" | "leader" | "settings" | "more" | "recovery" | "data";
+const paths: Record<AppView, string> = { today: "today", outreach: "outreach", map: "locations", people: "people", followups: "followups", leader: "leader", settings: "settings", more: "more", recovery: "recovery", data: "data" };
 export function appHref(view: AppView, id?: string) { return "/app/" + paths[view] + (id ? "/" + encodeURIComponent(id) : ""); }
 export function appRoute(pathname: string): { view: AppView; id?: string; fieldOutingId?: string } {
   const parts = pathname.split("/").filter(Boolean);
@@ -12,6 +12,6 @@ export function validAppSegments(parts: string[]) {
   if (!Object.values(paths).includes(parts[0])) return false;
   if (parts.length === 1) return true;
   if (!/^[A-Za-z0-9_-]{1,240}$/.test(parts[1] ?? "")) return false;
-  return (parts.length === 2 && ["outreach", "people", "locations", "followups", "guides"].includes(parts[0]))
+  return (parts.length === 2 && ["outreach", "people", "locations", "followups"].includes(parts[0]))
     || (parts.length === 3 && parts[0] === "outreach" && parts[2] === "field");
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 
-export function Modal({ title, description, wide = false, mobileImmersive = false, role, onClose, children }: { title: string; description?: string; wide?: boolean; mobileImmersive?: boolean; role?: "alertdialog"; onClose: () => void; children: React.ReactNode }) {
+export function Modal({ title, description, wide = false, mobileImmersive = false, className, role, onClose, children }: { title: string; description?: string; wide?: boolean; mobileImmersive?: boolean; className?: string; role?: "alertdialog"; onClose: () => void; children: React.ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -18,7 +18,7 @@ export function Modal({ title, description, wide = false, mobileImmersive = fals
     };
   }, []);
   const requestClose = () => { if (!dialog.current?.querySelector('[aria-busy="true"]')) onClose(); };
-  return <dialog ref={dialog} role={role} className={`modal-card${wide ? " wide" : ""}${mobileImmersive ? " mobile-immersive" : ""}`} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
+  return <dialog ref={dialog} role={role} className={`modal-card${wide ? " wide" : ""}${mobileImmersive ? " mobile-immersive" : ""}${className ? ` ${className}` : ""}`} aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
     <div className="modal-heading"><div><h2 id={titleId}>{title}</h2>{description && <p id={descriptionId}>{description}</p>}</div><button type="button" className="close-button" onClick={requestClose} aria-label="Close dialog"><X size={18} aria-hidden="true" /></button></div>{children}
   </dialog>;
 }
@@ -129,4 +129,13 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
 export function useConfirm() {
   return useContext(ConfirmContext);
+}
+
+/** The top of a tab (Today, Follow-ups): a mono capsule on the left and your
+ * avatar, which opens More. A dot on the avatar means the phone needs attention. */
+export function TabTopBar({ label, labelAriaLabel, onLabel, name, attention = false, onProfile }: { label: React.ReactNode; labelAriaLabel?: string; onLabel?: () => void; name: string; attention?: boolean; onProfile: () => void }) {
+  return <div className="tab-top-bar">
+    {onLabel ? <button type="button" className="mono-capsule" aria-label={labelAriaLabel} onClick={onLabel}>{label}<ChevronDown size={13} aria-hidden="true" /></button> : <span className="mono-capsule">{label}</span>}
+    <button type="button" className="avatar-button" aria-label={`${name}: profile, settings and more${attention ? ". Needs attention" : ""}`} onClick={onProfile}>{initials(name)}{attention && <b aria-hidden="true" />}</button>
+  </div>;
 }

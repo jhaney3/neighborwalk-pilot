@@ -60,7 +60,7 @@ export function RecoveryView({ data, online, onPreview, onResolve, onExport, onA
     setMessage(keepSelected ? "Your picks will send. The original is kept on this phone." : "Showing your church’s version. The old copy is kept on this phone.");
   };
   return <section className="content-view recovery-view">
-    <ViewHeading title="Sync" />
+    <ViewHeading title="Recovery" />
     <section className={`device-status-card ${statusTone}`}>
       <header><span className="device-status-icon">{statusTone === "calm" ? <CheckCircle2 size={25} /> : statusTone === "offline" ? <CloudOff size={25} /> : <AlertTriangle size={25} />}</span><div><h2>{statusTitle}</h2><span>{statusDetail}</span></div></header>
       {connected && <div className="device-status-actions"><button className={`button ${hasAttention ? "primary" : "quiet"}`} disabled={action.busy || !online} onClick={() => void action.run(async () => { const ok = await onSync(); setMessage(ok ? "Checked." : "Your changes are still saved on this phone."); })}><RefreshCcw size={16} /> {hasAttention ? "Try again" : "Check again"}</button>{reviewRequired && <button className="button quiet" disabled={action.busy} onClick={() => void action.run(async () => onExport())}><Download size={16} /> Download recovery copy</button>}</div>}

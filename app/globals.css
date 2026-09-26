@@ -27,6 +27,10 @@
 @import "./styles/website.css";
 @import "./styles/walk-setup.css";
 @import "./styles/walk-target-planner.css";
+@import "./styles/walk-mode.css";
+@import "./styles/followups.css";
+@import "./styles/walk-page.css";
+@import "./styles/pins.css";
 
 .sandbox-banner {
   position: fixed;
