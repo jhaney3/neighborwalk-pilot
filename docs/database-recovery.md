@@ -2,6 +2,29 @@
 
 This runbook describes implemented **application-database capture and isolated restore**, not a claim that production managed backups, off-site storage, provider recovery, or a production cutover are complete.
 
+## Manual backup retention
+
+For this release, the operating limit is **30 days from capture** for manual
+production database backups. Jacob Haney is responsible for securely keeping
+copies and removing them after expiry. The existing copy is on the operator's
+other personal laptop; this Mac has not inspected it or verified its age,
+encryption, contents, additional copies or successful restoration. Check that
+laptop before certifying enforcement. Do not silently delete a recovery point
+whose identity or scope has not been established.
+
+The Supabase organization remains on Free. Pro was offered only as an optional
+managed recovery service; the user's spending approval was conditional on an
+Apple requirement, which does not apply. No subscription was purchased. The
+live backup inventory currently reports no available recovery points. Do not
+publish a seven-day managed-backup claim.
+
+At account-deletion completion, note the latest expiry of any affected manual
+backup (at most 30 further days). Before reopening a restored database, reapply
+all deletions completed after its capture and verify access revocation and
+content erasure. Keep a minimal private deletion ledger until every affected
+recovery point has expired. Independently exported church files are separate
+from operator database backups. See [deletion operations](account-deletion-operations.md).
+
 ## Three different tools
 
 | Tool | Purpose | Important boundary |
